@@ -63,7 +63,7 @@ func Load() (*Config, error) {
 		DBConnMaxLife:  getEnvDuration("DB_CONN_MAX_LIFE", 30*time.Minute),
 
 		// Redis
-		RedisURL:      getEnv("REDIS_URL", "redis://default:ioq85yA8WYDn4wOAsIPMiZYuAWu5w5MM@redis-14549.c261.us-east-1-4.ec2.redns.redis-cloud.com:14549"),
+		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
 		RedisPoolSize: getEnvInt("REDIS_POOL_SIZE", 10),
 
 		// Auth
