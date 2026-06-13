@@ -1,0 +1,149 @@
+---
+title: API Overview
+description: REST API reference for Logstack endpoints.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Card, Cards } from "fumadocs-ui/components/card";
+
+# API Overview
+
+Logstack provides a RESTful API for log ingestion, querying, and management.
+
+## Base URLs
+
+| Environment | URL                              |
+| ----------- | -------------------------------- |
+| Production  | `https://api.logstack.tech/api/v1`  |
+| Self-hosted | `https://your-domain.com/api/v1` |
+
+## Authentication
+
+Logstack uses two authentication methods:
+
+### JWT Tokens (Dashboard Access)
+
+For user-facing operations (projects, alerts, settings):
+
+```http
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+```
+
+Obtain tokens via `/auth/login` endpoint.
+
+### API Keys (Log Ingestion)
+
+For SDK and log ingestion:
+
+```http
+X-API-Key: ls_live_abc123xyz789
+```
+
+API keys are created per-project in the dashboard.
+
+<Callout type="info">
+  API keys start with `ls_live_` for production or `ls_test_` for development.
+</Callout>
+
+## Rate Limits
+
+| Endpoint Type  | Rate Limit    | Window     |
+| -------------- | ------------- | ---------- |
+| Log Ingestion  | 1000 requests | per minute |
+| API Queries    | 100 requests  | per minute |
+| Authentication | 10 requests   | per minute |
+
+Rate limit headers are included in responses:
+
+```http
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 950
+X-RateLimit-Reset: 1705320000
+```
+
+## Response Format
+
+All responses use JSON format:
+
+### Success Response
+
+```json
+{
+  "data": { ... },
+  "meta": {
+    "page": 1,
+    "limit": 50,
+    "total": 1234
+  }
+}
+```
+
+### Error Response
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request body",
+    "details": [{ "field": "email", "message": "Invalid email format" }]
+  }
+}
+```
+
+## Error Codes
+
+| Code               | HTTP Status | Description                       |
+| ------------------ | ----------- | --------------------------------- |
+| `UNAUTHORIZED`     | 401         | Missing or invalid authentication |
+| `FORBIDDEN`        | 403         | Insufficient permissions          |
+| `NOT_FOUND`        | 404         | Resource not found                |
+| `VALIDATION_ERROR` | 400         | Invalid request parameters        |
+| `RATE_LIMITED`     | 429         | Too many requests                 |
+| `INTERNAL_ERROR`   | 500         | Server error                      |
+
+## Pagination
+
+List endpoints support offset/limit pagination (use `offset` starting at `0`):
+
+```http
+GET /api/v1/logs?projectId=proj_123&offset=0&limit=50
+```
+
+Response includes pagination metadata:
+
+```json
+{
+  "data": [...],
+  "meta": {
+    "offset": 0,
+    "limit": 50,
+    "total": 1234,
+    "hasMore": true
+  }
+}
+```
+
+## Explore Endpoints
+
+<Cards>
+  <Card
+    title="Authentication"
+    description="Login, register, refresh tokens"
+    href="/docs/api/authentication"
+  />
+  <Card
+    title="Logs"
+    description="Ingest and query logs"
+    href="/docs/api/logs"
+  />
+  <Card
+    title="Projects"
+    description="Manage projects and API keys"
+    href="/docs/api/projects"
+  />
+  <Card
+    title="Alerts"
+    description="Configure alerting rules"
+    href="/docs/api/alerts"
+  />
+</Cards>

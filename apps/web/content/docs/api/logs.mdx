@@ -1,0 +1,210 @@
+---
+title: Logs API
+description: Ingest and query logs via the REST API.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+# Logs API
+
+Endpoints for ingesting and querying logs.
+
+## POST /logs/ingest
+
+Ingest logs for a project. Supports batch ingestion.
+
+<Callout type="info">
+  This endpoint uses API key authentication, not JWT tokens.
+</Callout>
+
+### Request
+
+```bash
+curl -X POST https://api.logstack.io/api/v1/logs/ingest \
+  -H "X-API-Key: ls_live_abc123xyz789" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "logs": [
+      {
+        "level": "info",
+        "message": "User logged in successfully",
+        "source": "auth-service",
+        "metadata": {
+          "userId": "user_123",
+          "ip": "192.168.1.1"
+        }
+      },
+      {
+        "level": "error",
+        "message": "Database connection failed",
+        "source": "db-service",
+        "metadata": {
+          "error": "Connection timeout",
+          "host": "db.example.com"
+        }
+      }
+    ]
+  }'
+```
+
+### Request Body
+
+| Field              | Type   | Required | Description                                    |
+| ------------------ | ------ | -------- | ---------------------------------------------- |
+| `logs`             | array  | ✓        | Array of log entries (max 1000)                |
+| `logs[].level`     | string | ✓        | `info`, `warn`, `error`, or `critical`         |
+| `logs[].message`   | string | ✓        | Log message (max 10KB)                         |
+| `logs[].source`    | string |          | Service/component identifier                   |
+| `logs[].metadata`  | object |          | Structured metadata (max 100KB)                |
+| `logs[].timestamp` | string |          | ISO 8601 timestamp (auto-generated if omitted) |
+
+### Response (202 Accepted)
+
+```json
+{
+  "accepted": 2,
+  "rejected": 0
+}
+```
+
+### Rate Limits
+
+| Plan       | Logs per minute | Batch size |
+| ---------- | --------------- | ---------- |
+| Free       | 1,000           | 100        |
+| Starter    | 10,000          | 500        |
+| Pro        | 100,000         | 1,000      |
+| Enterprise | Unlimited       | 1,000      |
+
+---
+
+## GET /logs
+
+Query logs with filters.
+
+### Request
+
+```bash
+curl "https://api.logstack.io/api/v1/logs?projectId=proj_123&level=error&offset=0&limit=50" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Query Parameters
+
+| Parameter   | Type   | Default  | Description                                          |
+| ----------- | ------ | -------- | ---------------------------------------------------- |
+| `projectId` | string | required | Project ID                                           |
+| `level`     | string | all      | Filter by level: `info`, `warn`, `error`, `critical` |
+| `search`    | string |          | Full-text search in message                          |
+| `startTime` | string | 24h ago  | ISO 8601 start time                                  |
+| `endTime`   | string | now      | ISO 8601 end time                                    |
+| `offset`    | number | 0        | Number of results to skip                            |
+| `limit`     | number | 50       | Results per request (max 1000)                       |
+
+### Response (200 OK)
+
+```json
+{
+  "data": [
+    {
+      "id": "log_abc123",
+      "projectId": "proj_123",
+      "level": "error",
+      "message": "Database connection failed",
+      "source": "db-service",
+      "metadata": {
+        "error": "Connection timeout",
+        "host": "db.example.com"
+      },
+      "timestamp": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "meta": {
+    "offset": 0,
+    "limit": 50,
+    "total": 1234
+  }
+}
+```
+
+---
+
+## GET /logs/:id
+
+Get a single log entry by ID.
+
+### Request
+
+```bash
+curl https://api.logstack.io/api/v1/logs/log_abc123 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Response (200 OK)
+
+```json
+{
+  "id": "log_abc123",
+  "projectId": "proj_123",
+  "level": "error",
+  "message": "Database connection failed",
+  "source": "db-service",
+  "metadata": {
+    "error": "Connection timeout",
+    "host": "db.example.com",
+    "stack": "Error: Connection timeout\n    at ..."
+  },
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+---
+
+## SDK vs Direct API
+
+<Tabs items={['SDK (Recommended)', 'Direct API']}>
+  <Tab value="SDK (Recommended)">
+The SDK handles batching, retries, and error handling automatically:
+
+```typescript
+import { createLogStack } from "logstack-js";
+
+const logstack = createLogStack({
+  apiKey: "ls_live_abc123xyz789",
+});
+
+logstack.error("Database connection failed", {
+  error: "Connection timeout",
+  host: "db.example.com",
+});
+```
+
+  </Tab>
+  <Tab value="Direct API">
+For custom integrations or non-JavaScript environments:
+
+```bash
+curl -X POST https://api.logstack.io/api/v1/logs/ingest \
+  -H "X-API-Key: ls_live_abc123xyz789" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "logs": [{
+      "level": "error",
+      "message": "Database connection failed",
+      "metadata": {
+        "error": "Connection timeout"
+      }
+    }]
+  }'
+```
+
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+1. **Batch logs** — Send multiple logs per request to reduce overhead
+2. **Use structured metadata** — Makes searching and filtering easier
+3. **Include timestamps** — For accurate time ordering across services
+4. **Add source tags** — Identify which service generated each log

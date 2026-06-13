@@ -1,0 +1,266 @@
+---
+title: Cloud Deployment
+description: Deploy LogStack to AWS, GCP, or DigitalOcean.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+# Cloud Deployment
+
+Deploy LogStack to major cloud platforms with managed databases.
+
+## Architecture
+
+For production deployments, we recommend:
+
+- **Managed PostgreSQL** — RDS, Cloud SQL, or Managed Databases
+- **Managed Redis** — ElastiCache, Memorystore, or Managed Redis
+- **Container Hosting** — EC2, Cloud Run, App Platform, or Kubernetes
+- **Load Balancer** — ALB, Cloud Load Balancing, or built-in
+
+<Tabs items={['AWS', 'Google Cloud', 'DigitalOcean']}>
+  <Tab value="AWS">
+## AWS Deployment
+
+### 1. Create RDS PostgreSQL
+
+```bash
+aws rds create-db-instance \
+  --db-instance-identifier logstack-db \
+  --db-instance-class db.t3.small \
+  --engine postgres \
+  --engine-version 16 \
+  --master-username logstack \
+  --master-user-password YOUR_PASSWORD \
+  --allocated-storage 50 \
+  --vpc-security-group-ids sg-xxxxxxxx
+```
+
+### 2. Create ElastiCache Redis
+
+```bash
+aws elasticache create-cache-cluster \
+  --cache-cluster-id logstack-redis \
+  --cache-node-type cache.t3.micro \
+  --engine redis \
+  --num-cache-nodes 1
+```
+
+### 3. Launch EC2 Instance
+
+```bash
+# Launch t3.medium with Ubuntu 22.04
+aws ec2 run-instances \
+  --image-id ami-xxxxxxxxx \
+  --instance-type t3.medium \
+  --key-name your-key \
+  --security-group-ids sg-xxxxxxxx
+```
+
+### 4. Configure Environment
+
+```bash
+# SSH to instance
+ssh -i your-key.pem ubuntu@ec2-xx-xx-xx-xx.compute-1.amazonaws.com
+
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker ubuntu
+
+# Clone and configure
+git clone https://github.com/mosesedem/logstack.git
+cd logstack
+cp .env.example .env
+
+# Update .env with RDS and ElastiCache endpoints
+DATABASE_URL=postgres://logstack:PASSWORD@logstack-db.xxxxx.rds.amazonaws.com:5432/logstack
+REDIS_URL=redis://logstack-redis.xxxxx.cache.amazonaws.com:6379
+```
+
+### 5. Deploy
+
+```bash
+docker-compose up -d
+```
+
+### Recommended Instance Types
+
+| Workload     | Instance   | vCPU | Memory |
+| ------------ | ---------- | ---- | ------ |
+| Development  | t3.micro   | 2    | 1 GB   |
+| Small        | t3.small   | 2    | 2 GB   |
+| Medium       | t3.medium  | 2    | 4 GB   |
+| Production   | t3.large   | 2    | 8 GB   |
+| High-traffic | c6i.xlarge | 4    | 8 GB   |
+
+  </Tab>
+
+  <Tab value="Google Cloud">
+## Google Cloud Deployment
+
+### 1. Create Cloud SQL Instance
+
+```bash
+gcloud sql instances create logstack-db \
+  --database-version=POSTGRES_16 \
+  --tier=db-custom-2-4096 \
+  --region=us-central1
+
+gcloud sql users set-password postgres \
+  --instance=logstack-db \
+  --password=YOUR_PASSWORD
+
+gcloud sql databases create logstack \
+  --instance=logstack-db
+```
+
+### 2. Create Memorystore Redis
+
+```bash
+gcloud redis instances create logstack-redis \
+  --size=1 \
+  --region=us-central1 \
+  --redis-version=redis_7_0
+```
+
+### 3. Deploy to Cloud Run
+
+```bash
+# Build and push containers
+gcloud builds submit --tag gcr.io/PROJECT_ID/logstack-api ./packages/logstack-go
+gcloud builds submit --tag gcr.io/PROJECT_ID/logstack-web ./apps/web
+
+# Deploy API
+gcloud run deploy logstack-api \
+  --image gcr.io/PROJECT_ID/logstack-api \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars="DATABASE_URL=...,REDIS_URL=..."
+
+# Deploy Web
+gcloud run deploy logstack-web \
+  --image gcr.io/PROJECT_ID/logstack-web \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated
+```
+
+### VPC Connector for Private Access
+
+```bash
+gcloud compute networks vpc-access connectors create logstack-connector \
+  --region us-central1 \
+  --network default \
+  --range 10.8.0.0/28
+```
+
+  </Tab>
+
+  <Tab value="DigitalOcean">
+## DigitalOcean Deployment
+
+### 1. Create Managed PostgreSQL
+
+```bash
+doctl databases create logstack-db \
+  --engine pg \
+  --version 16 \
+  --size db-s-1vcpu-1gb \
+  --region nyc1 \
+  --num-nodes 1
+```
+
+### 2. Create Managed Redis
+
+```bash
+doctl databases create logstack-redis \
+  --engine redis \
+  --version 7 \
+  --size db-s-1vcpu-1gb \
+  --region nyc1
+```
+
+### 3. Create Droplet
+
+```bash
+doctl compute droplet create logstack \
+  --image ubuntu-22-04-x64 \
+  --size s-2vcpu-4gb \
+  --region nyc1 \
+  --ssh-keys YOUR_SSH_KEY_ID
+```
+
+### 4. Configure and Deploy
+
+```bash
+# SSH to droplet
+ssh root@YOUR_DROPLET_IP
+
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+
+# Clone and configure
+git clone https://github.com/mosesedem/logstack.git
+cd logstack
+cp .env.example .env
+
+# Get connection strings from DigitalOcean console
+# Update .env with managed database URLs
+
+docker-compose up -d
+```
+
+### App Platform (Alternative)
+
+For simpler deployments, use DigitalOcean App Platform:
+
+1. Connect your GitHub repository
+2. Configure environment variables
+3. Add managed databases as components
+4. Deploy automatically on push
+
+</Tab>
+</Tabs>
+
+## Load Balancer Setup
+
+For high availability, add a load balancer:
+
+```bash
+# AWS ALB
+aws elbv2 create-load-balancer \
+  --name logstack-lb \
+  --subnets subnet-xxxxx subnet-yyyyy \
+  --security-groups sg-xxxxxxxx
+
+# Configure target groups and listeners...
+```
+
+<Callout type="info">
+  For production, always use HTTPS with valid SSL certificates.
+</Callout>
+
+## Auto-Scaling
+
+### Docker Swarm
+
+```yaml
+services:
+  api:
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+```
+
+### Kubernetes
+
+See our Kubernetes deployment guide (coming soon) for:
+
+- Helm charts
+- Horizontal Pod Autoscaler
+- Ingress configuration

@@ -1,0 +1,308 @@
+---
+title: SDK Configuration
+description: Configure environment modes, context capture, batching, retries, and more.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+# SDK Configuration
+
+Customize Logstack SDK behavior to match your application's needs.
+
+## Full Configuration
+
+```typescript
+import { createLogStack } from "logstack-js";
+
+const logstack = createLogStack({
+  // Required: Your project API key
+  apiKey: process.env.LOGSTACK_API_KEY!,
+
+  // API endpoint (defaults to Logstack cloud)
+  endpoint: "https://api.logstack.tech",
+
+  // Environment mode: 'development' | 'production' | 'staging' | 'test'
+  // Development mode logs to console only, production sends to server
+  environment: process.env.NODE_ENV as "development" | "production",
+
+  // Also log to console in production mode
+  consoleInProduction: false,
+
+  // Auto-capture context like URL, route, user agent
+  captureContext: true,
+
+  // Number of logs to buffer before auto-sending
+  batchSize: 100,
+
+  // Auto-flush interval in milliseconds
+  flushInterval: 5000,
+
+  // Maximum retry attempts for failed requests
+  maxRetries: 3,
+
+  // Error callback for failed log submissions
+  onError: (error, logs) => {
+    console.error("Failed to send logs:", error);
+    // Optionally persist logs locally for later retry
+    persistLogsLocally(logs);
+  },
+});
+```
+
+## Configuration Options
+
+### `apiKey` (required)
+
+Your project API key from the Logstack dashboard.
+
+```typescript
+apiKey: "ls_live_abc123xyz789";
+```
+
+<Callout type="warn">
+  Use environment variables to store API keys. Never hardcode them in source
+  code.
+</Callout>
+
+### `environment`
+
+Controls whether logs are sent to the server or only to console.
+
+| Value         | Behavior                                           |
+| ------------- | -------------------------------------------------- |
+| `development` | Logs to console only with colored output           |
+| `production`  | Logs sent to server, triggers alerts/notifications |
+| `staging`     | Same as production (logs to server)                |
+| `test`        | Logs to console only                               |
+
+```typescript
+// Auto-detect from NODE_ENV (recommended)
+environment: process.env.NODE_ENV as 'development' | 'production',
+
+// Or explicitly set
+environment: 'production',
+```
+
+<Callout type="info">
+  In development mode, no network requests are made. Logs appear in your
+  terminal with colored formatting for easy reading.
+</Callout>
+
+### `consoleInProduction`
+
+Whether to also output logs to console when in production mode.
+
+```typescript
+consoleInProduction: true, // Useful for debugging production issues
+```
+
+### `captureContext`
+
+Automatically capture contextual information like URL, route, and user agent.
+
+```typescript
+captureContext: true, // Default
+```
+
+When enabled in browser environments, Logstack automatically captures:
+
+- `url` — Current page URL
+- `route` — URL pathname
+- `userAgent` — Browser user agent string
+
+### `endpoint`
+
+API endpoint URL. Use this for self-hosted instances.
+
+| Environment          | URL                            |
+| -------------------- | ------------------------------ |
+| Production (default) | `https://api.logstack.tech`    |
+| Self-hosted          | `https://logs.your-domain.com` |
+
+```typescript
+endpoint: process.env.LOGSTACK_ENDPOINT || "https://api.logstack.tech";
+```
+
+### `batchSize`
+
+Number of logs to buffer before automatically sending.
+
+| Value | Behavior                                         |
+| ----- | ------------------------------------------------ |
+| `1`   | Send immediately (higher latency, more requests) |
+| `100` | Default, good balance                            |
+| `500` | High-throughput applications                     |
+
+```typescript
+batchSize: 100;
+```
+
+### `flushInterval`
+
+How often to send buffered logs, in milliseconds.
+
+```typescript
+flushInterval: 5000; // 5 seconds (default)
+```
+
+<Callout type="info">
+  Logs are sent when either `batchSize` is reached OR `flushInterval` elapses,
+  whichever comes first.
+</Callout>
+
+### `maxRetries`
+
+Maximum retry attempts for failed HTTP requests.
+
+```typescript
+maxRetries: 3; // Default
+```
+
+Retries use exponential backoff: 200ms → 400ms → 800ms
+
+### `onError`
+
+Callback function when log submission fails after all retries.
+
+```typescript
+onError: (error: Error, logs: LogEntry[]) => {
+  // Log to console as fallback
+  console.error("Logstack error:", error.message);
+
+  // Persist to local storage or file
+  saveToLocalStorage(logs);
+
+  // Send to error tracking service
+  Sentry.captureException(error, { extra: { logCount: logs.length } });
+};
+```
+
+## Context Management
+
+Set persistent context that applies to all subsequent logs:
+
+```typescript
+// Set context for a request
+logstack.setContext({
+  url: "/api/users",
+  method: "POST",
+  requestId: "req_abc123",
+  component: "UserService",
+  ip: "192.168.1.1",
+});
+
+// All logs will now include this context
+logstack.info("Processing request");
+logstack.info("User created");
+
+// Clear context when done
+logstack.clearContext();
+```
+
+### Context Properties
+
+| Property    | Description               | Example            |
+| ----------- | ------------------------- | ------------------ |
+| `url`       | Page URL or API endpoint  | `'/api/users'`     |
+| `route`     | Route path pattern        | `'/users/:id'`     |
+| `method`    | HTTP method               | `'POST'`           |
+| `userAgent` | Browser/client user agent | `'Mozilla/5.0...'` |
+| `ip`        | Client IP address         | `'192.168.1.1'`    |
+| `requestId` | Request tracing ID        | `'req_abc123'`     |
+| `component` | Component or module name  | `'PaymentService'` |
+
+## Environment-Specific Configuration
+
+### Development
+
+```typescript
+const logstack = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+  environment: "development", // Console only
+});
+
+// Logs appear in terminal with colors:
+// INFO     2026-01-30 14:23:15.234 [/api/users] - User created
+```
+
+### Production
+
+```typescript
+const logstack = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+  environment: "production",
+  batchSize: 100,
+  flushInterval: 5000,
+  maxRetries: 5,
+  onError: (error, logs) => {
+    errorReporter.capture(error);
+    backupQueue.push(logs);
+  },
+});
+```
+
+### Staging with Console Output
+
+```typescript
+const logstack = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+  environment: "staging",
+  consoleInProduction: true, // See logs in terminal AND send to server
+});
+```
+
+### High-Throughput
+
+```typescript
+const logstack = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+  batchSize: 500, // Larger batches
+  flushInterval: 10000, // Less frequent flushes
+});
+```
+
+## Graceful Shutdown
+
+Always handle process termination to avoid losing logs:
+
+```typescript
+// Node.js
+process.on("SIGTERM", async () => {
+  console.log("Shutting down...");
+  await logstack.close();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  await logstack.close();
+  process.exit(0);
+});
+
+// Serverless (flush at end of handler)
+export async function handler(event) {
+  try {
+    // Your logic here
+    logstack.info("Request processed");
+  } finally {
+    await logstack.flush();
+  }
+}
+```
+
+## TypeScript Types
+
+```typescript
+import type {
+  LogStackConfig,
+  LogLevel,
+  LogEntry,
+  LogStackClient,
+} from "logstack-js";
+
+const options: LogStackConfig = {
+  apiKey: "ls_live_xxx",
+  batchSize: 100,
+};
+
+const logstack: LogStackClient = createLogStack(options);
+```

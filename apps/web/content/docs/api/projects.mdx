@@ -1,0 +1,202 @@
+---
+title: Projects API
+description: Manage projects and API keys.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+# Projects API
+
+Endpoints for managing projects and their API keys.
+
+## GET /projects
+
+List all projects for the authenticated user.
+
+### Request
+
+```bash
+curl https://api.logstack.tech/api/v1/projects \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Response (200 OK)
+
+```json
+{
+  "data": [
+    {
+      "id": "proj_abc123",
+      "name": "Production API",
+      "apiKey": "ls_live_abc...xyz",
+      "logCount": 125000,
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2024-01-20T15:45:00Z"
+    },
+    {
+      "id": "proj_def456",
+      "name": "Staging",
+      "apiKey": "ls_live_def...uvw",
+      "logCount": 8500,
+      "createdAt": "2024-01-10T08:00:00Z",
+      "updatedAt": "2024-01-19T12:30:00Z"
+    }
+  ]
+}
+```
+
+<Callout type="info">
+  API keys are partially masked in list responses. Use GET /projects/:id for the
+  full key.
+</Callout>
+
+---
+
+## POST /projects
+
+Create a new project.
+
+### Request
+
+```bash
+curl -X POST https://api.logstack.tech/api/v1/projects \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My New App"
+  }'
+```
+
+### Request Body
+
+| Field  | Type   | Required | Description                     |
+| ------ | ------ | -------- | ------------------------------- |
+| `name` | string | ✓        | Project name (1-100 characters) |
+
+### Response (201 Created)
+
+```json
+{
+  "id": "proj_ghi789",
+  "name": "My New App",
+  "apiKey": "ls_live_full_api_key_here",
+  "logCount": 0,
+  "createdAt": "2024-01-21T10:00:00Z",
+  "updatedAt": "2024-01-21T10:00:00Z"
+}
+```
+
+---
+
+## GET /projects/:id
+
+Get a single project with full API key.
+
+### Request
+
+```bash
+curl https://api.logstack.tech/api/v1/projects/proj_abc123 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Response (200 OK)
+
+```json
+{
+  "id": "proj_abc123",
+  "name": "Production API",
+  "apiKey": "ls_live_full_api_key_here",
+  "logCount": 125000,
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2024-01-20T15:45:00Z"
+}
+```
+
+---
+
+## PUT /projects/:id
+
+Update a project.
+
+### Request
+
+```bash
+curl -X PUT https://api.logstack.tech/api/v1/projects/proj_abc123 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production API v2"
+  }'
+```
+
+### Response (200 OK)
+
+```json
+{
+  "id": "proj_abc123",
+  "name": "Production API v2",
+  "apiKey": "ls_live_abc...xyz",
+  "logCount": 125000,
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2024-01-21T11:00:00Z"
+}
+```
+
+---
+
+## DELETE /projects/:id
+
+Delete a project and all associated logs.
+
+### Request
+
+```bash
+curl -X DELETE https://api.logstack.tech/api/v1/projects/proj_abc123 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Response (204 No Content)
+
+No response body.
+
+<Callout type="warn">
+  This action is irreversible. All logs associated with the project will be
+  permanently deleted.
+</Callout>
+
+---
+
+## POST /projects/:id/rotate-key
+
+Rotate the API key for a project.
+
+### Request
+
+```bash
+curl -X POST https://api.logstack.tech/api/v1/projects/proj_abc123/rotate-key \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Response (200 OK)
+
+```json
+{
+  "apiKey": "ls_live_new_api_key_here"
+}
+```
+
+<Callout type="warn">
+  After rotation, the old API key is immediately invalidated. Update your
+  applications with the new key.
+</Callout>
+
+---
+
+## Project Limits
+
+| Plan       | Max Projects |
+| ---------- | ------------ |
+| Free       | 1            |
+| Starter    | 5            |
+| Pro        | 20           |
+| Enterprise | Unlimited    |

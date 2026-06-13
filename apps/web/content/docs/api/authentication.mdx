@@ -1,0 +1,179 @@
+---
+title: Authentication API
+description: User authentication endpoints for Logstack.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+# Authentication API
+
+Endpoints for user registration, login, and token management.
+
+## POST /v1/auth/signup
+
+Create a new user account.
+
+### Request
+
+```bash
+curl -X POST https://api.logstack.tech/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepassword123"
+  }'
+```
+
+### Request Body
+
+| Field      | Type   | Required | Description          |
+| ---------- | ------ | -------- | -------------------- |
+| `email`    | string | ✓        | Valid email address  |
+| `password` | string | ✓        | Minimum 8 characters |
+
+### Response (201 Created)
+
+```json
+{
+  "user": {
+    "id": "usr_abc123xyz789",
+    "email": "user@example.com",
+    "createdAt": "2024-01-15T10:30:00Z"
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+---
+
+## POST /auth/login
+
+Authenticate an existing user.
+
+### Request
+
+```bash
+curl -X POST https://api.logstack.tech/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepassword123"
+  }'
+```
+
+### Response (200 OK)
+
+```json
+{
+  "user": {
+    "id": "usr_abc123xyz789",
+    "email": "user@example.com",
+    "createdAt": "2024-01-15T10:30:00Z"
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+### Errors
+
+| Status | Code                  | Description                 |
+| ------ | --------------------- | --------------------------- |
+| 401    | `INVALID_CREDENTIALS` | Email or password incorrect |
+| 429    | `RATE_LIMITED`        | Too many login attempts     |
+
+---
+
+## POST /auth/refresh
+
+Refresh an expired access token.
+
+### Request
+
+```bash
+curl -X POST https://api.logstack.tech/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
+  }'
+```
+
+### Response (200 OK)
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+<Callout type="info">
+  Refresh tokens are single-use. A new refresh token is returned with each
+  refresh request.
+</Callout>
+
+---
+
+## POST /auth/logout
+
+Invalidate the current refresh token.
+
+### Request
+
+```bash
+curl -X POST https://api.logstack.tech/api/v1/auth/logout \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
+  }'
+```
+
+### Response (204 No Content)
+
+No response body.
+
+---
+
+## GET /auth/me
+
+Get the current authenticated user.
+
+### Request
+
+```bash
+curl https://api.logstack.tech/api/v1/auth/me \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Response (200 OK)
+
+```json
+{
+  "id": "usr_abc123xyz789",
+  "email": "user@example.com",
+  "createdAt": "2024-01-15T10:30:00Z",
+  "subscription": {
+    "plan": "pro",
+    "status": "active",
+    "periodEnd": "2024-02-15T10:30:00Z"
+  }
+}
+```
+
+---
+
+## Token Expiration
+
+| Token Type    | Expiration | Configurable                   |
+| ------------- | ---------- | ------------------------------ |
+| Access Token  | 15 minutes | `ACCESS_TOKEN_EXPIRY` env var  |
+| Refresh Token | 7 days     | `REFRESH_TOKEN_EXPIRY` env var |
+
+## Security Best Practices
+
+1. **Store tokens securely** — Use HttpOnly cookies or secure storage
+2. **Refresh proactively** — Refresh before expiration to avoid interruptions
+3. **Handle rotation** — Always use the newest refresh token
+4. **Logout on suspicious activity** — Invalidate tokens if compromise suspected

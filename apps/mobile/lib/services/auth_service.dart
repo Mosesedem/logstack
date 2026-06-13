@@ -1,0 +1,104 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logstack_mobile/models/user.dart';
+import 'package:logstack_mobile/services/api_client.dart';
+import 'package:logstack_mobile/services/storage_service.dart';
+import 'package:logstack_mobile/services/notification_service.dart';
+import 'dart:convert';
+
+final authServiceProvider = Provider<AuthService>((ref) {
+  final api = ref.watch(apiClientProvider);
+  final storage = ref.watch(storageServiceProvider);
+  return AuthService(api, storage);
+});
+
+class AuthService {
+  final ApiClient _api;
+  final StorageService _storage;
+
+  AuthService(this._api, this._storage);
+
+  Future<AuthResponse> login({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/auth/login',
+      data: {'email': email, 'password': password},
+    );
+
+    final authResponse = AuthResponse.fromJson(response);
+    await _storage.setToken(authResponse.token);
+    await _storage.setUserData(jsonEncode(authResponse.user.toJson()));
+
+    // Register FCM token after login
+    await _registerPushToken();
+
+    return authResponse;
+  }
+
+  Future<AuthResponse> signup({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/auth/signup',
+      data: {'email': email, 'password': password},
+    );
+
+    final authResponse = AuthResponse.fromJson(response);
+    await _storage.setToken(authResponse.token);
+    await _storage.setUserData(jsonEncode(authResponse.user.toJson()));
+
+    // Register FCM token after signup
+    await _registerPushToken();
+
+    return authResponse;
+  }
+
+  Future<void> logout() async {
+    // Unregister push token before logout
+    await _unregisterPushToken();
+    await _storage.clearAll();
+  }
+
+  Future<User?> getCurrentUser() async {
+    final userData = await _storage.getUserData();
+    if (userData == null) return null;
+    return User.fromJson(jsonDecode(userData));
+  }
+
+  Future<bool> isAuthenticated() async {
+    final token = await _storage.getToken();
+    return token != null;
+  }
+
+  Future<void> _registerPushToken() async {
+    final fcmToken = NotificationService.instance.fcmToken;
+    if (fcmToken != null) {
+      try {
+        await _api.post('/mobile/push-tokens', data: {
+          'token': fcmToken,
+          'platform': _getPlatform(),
+        });
+      } catch (e) {
+        // Silently fail - push notifications are optional
+      }
+    }
+  }
+
+  Future<void> _unregisterPushToken() async {
+    final fcmToken = NotificationService.instance.fcmToken;
+    if (fcmToken != null) {
+      try {
+        await _api.delete('/mobile/push-tokens/$fcmToken');
+      } catch (e) {
+        // Silently fail
+      }
+    }
+  }
+
+  String _getPlatform() {
+    // In a real app, use Platform.isIOS / Platform.isAndroid
+    return 'ios'; // or 'android'
+  }
+}

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Install pnpm
+        run: npm install -g pnpm@8.15.0
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Lint Go
+        run: |
+          cd packages/logstack-go
+          go mod tidy
+          go vet ./...
+          go test ./... -v
+
+      - name: Lint TypeScript
+        run: |
+          cd apps/web
+          pnpm lint
+
+      - name: Build Go
+        run: |
+          cd packages/logstack-go
+          go build -o /tmp/server cmd/server/main.go
+
+      - name: Build Web
+        run: |
+          cd apps/web
+          pnpm build

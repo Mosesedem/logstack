@@ -1,0 +1,259 @@
+---
+title: Alerts API
+description: Configure and manage alerting rules.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+# Alerts API
+
+Endpoints for managing alert rules and viewing alert history.
+
+## GET /alerts
+
+List all alert rules for a project.
+
+### Request
+
+```bash
+curl "https://api.logstack.tech/api/v1/alerts?projectId=proj_abc123" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Response (200 OK)
+
+```json
+{
+  "data": [
+    {
+      "id": "alert_123",
+      "projectId": "proj_abc123",
+      "name": "Critical Errors",
+      "condition": {
+        "level": "critical",
+        "threshold": 1,
+        "window": "5m"
+      },
+      "channels": ["email", "push"],
+      "cooldown": "15m",
+      "enabled": true,
+      "createdAt": "2024-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+---
+
+## POST /alerts
+
+Create a new alert rule.
+
+### Request
+
+```bash
+curl -X POST https://api.logstack.tech/api/v1/alerts \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projectId": "proj_abc123",
+    "name": "High Error Rate",
+    "condition": {
+      "level": "error",
+      "threshold": 10,
+      "window": "5m"
+    },
+    "channels": ["email"],
+    "cooldown": "30m"
+  }'
+```
+
+### Request Body
+
+| Field                 | Type   | Required | Description                                  |
+| --------------------- | ------ | -------- | -------------------------------------------- |
+| `projectId`           | string | ✓        | Project ID                                   |
+| `name`                | string | ✓        | Alert name                                   |
+| `condition.level`     | string | ✓        | Log level to match                           |
+| `condition.threshold` | number | ✓        | Number of logs to trigger                    |
+| `condition.window`    | string | ✓        | Time window (e.g., `5m`, `1h`)               |
+| `condition.source`    | string |          | Filter by source                             |
+| `condition.pattern`   | string |          | Regex pattern for message                    |
+| `channels`            | array  | ✓        | Notification channels: `email`, `push`       |
+| `cooldown`            | string |          | Minimum time between alerts (default: `15m`) |
+
+### Response (201 Created)
+
+```json
+{
+  "id": "alert_456",
+  "projectId": "proj_abc123",
+  "name": "High Error Rate",
+  "condition": {
+    "level": "error",
+    "threshold": 10,
+    "window": "5m"
+  },
+  "channels": ["email"],
+  "cooldown": "30m",
+  "enabled": true,
+  "createdAt": "2024-01-21T10:00:00Z"
+}
+```
+
+---
+
+## PUT /alerts/:id
+
+Update an alert rule.
+
+### Request
+
+```bash
+curl -X PUT https://api.logstack.tech/api/v1/alerts/alert_456 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "High Error Rate (Updated)",
+    "condition": {
+      "level": "error",
+      "threshold": 5,
+      "window": "5m"
+    },
+    "enabled": true
+  }'
+```
+
+### Response (200 OK)
+
+```json
+{
+  "id": "alert_456",
+  "projectId": "proj_abc123",
+  "name": "High Error Rate (Updated)",
+  "condition": {
+    "level": "error",
+    "threshold": 5,
+    "window": "5m"
+  },
+  "channels": ["email"],
+  "cooldown": "30m",
+  "enabled": true,
+  "updatedAt": "2024-01-21T11:00:00Z"
+}
+```
+
+---
+
+## DELETE /alerts/:id
+
+Delete an alert rule.
+
+### Request
+
+```bash
+curl -X DELETE https://api.logstack.tech/api/v1/alerts/alert_456 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Response (204 No Content)
+
+No response body.
+
+---
+
+## GET /alerts/:id/history
+
+Get alert trigger history.
+
+### Request
+
+```bash
+curl "https://api.logstack.tech/api/v1/alerts/alert_456/history?limit=10" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Response (200 OK)
+
+```json
+{
+  "data": [
+    {
+      "id": "hist_789",
+      "alertId": "alert_456",
+      "triggeredAt": "2024-01-21T09:30:00Z",
+      "logCount": 12,
+      "sampleLogs": [
+        {
+          "id": "log_abc",
+          "message": "Database connection timeout",
+          "timestamp": "2024-01-21T09:28:00Z"
+        }
+      ],
+      "notificationsSent": ["email"]
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 45
+  }
+}
+```
+
+---
+
+## Alert Conditions
+
+### Level-based
+
+Trigger when logs of a specific level exceed threshold:
+
+```json
+{
+  "level": "error",
+  "threshold": 10,
+  "window": "5m"
+}
+```
+
+### Pattern-based
+
+Trigger when log messages match a regex pattern:
+
+```json
+{
+  "level": "error",
+  "pattern": ".*payment.*failed.*",
+  "threshold": 1,
+  "window": "1h"
+}
+```
+
+### Source-filtered
+
+Trigger only for logs from a specific source:
+
+```json
+{
+  "level": "critical",
+  "source": "payment-service",
+  "threshold": 1,
+  "window": "5m"
+}
+```
+
+<Callout type="info">
+  Cooldown prevents alert fatigue by limiting how often an alert can fire.
+</Callout>
+
+---
+
+## Alert Limits
+
+| Plan       | Max Alerts per Project |
+| ---------- | ---------------------- |
+| Free       | 2                      |
+| Starter    | 10                     |
+| Pro        | 50                     |
+| Enterprise | Unlimited              |

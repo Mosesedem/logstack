@@ -1,0 +1,170 @@
+---
+title: SDK Overview
+description: Complete guide to the Logstack JavaScript/TypeScript SDK.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Card, Cards } from "fumadocs-ui/components/card";
+
+# SDK Overview
+
+The Logstack SDK provides a simple, powerful interface for sending logs from your JavaScript/TypeScript applications.
+
+## Features
+
+- **Automatic Batching** — Logs are buffered and sent in batches for efficiency
+- **Retry with Backoff** — Failed requests are automatically retried with exponential backoff
+- **TypeScript Support** — Full type definitions for IntelliSense and type safety
+- **Framework Agnostic** — Works with any JavaScript runtime (Node.js, Deno, Bun, browsers)
+- **Graceful Shutdown** — Ensures all logs are sent before process exit
+
+## Core Concepts
+
+### Log Levels
+
+| Level      | Method               | Use Case                                        |
+| ---------- | -------------------- | ----------------------------------------------- |
+| `info`     | `logstack.info()`     | General information, successful operations      |
+| `warn`     | `logstack.warn()`     | Warning conditions, potential issues            |
+| `error`    | `logstack.error()`    | Error conditions, failed operations             |
+| `critical` | `logstack.critical()` | Critical failures requiring immediate attention |
+
+### Metadata
+
+Attach structured metadata to any log entry:
+
+```typescript
+logstack.info("Order placed", {
+  orderId: "order_123",
+  userId: "user_456",
+  amount: 99.99,
+  currency: "USD",
+  items: ["item_1", "item_2"],
+});
+```
+
+Metadata is indexed and searchable in the dashboard.
+
+### Source Tagging
+
+Identify where logs originate:
+
+```typescript
+logstack.log({
+  level: "info",
+  message: "Database query executed",
+  source: "database-service",
+  metadata: { query: "SELECT * FROM users", duration: 45 },
+});
+```
+
+## API Reference
+
+### `createLogStack(options)`
+
+Creates a new Logstack client instance.
+
+```typescript
+import { createLogStack } from "logstack-js";
+
+const logstack = createLogStack({
+  apiKey: "ls_live_xxx", // Required
+  endpoint: "https://api.logstack.tech", // Optional
+  batchSize: 100, // Optional
+  flushInterval: 5000, // Optional
+  maxRetries: 3, // Optional
+  onError: (error, logs) => {}, // Optional
+});
+```
+
+### `logstack.info(message, metadata?)`
+
+Send an info-level log.
+
+```typescript
+logstack.info("User logged in", { userId: "user_123" });
+```
+
+### `logstack.warn(message, metadata?)`
+
+Send a warning-level log.
+
+```typescript
+logstack.warn("API rate limit approaching", { usage: 90, limit: 100 });
+```
+
+### `logstack.error(message, metadata?)`
+
+Send an error-level log.
+
+```typescript
+logstack.error("Database connection failed", {
+  error: "Connection timeout",
+  host: "db.example.com",
+});
+```
+
+### `logstack.critical(message, metadata?)`
+
+Send a critical-level log.
+
+```typescript
+logstack.critical("Payment processing unavailable", {
+  service: "stripe",
+  lastSuccess: new Date().toISOString(),
+});
+```
+
+### `logstack.log(entry)`
+
+Send a custom log entry with full control.
+
+```typescript
+logstack.log({
+  level: "error",
+  message: "Operation failed",
+  source: "worker-service",
+  metadata: { jobId: "job_123" },
+  timestamp: new Date().toISOString(), // Optional, auto-generated if omitted
+});
+```
+
+### `logstack.flush()`
+
+Force send all buffered logs immediately.
+
+```typescript
+await logstack.flush();
+```
+
+### `logstack.close()`
+
+Flush remaining logs and close the client.
+
+```typescript
+await logstack.close();
+```
+
+<Callout type="info">
+  Always call `close()` during graceful shutdown to ensure no logs are lost.
+</Callout>
+
+## Explore More
+
+<Cards>
+  <Card
+    title="Configuration"
+    description="Customize batching, retries, and error handling"
+    href="/docs/sdk/configuration"
+  />
+  <Card
+    title="Logging Best Practices"
+    description="Log levels, metadata patterns, and tips"
+    href="/docs/sdk/logging"
+  />
+  <Card
+    title="Framework Integrations"
+    description="Express, Next.js, Fastify, NestJS guides"
+    href="/docs/sdk/frameworks"
+  />
+</Cards>

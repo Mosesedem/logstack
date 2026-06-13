@@ -1,0 +1,113 @@
+---
+title: Quick Start
+description: Get Logstack running in your application in under 5 minutes.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Step, Steps } from "fumadocs-ui/components/steps";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+# Quick Start
+
+Get Logstack integrated into your application in 5 minutes.
+
+<Steps>
+
+<Step>
+## Create an Account
+
+Sign up for Logstack at [logstack.tech/signup](https://logstack.tech/signup) or deploy your own instance.
+
+</Step>
+
+<Step>
+## Create a Project
+
+After signing in, create a new project from the dashboard. You'll receive an API key starting with `ls_live_`.
+
+<Callout type="warn">
+  Keep your API key secure. Never commit it to version control or expose it in
+  client-side code.
+</Callout>
+
+</Step>
+
+<Step>
+## Install the SDK
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tab value="npm">```bash npm install logstack-js ```</Tab>
+  <Tab value="yarn">```bash yarn add logstack-js ```</Tab>
+  <Tab value="pnpm">```bash pnpm add logstack-js ```</Tab>
+</Tabs>
+
+</Step>
+
+<Step>
+## Initialize and Log
+
+```typescript title="src/lib/logger.ts"
+import { createLogStack } from "logstack-js";
+
+export const logger = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+});
+```
+
+```typescript title="src/index.ts"
+import { logger } from "./lib/logger";
+
+// Start logging
+logger.info("Application started", { version: "1.0.0" });
+
+// Log with context
+logger.info("User action", {
+  userId: "user_123",
+  action: "login",
+  ip: "192.168.1.1",
+});
+
+// Log errors with stack traces
+try {
+  throw new Error("Something went wrong");
+} catch (error) {
+  logger.error("Operation failed", {
+    error: error.message,
+    stack: error.stack,
+  });
+}
+```
+
+</Step>
+
+<Step>
+## View Your Logs
+
+Open the Logstack dashboard to see your logs streaming in real-time. Use filters to search by level, time range, or metadata.
+
+</Step>
+
+</Steps>
+
+## What's Next?
+
+- **[SDK Configuration](/docs/sdk/configuration)** — Customize batching, retries, and error handling
+- **[Framework Guides](/docs/sdk/frameworks)** — Integrate with Express, Next.js, Fastify, NestJS
+- **[API Reference](/docs/api/overview)** — Direct API access for advanced use cases
+- **[Self-Hosting](/docs/deployment/overview)** — Deploy Logstack on your own infrastructure
+
+## Environment Variables
+
+We recommend using environment variables for configuration:
+
+```bash title=".env"
+# Required: Your Logstack API key
+LOGSTACK_API_KEY=ls_live_your_api_key_here
+
+# Optional: Custom endpoint (for self-hosted)
+LOGSTACK_ENDPOINT=https://api.logstack.tech
+```
+
+<Callout type="info">
+  Add `.env` to your `.gitignore` to prevent accidentally committing secrets.
+</Callout>

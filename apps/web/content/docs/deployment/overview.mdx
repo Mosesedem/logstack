@@ -1,0 +1,131 @@
+---
+title: Deployment Overview
+description: Deploy LogStack to production environments.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Card, Cards } from "fumadocs-ui/components/card";
+
+# Deployment Overview
+
+LogStack can be deployed in multiple ways to match your infrastructure needs.
+
+## Deployment Options
+
+<Cards>
+  <Card
+    title="Docker Compose"
+    description="Quick deployment for single-server setups"
+    href="/docs/deployment/docker"
+  />
+  <Card
+    title="Cloud Platforms"
+    description="AWS, GCP, DigitalOcean deployment guides"
+    href="/docs/deployment/cloud"
+  />
+  <Card
+    title="Production Checklist"
+    description="Security and performance best practices"
+    href="/docs/deployment/production-checklist"
+  />
+</Cards>
+
+## Architecture Requirements
+
+LogStack requires the following services:
+
+| Service         | Purpose                         | Recommended    |
+| --------------- | ------------------------------- | -------------- |
+| **PostgreSQL**  | Primary database                | PostgreSQL 15+ |
+| **Redis**       | Caching, rate limiting, pub/sub | Redis 7+       |
+| **Go API**      | Backend API server              | Go 1.21+       |
+| **Next.js Web** | Dashboard frontend              | Node.js 18+    |
+
+## Minimum Requirements
+
+### Development / Testing
+
+| Resource | Minimum   |
+| -------- | --------- |
+| CPU      | 2 cores   |
+| RAM      | 4 GB      |
+| Storage  | 20 GB SSD |
+
+### Production
+
+| Resource | Recommended |
+| -------- | ----------- |
+| CPU      | 4+ cores    |
+| RAM      | 8+ GB       |
+| Storage  | 100+ GB SSD |
+
+## Quick Start
+
+The fastest way to deploy LogStack:
+
+```bash
+# Clone the repository
+git clone https://github.com/mosesedem/logstack.git
+cd logstack
+
+# Copy environment configuration
+cp .env.example .env
+
+# Edit configuration (see Production Checklist)
+nano .env
+
+# Start all services
+docker-compose up -d
+
+# Check health
+curl http://localhost:8080/health
+```
+
+<Callout type="warn">
+  The default configuration is for development. See the [Production
+  Checklist](/docs/deployment/production-checklist) before deploying to
+  production.
+</Callout>
+
+## Environment Variables
+
+Key configuration variables:
+
+```bash
+# Database
+DATABASE_URL=postgres://logstack:password@localhost:5432/logstack
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# Security (CHANGE IN PRODUCTION)
+JWT_SECRET=generate-with-openssl-rand-base64-32
+NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32
+
+# External Services
+RESEND_API_KEY=re_xxxxxxxxxxxxx  # Email notifications
+FCM_SERVER_KEY=AAAAxxxxxxx       # Push notifications (optional)
+
+# Server
+PORT=8080
+ENV=production
+ALLOWED_ORIGINS=https://your-domain.com
+```
+
+See [.env.example](https://github.com/mosesedem/logstack/blob/main/.env.example) for all options.
+
+## Service Ports
+
+| Service     | Default Port | Protocol |
+| ----------- | ------------ | -------- |
+| Go API      | 8080         | HTTP     |
+| Next.js Web | 3000         | HTTP     |
+| PostgreSQL  | 5432         | TCP      |
+| Redis       | 6379         | TCP      |
+| WebSocket   | 8080         | WS       |
+
+## Next Steps
+
+1. **[Docker Deployment](/docs/deployment/docker)** — Set up with Docker Compose
+2. **[Cloud Deployment](/docs/deployment/cloud)** — Deploy to AWS, GCP, or DigitalOcean
+3. **[Production Checklist](/docs/deployment/production-checklist)** — Security and performance hardening

@@ -1,0 +1,324 @@
+---
+title: Logging Guide
+description: Best practices for effective logging with Logstack, including log levels, context, and metadata.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+# Logging Guide
+
+Learn how to write effective, searchable, and actionable logs with Logstack.
+
+## Log Levels
+
+Choose the appropriate level for each log entry. Logstack supports five log levels:
+
+| Level      | Color (Dev) | Use Case                                      |
+| ---------- | ----------- | --------------------------------------------- |
+| `debug`    | Magenta     | Detailed debugging information                |
+| `info`     | Cyan        | General information, successful operations    |
+| `warn`     | Yellow      | Warning conditions, potential issues          |
+| `error`    | Red         | Errors that affect functionality              |
+| `critical` | Red BG      | Severe failures requiring immediate attention |
+
+### `debug` — Detailed Debugging
+
+Use for verbose information useful during development.
+
+```typescript
+logstack.debug("Parsing configuration", {
+  configPath: "/app/config.json",
+  options: { env: "dev", debug: true },
+});
+logstack.debug("Cache hit", { key: "user:123", ttl: 3600 });
+```
+
+<Callout type="info">
+  Debug logs are great for development. In production, consider filtering them
+  out or using sparingly.
+</Callout>
+
+### `info` — General Information
+
+Use for normal operations and successful events.
+
+```typescript
+logstack.info("Server started", { port: 3000, env: "production" });
+logstack.info("User signed up", { userId: "user_123", plan: "pro" });
+logstack.info("Order completed", { orderId: "order_456", amount: 99.99 });
+```
+
+### `warn` — Warning Conditions
+
+Use for potentially harmful situations that don't block execution.
+
+```typescript
+logstack.warn("API rate limit approaching", { current: 85, limit: 100 });
+logstack.warn("Deprecated API called", { endpoint: "/v1/old-route" });
+logstack.warn("Slow database query", { duration: 2500, query: "SELECT..." });
+```
+
+### `error` — Error Conditions
+
+Use for errors that affect functionality but allow continued operation.
+
+```typescript
+logstack.error("Payment failed", {
+  orderId: "order_789",
+  error: "Card declined",
+  gateway: "stripe",
+});
+
+logstack.error("External API error", {
+  service: "weather-api",
+  statusCode: 500,
+  response: "Internal Server Error",
+});
+```
+
+### `critical` — Critical Failures
+
+Use for severe errors requiring immediate attention.
+
+```typescript
+logstack.critical("Database connection lost", {
+  host: "db.example.com",
+  lastSuccessful: new Date().toISOString(),
+});
+
+logstack.critical("All payment gateways unavailable", {
+  gateways: ["stripe", "paypal"],
+  affectedOrders: 15,
+});
+```
+
+<Callout type="warn">
+  Set up alerts for `critical` logs to get notified immediately via push
+  notifications.
+</Callout>
+
+## Log Context
+
+Logstack automatically captures contextual information to help you trace where logs originated.
+
+### Automatic Context (Browser)
+
+When `captureContext: true` (default), Logstack automatically captures:
+
+```typescript
+// These are captured automatically in browser environments
+{
+  url: "https://myapp.com/dashboard",
+  route: "/dashboard",
+  userAgent: "Mozilla/5.0..."
+}
+```
+
+### Manual Context
+
+Set context for a request or operation:
+
+```typescript
+// Set context at the start of a request
+logstack.setContext({
+  url: "/api/users",
+  method: "POST",
+  requestId: "req_abc123",
+  ip: "192.168.1.1",
+  component: "UserService",
+});
+
+// All subsequent logs include this context
+logstack.info("Validating user data");
+logstack.info("Creating user record");
+logstack.info("Sending welcome email");
+
+// Clear when done
+logstack.clearContext();
+```
+
+### Context in Middleware
+
+```typescript
+app.use((req, res, next) => {
+  logstack.setContext({
+    url: req.originalUrl,
+    method: req.method,
+    requestId: req.headers["x-request-id"] || crypto.randomUUID(),
+    ip: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+
+  res.on("finish", () => {
+    logstack.clearContext();
+  });
+
+  next();
+});
+```
+
+## Structured Metadata
+
+Always include relevant context as metadata:
+
+### Good: Structured and Searchable
+
+```typescript
+logstack.info("User action", {
+  userId: "user_123",
+  action: "purchase",
+  productId: "prod_456",
+  amount: 49.99,
+  currency: "USD",
+});
+```
+
+### Avoid: Unstructured Strings
+
+```typescript
+// ❌ Hard to search and filter
+logstack.info("User user_123 purchased product prod_456 for $49.99 USD");
+```
+
+## Common Patterns
+
+### Request/Response Logging
+
+```typescript
+function logRequest(req: Request, res: Response, duration: number) {
+  const level =
+    res.status >= 500 ? "error" : res.status >= 400 ? "warn" : "info";
+
+  logstack.log({
+    level,
+    message: `${req.method} ${req.path}`,
+    source: "http",
+    metadata: {
+      method: req.method,
+      path: req.path,
+      statusCode: res.status,
+      duration,
+      userAgent: req.headers["user-agent"],
+      ip: req.ip,
+      userId: req.user?.id,
+    },
+  });
+}
+```
+
+### Error with Stack Trace
+
+```typescript
+try {
+  await riskyOperation();
+} catch (error) {
+  logstack.error("Operation failed", {
+    error: error.message,
+    stack: error.stack,
+    name: error.name,
+    context: { operationId: "op_123" },
+  });
+}
+```
+
+### Performance Metrics
+
+```typescript
+const start = performance.now();
+
+await databaseQuery();
+
+logstack.info("Database query executed", {
+  query: "SELECT * FROM users WHERE active = true",
+  duration: Math.round(performance.now() - start),
+  rowCount: 150,
+});
+```
+
+### User Actions
+
+```typescript
+logstack.info("User action", {
+  userId: user.id,
+  sessionId: session.id,
+  action: "add_to_cart",
+  target: {
+    productId: product.id,
+    productName: product.name,
+    quantity: 2,
+  },
+  timestamp: new Date().toISOString(),
+});
+```
+
+## Best Practices
+
+### 1. Be Consistent
+
+Use the same metadata keys across your application:
+
+```typescript
+// ✅ Consistent: always use 'userId'
+logstack.info("Login", { userId: "user_123" });
+logstack.info("Purchase", { userId: "user_123" });
+
+// ❌ Inconsistent: mixing 'userId', 'user_id', 'user'
+logstack.info("Login", { user_id: "user_123" });
+logstack.info("Purchase", { user: "user_123" });
+```
+
+### 2. Use Source Tags
+
+Identify which service generated the log:
+
+```typescript
+logstack.log({
+  level: "info",
+  message: "Task completed",
+  source: "background-worker", // Identifies the service
+  metadata: { taskId: "task_123" },
+});
+```
+
+### 3. Avoid Sensitive Data
+
+Never log passwords, tokens, or PII:
+
+```typescript
+// ❌ Never do this
+logstack.info("Login", { password: user.password });
+
+// ✅ Log identifiers, not sensitive values
+logstack.info("Login", { userId: user.id, email: user.email });
+```
+
+### 4. Include Correlation IDs
+
+Track requests across services:
+
+```typescript
+const correlationId = crypto.randomUUID();
+
+logstack.info("Request started", { correlationId, path: "/api/orders" });
+// ... in another service
+logstack.info("Order processed", { correlationId, orderId: "order_123" });
+```
+
+### 5. Log at Boundaries
+
+Log when entering/exiting important operations:
+
+```typescript
+async function processPayment(orderId: string) {
+  logstack.info("Payment processing started", { orderId });
+
+  try {
+    const result = await chargeCard();
+    logstack.info("Payment successful", { orderId, transactionId: result.id });
+    return result;
+  } catch (error) {
+    logstack.error("Payment failed", { orderId, error: error.message });
+    throw error;
+  }
+}
+```

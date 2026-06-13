@@ -1,0 +1,369 @@
+---
+title: Framework Integrations
+description: Integrate LogStack with Express, Next.js, Fastify, NestJS, and more.
+---
+
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+import { Callout } from "fumadocs-ui/components/callout";
+
+# Framework Integrations
+
+Step-by-step guides for popular frameworks.
+
+## Express.js
+
+Full integration with request logging and error handling.
+
+```typescript title="src/lib/logger.ts"
+import { createLogStack } from "logstack-js";
+
+export const logstack = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+});
+```
+
+```typescript title="src/middleware/logging.ts"
+import { Request, Response, NextFunction } from "express";
+import { logstack } from "../lib/logger";
+
+export function requestLogger(req: Request, res: Response, next: NextFunction) {
+  const start = Date.now();
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    const level =
+      res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
+
+    logstack.log({
+      level,
+      message: `${req.method} ${req.path}`,
+      source: "http",
+      metadata: {
+        method: req.method,
+        path: req.path,
+        statusCode: res.statusCode,
+        duration,
+        userAgent: req.get("user-agent"),
+        ip: req.ip,
+      },
+    });
+  });
+
+  next();
+}
+```
+
+```typescript title="src/middleware/error.ts"
+import { Request, Response, NextFunction } from "express";
+import { logstack } from "../lib/logger";
+
+export function errorHandler(
+  err: Error,
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  logstack.error("Unhandled error", {
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+  });
+
+  res.status(500).json({ error: "Internal server error" });
+}
+```
+
+```typescript title="src/app.ts"
+import express from "express";
+import { requestLogger } from "./middleware/logging";
+import { errorHandler } from "./middleware/error";
+import { logstack } from "./lib/logger";
+
+const app = express();
+
+app.use(requestLogger);
+
+// Your routes here
+app.get("/health", (req, res) => res.json({ status: "ok" }));
+
+app.use(errorHandler);
+
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  await logstack.close();
+  process.exit(0);
+});
+
+app.listen(3000);
+```
+
+## Next.js (App Router)
+
+<Tabs items={['Server Components', 'API Routes', 'Middleware']}>
+  <Tab value="Server Components">
+```typescript title="src/lib/logger.ts"
+import { createLogStack } from 'logstack-js';
+
+// Create singleton instance
+export const logstack = createLogStack({
+apiKey: process.env.LOGSTACK_API_KEY!,
+});
+
+````
+
+```typescript title="src/app/users/page.tsx"
+import { logstack } from '@/lib/logger';
+
+export default async function UsersPage() {
+  logstack.info('Users page viewed');
+
+  const users = await fetchUsers();
+
+  return <UserList users={users} />;
+}
+````
+
+  </Tab>
+  <Tab value="API Routes">
+```typescript title="src/app/api/users/route.ts"
+import { NextResponse } from 'next/server';
+import { logstack } from '@/lib/logger';
+
+export async function POST(request: Request) {
+  const start = Date.now();
+  
+  try {
+    const data = await request.json();
+    
+    // Create user logic
+    const user = await createUser(data);
+    
+    logstack.info('User created', { 
+      userId: user.id, 
+      email: data.email,
+      duration: Date.now() - start,
+    });
+    
+    return NextResponse.json(user, { status: 201 });
+  } catch (error) {
+    logstack.error('Failed to create user', { 
+      error: error.message,
+      duration: Date.now() - start,
+    });
+    
+    return NextResponse.json(
+      { error: 'Failed to create user' },
+      { status: 500 }
+    );
+  }
+}
+```
+  </Tab>
+  <Tab value="Middleware">
+```typescript title="src/middleware.ts"
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { logstack } from '@/lib/logger';
+
+export function middleware(request: NextRequest) {
+  const start = Date.now();
+  const response = NextResponse.next();
+  
+  // Log after response
+  response.headers.set('x-request-start', start.toString());
+  
+  logstack.info('Request', {
+    method: request.method,
+    path: request.nextUrl.pathname,
+    userAgent: request.headers.get('user-agent'),
+  });
+  
+  return response;
+}
+
+export const config = {
+  matcher: '/api/:path*',
+};
+```
+  </Tab>
+</Tabs>
+
+## Fastify
+
+```typescript title="src/plugins/logger.ts"
+import { FastifyPluginAsync } from "fastify";
+import fp from "fastify-plugin";
+import { createLogStack } from "logstack-js";
+
+const logstack = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+});
+
+const loggerPlugin: FastifyPluginAsync = async (fastify) => {
+  // Decorate fastify with logstack
+  fastify.decorate("logstack", logstack);
+
+  // Request logging hook
+  fastify.addHook("onResponse", async (request, reply) => {
+    const level =
+      reply.statusCode >= 500
+        ? "error"
+        : reply.statusCode >= 400
+          ? "warn"
+          : "info";
+
+    logstack.log({
+      level,
+      message: `${request.method} ${request.url}`,
+      source: "http",
+      metadata: {
+        method: request.method,
+        url: request.url,
+        statusCode: reply.statusCode,
+        duration: reply.elapsedTime,
+        ip: request.ip,
+      },
+    });
+  });
+
+  // Graceful shutdown
+  fastify.addHook("onClose", async () => {
+    await logstack.close();
+  });
+};
+
+export default fp(loggerPlugin);
+```
+
+```typescript title="src/app.ts"
+import Fastify from "fastify";
+import loggerPlugin from "./plugins/logger";
+
+const app = Fastify();
+
+app.register(loggerPlugin);
+
+app.get("/health", async () => ({ status: "ok" }));
+
+app.listen({ port: 3000 });
+```
+
+## NestJS
+
+```typescript title="src/common/logger/logstack.service.ts"
+import { Injectable, OnModuleDestroy } from "@nestjs/common";
+import { createLogStack, LogStackClient } from "logstack-js";
+
+@Injectable()
+export class LogStackService implements OnModuleDestroy {
+  private client: LogStackClient;
+
+  constructor() {
+    this.client = createLogStack({
+      apiKey: process.env.LOGSTACK_API_KEY!,
+    });
+  }
+
+  info(message: string, metadata?: Record<string, any>) {
+    this.client.info(message, metadata);
+  }
+
+  warn(message: string, metadata?: Record<string, any>) {
+    this.client.warn(message, metadata);
+  }
+
+  error(message: string, metadata?: Record<string, any>) {
+    this.client.error(message, metadata);
+  }
+
+  critical(message: string, metadata?: Record<string, any>) {
+    this.client.critical(message, metadata);
+  }
+
+  async onModuleDestroy() {
+    await this.client.close();
+  }
+}
+```
+
+```typescript title="src/common/interceptors/logging.interceptor.ts"
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+} from "@nestjs/common";
+import { Observable } from "rxjs";
+import { tap } from "rxjs/operators";
+import { LogStackService } from "../logger/logstack.service";
+
+@Injectable()
+export class LoggingInterceptor implements NestInterceptor {
+  constructor(private logstack: LogStackService) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest();
+    const start = Date.now();
+
+    return next.handle().pipe(
+      tap({
+        next: () => {
+          this.logstack.info(`${request.method} ${request.url}`, {
+            duration: Date.now() - start,
+            statusCode: context.switchToHttp().getResponse().statusCode,
+          });
+        },
+        error: (error) => {
+          this.logstack.error(`${request.method} ${request.url}`, {
+            duration: Date.now() - start,
+            error: error.message,
+          });
+        },
+      }),
+    );
+  }
+}
+```
+
+<Callout type="info">
+  Register `LogStackService` as a global provider and `LoggingInterceptor` as a
+  global interceptor in your `AppModule`.
+</Callout>
+
+## Hono
+
+```typescript title="src/index.ts"
+import { Hono } from "hono";
+import { createLogStack } from "logstack-js";
+
+const app = new Hono();
+const logstack = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+});
+
+// Logging middleware
+app.use("*", async (c, next) => {
+  const start = Date.now();
+  await next();
+
+  const level =
+    c.res.status >= 500 ? "error" : c.res.status >= 400 ? "warn" : "info";
+
+  logstack.log({
+    level,
+    message: `${c.req.method} ${c.req.path}`,
+    source: "http",
+    metadata: {
+      method: c.req.method,
+      path: c.req.path,
+      status: c.res.status,
+      duration: Date.now() - start,
+    },
+  });
+});
+
+app.get("/", (c) => c.json({ message: "Hello!" }));
+
+export default app;
+```

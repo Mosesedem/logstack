@@ -1,0 +1,403 @@
+---
+title: For Vibecoders & AI Assistants
+description: Complete Logstack integration guide optimized for AI-assisted development. Copy this entire page for your AI assistant.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+# Logstack for Vibecoders 🤖
+
+This page contains everything an AI assistant needs to help you integrate Logstack into your project. Copy the entire snippet below and paste it into your AI assistant's context.
+
+<Callout type="info">
+  This documentation is specifically designed to be AI-readable. Share the
+  snippet below with your favorite AI coding assistant (Copilot, Cursor, Claude,
+  etc.) for seamless integration.
+</Callout>
+
+## Complete AI-Friendly Integration Snippet
+
+Copy everything inside the code block below and paste it into your AI assistant:
+
+````markdown
+# Logstack Complete Integration Guide
+
+## For AI Assistants and Vibecoders
+
+### What is Logstack?
+
+Logstack is a production-ready log management platform with:
+
+- Real-time log streaming via WebSockets
+- Smart alerting with pattern matching
+- Push notifications for mobile
+- Self-hostable with Docker
+- TypeScript SDK with full type support
+
+### Installation
+
+```bash
+# Using npm
+npm install logstack-js
+
+# Using yarn
+yarn add logstack-js
+
+# Using pnpm
+pnpm add logstack-js
+
+# Using bun
+bun add logstack-js
+```
+````
+
+### Requirements
+
+- Node.js 16.0.0 or higher
+- TypeScript 4.7+ (optional but recommended)
+- A Logstack API key (get one at logstack.tech/signup)
+
+### Environment Variables
+
+Create a `.env` file with:
+
+```bash
+LOGSTACK_API_KEY=ls_live_your_api_key_here
+LOGSTACK_ENDPOINT=https://api.logstack.tech  # optional, for self-hosted
+NODE_ENV=development  # or 'production'
+```
+
+### Basic Usage
+
+```typescript
+import { createLogStack } from "logstack-js";
+
+// Create the logger instance
+const logger = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+  // Optional configuration:
+  environment: process.env.NODE_ENV as "development" | "production",
+  batchSize: 100, // Logs per batch (default: 100)
+  flushInterval: 5000, // Flush interval in ms (default: 5000)
+  maxRetries: 3, // Retry attempts (default: 3)
+  consoleInProduction: false, // Also log to console in prod
+  captureContext: true, // Auto-capture URL, route, userAgent
+});
+
+// Log levels
+logger.debug("Debug message", { debugInfo: "value" });
+logger.info("Info message", { userId: "user_123" });
+logger.warn("Warning message", { threshold: 90 });
+logger.error("Error message", { errorCode: "E001" });
+logger.critical("Critical message", { system: "payment" });
+
+// Always flush before app exit
+process.on("beforeExit", async () => {
+  await logger.close();
+});
+```
+
+### Development vs Production Mode
+
+- **Development mode** (`NODE_ENV=development`):
+  - Logs output to console only with colored formatting
+  - No network requests, no server logging
+  - Great for local development
+
+- **Production mode** (`NODE_ENV=production`):
+  - Logs sent to Logstack server
+  - Stored in database, triggers alerts
+  - Push notifications for errors/critical
+
+### Log Entry Structure
+
+```typescript
+interface LogEntry {
+  level: "debug" | "info" | "warn" | "error" | "critical";
+  message: string;
+  source?: string; // e.g., 'auth-service'
+  metadata?: Record<string, unknown>; // Any JSON-serializable data
+  timestamp?: string; // ISO 8601 format, auto-generated if omitted
+  context?: {
+    url?: string; // Page URL or API endpoint
+    route?: string; // Route path
+    method?: string; // HTTP method
+    userAgent?: string; // Browser/client user agent
+    ip?: string; // Client IP address
+    requestId?: string; // Request tracing ID
+    component?: string; // Component or module name
+  };
+}
+```
+
+### Setting Persistent Context
+
+```typescript
+// Set context that applies to all subsequent logs
+logger.setContext({
+  url: "/api/users",
+  method: "POST",
+  requestId: "req_abc123",
+  component: "UserService",
+});
+
+logger.info("User created"); // Will include the context above
+
+// Clear context when done
+logger.clearContext();
+```
+
+### Framework Integration Examples
+
+#### Express.js Middleware
+
+```typescript
+import express from "express";
+import { createLogStack } from "logstack-js";
+
+const app = express();
+const logger = createLogStack({ apiKey: process.env.LOGSTACK_API_KEY! });
+
+// Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+
+  logger.setContext({
+    url: req.originalUrl,
+    method: req.method,
+    ip: req.ip,
+    userAgent: req.get("user-agent"),
+    requestId: req.get("x-request-id") || crypto.randomUUID(),
+  });
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    logger.info(`${req.method} ${req.originalUrl} ${res.statusCode}`, {
+      duration,
+      statusCode: res.statusCode,
+    });
+    logger.clearContext();
+  });
+
+  next();
+});
+
+// Error handling middleware
+app.use(
+  (
+    err: Error,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    logger.error("Unhandled error", {
+      error: err.message,
+      stack: err.stack,
+      url: req.originalUrl,
+    });
+    res.status(500).json({ error: "Internal server error" });
+  },
+);
+```
+
+#### Next.js Integration
+
+```typescript
+// lib/logger.ts
+import { createLogStack } from "logstack-js";
+
+export const logger = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+  environment: process.env.NODE_ENV as "development" | "production",
+});
+
+// In API routes
+// app/api/users/route.ts
+import { logger } from "@/lib/logger";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function POST(request: NextRequest) {
+  logger.setContext({
+    url: "/api/users",
+    method: "POST",
+  });
+
+  try {
+    const body = await request.json();
+    logger.info("Creating user", { email: body.email });
+    // ... create user logic
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    logger.error("Failed to create user", {
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  }
+}
+```
+
+#### NestJS Integration
+
+```typescript
+// logger.service.ts
+import { Injectable, OnModuleDestroy } from "@nestjs/common";
+import { createLogStack, LogStackClient } from "logstack-js";
+
+@Injectable()
+export class LoggerService implements OnModuleDestroy {
+  private logger: LogStackClient;
+
+  constructor() {
+    this.logger = createLogStack({
+      apiKey: process.env.LOGSTACK_API_KEY!,
+    });
+  }
+
+  info(message: string, metadata?: Record<string, unknown>) {
+    this.logger.info(message, metadata);
+  }
+
+  error(message: string, metadata?: Record<string, unknown>) {
+    this.logger.error(message, metadata);
+  }
+
+  async onModuleDestroy() {
+    await this.logger.close();
+  }
+}
+```
+
+### REST API Reference
+
+#### Ingest Logs
+
+```
+POST /api/v1/logs/ingest
+Headers:
+  Content-Type: application/json
+  X-API-Key: ls_live_your_api_key
+
+Body:
+{
+  "logs": [
+    {
+      "level": "info",
+      "message": "User signed up",
+      "metadata": { "userId": "user_123" },
+      "timestamp": "2026-01-30T14:23:15.234Z"
+    }
+  ]
+}
+
+Response: 200 OK
+{
+  "received": 1,
+  "status": "ok"
+}
+```
+
+#### Query Logs
+
+```
+GET /api/v1/logs?level=error&limit=100&since=2026-01-01T00:00:00Z
+Headers:
+  Authorization: Bearer <access_token>
+
+Response: 200 OK
+{
+  "logs": [...],
+  "pagination": { "total": 150, "page": 1, "limit": 100 }
+}
+```
+
+### Common Patterns
+
+#### Error Boundary Logging (React)
+
+```typescript
+import { logger } from "@/lib/logger";
+
+class ErrorBoundary extends React.Component {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    logger.error("React error boundary caught error", {
+      error: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+    });
+  }
+}
+```
+
+#### Async Operation Logging
+
+```typescript
+async function processOrder(orderId: string) {
+  const startTime = Date.now();
+
+  logger.info("Starting order processing", { orderId });
+
+  try {
+    const result = await processPayment(orderId);
+    logger.info("Order processed successfully", {
+      orderId,
+      duration: Date.now() - startTime,
+    });
+    return result;
+  } catch (error) {
+    logger.error("Order processing failed", {
+      orderId,
+      error: error instanceof Error ? error.message : "Unknown",
+      duration: Date.now() - startTime,
+    });
+    throw error;
+  }
+}
+```
+
+### Troubleshooting
+
+1. **Logs not appearing in dashboard?**
+   - Check NODE_ENV is set to 'production'
+   - Verify API key is correct
+   - Ensure flush() or close() is called before exit
+
+2. **Console logs not colored?**
+   - Only works in terminal environments
+   - Browser logs use CSS styling instead
+
+3. **Getting rate limited?**
+   - Increase batchSize to reduce API calls
+   - Check if you're logging in a tight loop
+
+### Links
+
+- Dashboard: https://logstack.tech/dashboard
+- API Docs: https://logstack.tech/docs/api/overview
+- Self-Hosting: https://logstack.tech/docs/deployment/overview
+- GitHub: https://github.com/logstack/logstack
+- Support: support@logstack.tech
+
+```
+
+## Need Help?
+
+If you're using an AI assistant and something isn't working:
+
+1. Make sure the AI has the complete snippet above
+2. Provide your current code context
+3. Describe the specific error or issue
+4. Mention your Node.js version and framework
+
+<Callout type="warn">
+  Never share your actual API key with AI assistants or in public contexts. Use environment variables.
+</Callout>
+
+## Quick Commands for AI Assistants
+
+Tell your AI assistant:
+
+- **"Add Logstack logging to my Express app"** - Will set up middleware and error handling
+- **"Log this function with Logstack"** - Will add appropriate log calls
+- **"Add error tracking with Logstack"** - Will wrap try/catch with logging
+- **"Set up Logstack for my Next.js API routes"** - Will create logger module and integrate
+```

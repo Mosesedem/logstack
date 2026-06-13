@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: ./packages/logstack-go
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://logstack:logstack@postgres:5432/logstack?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      - PORT=8080
+      - ENV=development
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=logstack
+      - POSTGRES_PASSWORD=logstack
+      - POSTGRES_DB=logstack
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

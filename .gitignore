@@ -1,0 +1,67 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+!apps/web/src/components/logs/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Turbo
+.turbo/
+
+# Flutter
+apps/mobile/.dart_tool/
+apps/mobile/.packages
+apps/mobile/build/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/ios/Pods/
+apps/mobile/ios/.symlinks/
+
+# Go
+packages/logstack-go/tmp/
+
+# Misc
+*.pem
+*.key
+
+logstack-design-guide.md
+
+Design_Guide.MD
+demo.html
+Logstack_Finishes.MD
+
+progress.txt
+
+# backend_documentation.mdapps/mobile/lib/firebase_options.dart

@@ -1,0 +1,57 @@
+name: logstack_mobile
+description: Logstack mobile app for real-time log monitoring
+
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.4.0
+  riverpod_annotation: ^2.3.0
+
+  # Networking
+  dio: ^5.3.0
+
+  # Local storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Push notifications
+  firebase_core: ^2.24.0
+  firebase_messaging: ^14.7.0
+  flutter_local_notifications: ^16.1.0
+
+  # UI
+  cupertino_icons: ^1.0.2
+  google_fonts: ^6.1.0
+  flutter_svg: ^2.0.9
+  shimmer: ^3.0.0
+
+  # Utils
+  intl: ^0.18.1
+  logger: ^2.0.2
+  shared_preferences: ^2.2.2
+  go_router: ^12.1.0
+  json_annotation: ^4.8.1
+  freezed_annotation: ^2.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.6
+  riverpod_generator: ^2.3.0
+  json_serializable: ^6.7.1
+  freezed: ^2.4.5
+  hive_generator: ^2.0.1
+
+flutter:
+  uses-material-design: true

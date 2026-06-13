@@ -1,0 +1,273 @@
+---
+title: Production Checklist
+description: Security and performance best practices for production.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+# Production Checklist
+
+Essential steps before deploying LogStack to production.
+
+## Security Checklist
+
+### Authentication & Secrets
+
+- [ ] **Generate unique JWT secret**
+  ```bash
+  openssl rand -base64 32
+  ```
+- [ ] **Generate unique NextAuth secret**
+
+  ```bash
+  openssl rand -base64 32
+  ```
+
+- [ ] **Use strong database passwords** — Minimum 20 characters, mixed case, numbers, symbols
+
+- [ ] **Never commit secrets** — Use `.env` files or secret managers
+
+<Callout type="warn">
+  Default secrets in `.env.example` are for development only. Always generate
+  unique secrets for production.
+</Callout>
+
+### Network Security
+
+- [ ] **Enable HTTPS/TLS** — Use valid SSL certificates (Let's Encrypt is free)
+
+- [ ] **Restrict ALLOWED_ORIGINS** — Set to your specific domain(s), never use `*` in production
+
+  ```bash
+  ALLOWED_ORIGINS=https://your-domain.com,https://app.your-domain.com
+  ```
+
+- [ ] **Configure firewall** — Only expose ports 80 and 443
+
+  ```bash
+  sudo ufw allow 80/tcp
+  sudo ufw allow 443/tcp
+  sudo ufw enable
+  ```
+
+- [ ] **Database not publicly accessible** — Keep PostgreSQL and Redis on private network
+
+### Rate Limiting
+
+- [ ] **Enable rate limiting**
+
+  ```bash
+  RATE_LIMIT_REQUESTS=100
+  RATE_LIMIT_WINDOW=1m
+  ```
+
+- [ ] **Configure per-endpoint limits** — Stricter limits for auth endpoints
+
+---
+
+## Performance Checklist
+
+### Database
+
+- [ ] **Enable connection pooling**
+
+  ```bash
+  DB_MAX_IDLE_CONNS=10
+  DB_MAX_OPEN_CONNS=100
+  DB_CONN_MAX_LIFE=30m
+  ```
+
+- [ ] **Create indexes** — Ensure migrations have run with all indexes
+
+- [ ] **Configure log retention** — Archive or delete old logs to manage storage
+
+### Redis
+
+- [ ] **Set memory limits**
+
+  ```bash
+  redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+  ```
+
+- [ ] **Configure eviction policy** — `allkeys-lru` for caching
+
+### Application
+
+- [ ] **Enable JSON logging**
+
+  ```bash
+  LOG_JSON=true
+  LOG_LEVEL=info
+  ```
+
+- [ ] **Configure appropriate timeouts**
+
+  ```bash
+  READ_TIMEOUT=15s
+  WRITE_TIMEOUT=15s
+  IDLE_TIMEOUT=60s
+  ```
+
+- [ ] **Enable gzip compression** — Configure in nginx
+
+---
+
+## Monitoring Checklist
+
+### Health Checks
+
+- [ ] **Monitor health endpoints**
+
+  ```bash
+  # API health
+  curl https://your-domain.com/health
+
+  # Readiness check
+  curl https://your-domain.com/ready
+  ```
+
+- [ ] **Set up uptime monitoring** — Use services like UptimeRobot, Pingdom, or Healthchecks.io
+
+### Logging & Alerts
+
+- [ ] **Configure log aggregation** — Forward logs to your logging platform
+
+- [ ] **Set up error alerting** — Get notified on critical errors
+
+- [ ] **Monitor disk space** — Alert before storage fills up
+
+---
+
+## Backup Checklist
+
+### Database Backups
+
+- [ ] **Enable automated backups**
+
+  ```bash
+  # Cron job for daily backups at 2 AM
+  0 2 * * * docker exec logstack-postgres pg_dump -U logstack logstack | gzip > /backups/logstack-$(date +\%Y\%m\%d).sql.gz
+  ```
+
+- [ ] **Test backup restoration** — Regularly verify backups work
+
+- [ ] **Offsite backup storage** — Store backups in a different location (S3, GCS)
+
+### Backup Retention
+
+| Type    | Retention |
+| ------- | --------- |
+| Daily   | 7 days    |
+| Weekly  | 4 weeks   |
+| Monthly | 12 months |
+
+---
+
+## Deployment Checklist
+
+### Before Deploy
+
+- [ ] Run all tests
+- [ ] Review environment variables
+- [ ] Check SSL certificate validity
+- [ ] Verify database migrations
+
+### During Deploy
+
+- [ ] Use rolling deployments
+- [ ] Monitor error rates
+- [ ] Watch for increased latency
+
+### After Deploy
+
+- [ ] Verify health endpoints
+- [ ] Check key functionality
+- [ ] Monitor logs for errors
+
+---
+
+## Environment Variables Reference
+
+```bash title=".env.production"
+# ============================================
+# REQUIRED - Must be set for production
+# ============================================
+
+# Database (use managed database in production)
+DATABASE_URL=postgres://user:pass@your-db-host:5432/logstack?sslmode=require
+
+# Redis (use managed Redis in production)
+REDIS_URL=redis://your-redis-host:6379
+
+# Security (generate unique values!)
+JWT_SECRET=your-unique-32-byte-secret-here
+NEXTAUTH_SECRET=another-unique-32-byte-secret
+NEXTAUTH_URL=https://your-domain.com
+
+# Allowed origins (no wildcards!)
+ALLOWED_ORIGINS=https://your-domain.com
+
+# ============================================
+# RECOMMENDED - Set for better operation
+# ============================================
+
+# Server
+ENV=production
+PORT=8080
+LOG_LEVEL=info
+LOG_JSON=true
+
+# Rate limiting
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_WINDOW=1m
+
+# Database pooling
+DB_MAX_IDLE_CONNS=10
+DB_MAX_OPEN_CONNS=100
+DB_CONN_MAX_LIFE=30m
+
+# Timeouts
+READ_TIMEOUT=15s
+WRITE_TIMEOUT=15s
+IDLE_TIMEOUT=60s
+
+# ============================================
+# OPTIONAL - External services
+# ============================================
+
+# Email notifications (Resend)
+RESEND_API_KEY=re_xxxxxxxxxxxxx
+
+# Push notifications (Firebase)
+FCM_SERVER_KEY=AAAAxxxxxxx
+```
+
+---
+
+## Security Hardening
+
+### Additional Nginx Headers
+
+```nginx
+# Security headers
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-XSS-Protection "1; mode=block" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Content-Security-Policy "default-src 'self'" always;
+```
+
+### Regular Updates
+
+```bash
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Update Docker images
+docker-compose pull
+docker-compose up -d
+```
+
+<Callout type="info">
+  Schedule regular security updates and monitor for CVEs in your dependencies.
+</Callout>

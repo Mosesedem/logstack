@@ -1,0 +1,26 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "---Getting Started---",
+    "quickstart",
+    "installation",
+    "vibecoders",
+    "---SDK---",
+    "sdk/overview",
+    "sdk/configuration",
+    "sdk/logging",
+    "sdk/frameworks",
+    "---API Reference---",
+    "api/overview",
+    "api/authentication",
+    "api/logs",
+    "api/projects",
+    "api/alerts",
+    "---Deployment---",
+    "deployment/overview",
+    "deployment/docker",
+    "deployment/cloud",
+    "deployment/production-checklist"
+  ]
+}

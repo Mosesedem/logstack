@@ -1,0 +1,263 @@
+---
+title: Docker Deployment
+description: Deploy LogStack using Docker Compose.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Step, Steps } from "fumadocs-ui/components/steps";
+
+# Docker Deployment
+
+Deploy LogStack with Docker Compose for single-server or development setups.
+
+## Prerequisites
+
+- Docker 24.0+
+- Docker Compose 2.20+
+- A server with at least 4GB RAM
+- Domain name with DNS configured (for production)
+
+<Steps>
+
+<Step>
+## Clone and Configure
+
+```bash
+git clone https://github.com/mosesedem/logstack.git
+cd logstack
+
+# Copy environment template
+cp .env.example .env
+```
+
+</Step>
+
+<Step>
+## Edit Environment Variables
+
+```bash title=".env"
+# Database - use strong passwords
+POSTGRES_USER=logstack
+POSTGRES_PASSWORD=your-strong-database-password
+POSTGRES_DB=logstack
+DATABASE_URL=postgres://logstack:your-strong-database-password@postgres:5432/logstack
+
+# Redis
+REDIS_URL=redis://redis:6379
+
+# Security - generate unique secrets
+# Run: openssl rand -base64 32
+JWT_SECRET=your-unique-jwt-secret-here
+NEXTAUTH_SECRET=your-unique-nextauth-secret-here
+NEXTAUTH_URL=https://your-domain.com
+
+# Domain
+ALLOWED_ORIGINS=https://your-domain.com
+
+# Email (Resend)
+RESEND_API_KEY=re_xxxxxxxxxxxxx
+
+# Environment
+ENV=production
+LOG_LEVEL=info
+LOG_JSON=true
+```
+
+<Callout type="warn">
+  Generate unique secrets for `JWT_SECRET` and `NEXTAUTH_SECRET`: ```bash
+  openssl rand -base64 32 ```
+</Callout>
+
+</Step>
+
+<Step>
+## Configure SSL Certificates
+
+### Option A: Let's Encrypt (Recommended)
+
+```bash
+# Install certbot
+sudo apt install certbot
+
+# Obtain certificates
+sudo certbot certonly --standalone -d your-domain.com
+
+# Copy to project
+mkdir -p infra/nginx/ssl
+sudo cp /etc/letsencrypt/live/your-domain.com/fullchain.pem infra/nginx/ssl/cert.pem
+sudo cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/nginx/ssl/key.pem
+sudo chown $USER:$USER infra/nginx/ssl/*.pem
+```
+
+### Option B: Self-signed (Development only)
+
+```bash
+mkdir -p infra/nginx/ssl
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout infra/nginx/ssl/key.pem \
+  -out infra/nginx/ssl/cert.pem \
+  -subj "/CN=localhost"
+```
+
+</Step>
+
+<Step>
+## Deploy
+
+```bash
+# Start all services
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+```
+
+</Step>
+
+<Step>
+## Verify Deployment
+
+```bash
+# Health check
+curl https://your-domain.com/health
+
+# Expected response
+{"status":"ok","timestamp":"2024-01-21T10:00:00Z"}
+```
+
+</Step>
+
+</Steps>
+
+## Docker Compose Configuration
+
+```yaml title="docker-compose.yml"
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  api:
+    build: ./packages/logstack-go
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      ENV: ${ENV}
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  web:
+    build: ./apps/web
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+## Management Commands
+
+### View Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f api
+```
+
+### Restart Services
+
+```bash
+# All services
+docker-compose restart
+
+# Specific service
+docker-compose restart api
+```
+
+### Update to Latest Version
+
+```bash
+git pull
+docker-compose build
+docker-compose up -d
+```
+
+### Database Backup
+
+```bash
+# Backup
+docker-compose exec postgres pg_dump -U logstack logstack > backup.sql
+
+# Restore
+docker-compose exec -T postgres psql -U logstack logstack < backup.sql
+```
+
+## Troubleshooting
+
+### Services not starting
+
+```bash
+# Check logs for errors
+docker-compose logs api
+
+# Verify environment variables
+docker-compose config
+```
+
+### Database connection issues
+
+```bash
+# Test database connection
+docker-compose exec postgres psql -U logstack -d logstack -c "SELECT 1"
+```
+
+### Port conflicts
+
+```bash
+# Check what's using port 80/443
+sudo lsof -i :80
+sudo lsof -i :443
+```

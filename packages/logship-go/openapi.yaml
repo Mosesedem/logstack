@@ -1,0 +1,731 @@
+openapi: 3.1.0
+info:
+  title: Logstack API
+  description: |
+    Production-ready log management platform API.
+
+    ## Authentication
+
+    Logstack uses two authentication methods:
+
+    - **JWT Bearer Tokens**: For user-facing operations (projects, alerts, settings)
+    - **API Keys**: For log ingestion from your applications
+
+    ## Rate Limits
+
+    | Endpoint Type | Limit | Window |
+    |--------------|-------|--------|
+    | Log Ingestion | 1000 | 1 minute |
+    | API Queries | 100 | 1 minute |
+    | Authentication | 10 | 1 minute |
+  version: 1.0.0
+  contact:
+    name: Logstack Support
+    url: https://logstack.tech/docs
+    email: support@logstack.tech
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.logstack.tech/api/v1
+    description: Production
+  - url: http://localhost:8080/api/v1
+    description: Development
+
+tags:
+  - name: Authentication
+    description: User authentication and token management
+  - name: Logs
+    description: Log ingestion and querying
+  - name: Projects
+    description: Project and API key management
+  - name: Alerts
+    description: Alert rule configuration
+
+security:
+  - BearerAuth: []
+
+paths:
+  /auth/signup:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  minLength: 8
+                  example: securepassword123
+      responses:
+        "201":
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: Email already registered
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Authenticate user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: Tokens refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "401":
+          description: Invalid refresh token
+
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /logs/ingest:
+    post:
+      tags: [Logs]
+      summary: Ingest logs
+      description: |
+        Ingest logs for a project. Supports batch ingestion up to 1000 logs per request.
+
+        Uses API Key authentication instead of JWT.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [logs]
+              properties:
+                logs:
+                  type: array
+                  maxItems: 1000
+                  items:
+                    $ref: "#/components/schemas/LogEntry"
+            example:
+              logs:
+                - level: info
+                  message: User logged in
+                  source: auth-service
+                  metadata:
+                    userId: user_123
+                - level: error
+                  message: Database connection failed
+                  metadata:
+                    error: Connection timeout
+      responses:
+        "202":
+          description: Logs accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: integer
+                    example: 2
+                  rejected:
+                    type: integer
+                    example: 0
+        "401":
+          description: Invalid API key
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /logs:
+    get:
+      tags: [Logs]
+      summary: Query logs
+      parameters:
+        - name: projectId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [info, warn, error, critical]
+        - name: source
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Full-text search in message
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        "200":
+          description: Logs retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Log"
+                  meta:
+                    $ref: "#/components/schemas/Pagination"
+
+  /logs/{id}:
+    get:
+      tags: [Logs]
+      summary: Get log by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Log found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Log"
+        "404":
+          description: Log not found
+
+  /projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      responses:
+        "200":
+          description: Projects retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Project"
+
+    post:
+      tags: [Projects]
+      summary: Create project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Get project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+    put:
+      tags: [Projects]
+      summary: Update project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+    delete:
+      tags: [Projects]
+      summary: Delete project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Project deleted
+
+  /projects/{id}/rotate-key:
+    post:
+      tags: [Projects]
+      summary: Rotate API key
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: API key rotated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apiKey:
+                    type: string
+                    example: ls_live_newkey123...
+
+  /alerts:
+    get:
+      tags: [Alerts]
+      summary: List alert rules
+      parameters:
+        - name: projectId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Alerts retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Alert"
+
+    post:
+      tags: [Alerts]
+      summary: Create alert rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertCreate"
+      responses:
+        "201":
+          description: Alert created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+  /alerts/{id}:
+    put:
+      tags: [Alerts]
+      summary: Update alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertUpdate"
+      responses:
+        "200":
+          description: Alert updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+    delete:
+      tags: [Alerts]
+      summary: Delete alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Alert deleted
+
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: System healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Project API key (starts with ls_live_ or ls_test_)
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: usr_abc123
+        email:
+          type: string
+          format: email
+        createdAt:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+
+    TokenPair:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+
+    LogEntry:
+      type: object
+      required: [level, message]
+      properties:
+        level:
+          type: string
+          enum: [info, warn, error, critical]
+        message:
+          type: string
+          maxLength: 10240
+        source:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+
+    Log:
+      allOf:
+        - $ref: "#/components/schemas/LogEntry"
+        - type: object
+          properties:
+            id:
+              type: string
+            projectId:
+              type: string
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        apiKey:
+          type: string
+        logCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        name:
+          type: string
+        condition:
+          $ref: "#/components/schemas/AlertCondition"
+        channels:
+          type: array
+          items:
+            type: string
+            enum: [email, push]
+        cooldown:
+          type: string
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    AlertCondition:
+      type: object
+      properties:
+        level:
+          type: string
+          enum: [info, warn, error, critical]
+        threshold:
+          type: integer
+        window:
+          type: string
+          example: 5m
+        source:
+          type: string
+        pattern:
+          type: string
+
+    AlertCreate:
+      type: object
+      required: [projectId, name, condition, channels]
+      properties:
+        projectId:
+          type: string
+        name:
+          type: string
+        condition:
+          $ref: "#/components/schemas/AlertCondition"
+        channels:
+          type: array
+          items:
+            type: string
+            enum: [email, push]
+        cooldown:
+          type: string
+          default: 15m
+
+    AlertUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        condition:
+          $ref: "#/components/schemas/AlertCondition"
+        channels:
+          type: array
+          items:
+            type: string
+        cooldown:
+          type: string
+        enabled:
+          type: boolean
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+
+  responses:
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Invalid request body
+              details:
+                - field: email
+                  message: Invalid email format
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: RATE_LIMITED
+              message: Too many requests

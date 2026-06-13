@@ -1,0 +1,686 @@
+package services
+
+import (
+	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/sha512"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"github.com/mosesedem/logstack/internal/models"
+	"gorm.io/gorm"
+)
+
+const (
+	paystackBaseURL = "https://api.paystack.co"
+)
+
+// BillingService handles Paystack payment integration
+type BillingService struct {
+	db         *gorm.DB
+	secretKey  string
+	publicKey  string
+	webhookURL string
+	httpClient *http.Client
+}
+
+// NewBillingService creates a new billing service
+func NewBillingService(db *gorm.DB, secretKey, publicKey, webhookURL string) *BillingService {
+	return &BillingService{
+		db:         db,
+		secretKey:  secretKey,
+		publicKey:  publicKey,
+		webhookURL: webhookURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+	}
+}
+
+// PaystackInitializeRequest represents the request to initialize a transaction
+type PaystackInitializeRequest struct {
+	Email       string            `json:"email"`
+	Amount      int               `json:"amount"` // In smallest currency unit (kobo for NGN, cents for USD)
+	Currency    string            `json:"currency"`
+	Plan        string            `json:"plan,omitempty"`
+	CallbackURL string            `json:"callback_url,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Channels    []string          `json:"channels,omitempty"`
+}
+
+// PaystackInitializeResponse represents the response from initialization
+type PaystackInitializeResponse struct {
+	Status  bool   `json:"status"`
+	Message string `json:"message"`
+	Data    struct {
+		AuthorizationURL string `json:"authorization_url"`
+		AccessCode       string `json:"access_code"`
+		Reference        string `json:"reference"`
+	} `json:"data"`
+}
+
+// PaystackPlanRequest represents a plan creation request
+type PaystackPlanRequest struct {
+	Name        string `json:"name"`
+	Amount      int    `json:"amount"`
+	Interval    string `json:"interval"` // monthly, yearly
+	Currency    string `json:"currency"`
+	Description string `json:"description,omitempty"`
+}
+
+// PaystackPlanResponse represents a plan response
+type PaystackPlanResponse struct {
+	Status  bool   `json:"status"`
+	Message string `json:"message"`
+	Data    struct {
+		ID           int    `json:"id"`
+		Name         string `json:"name"`
+		PlanCode     string `json:"plan_code"`
+		Amount       int    `json:"amount"`
+		Interval     string `json:"interval"`
+		Currency     string `json:"currency"`
+		SendInvoices bool   `json:"send_invoices"`
+	} `json:"data"`
+}
+
+// PaystackCustomerRequest represents a customer creation request
+type PaystackCustomerRequest struct {
+	Email     string            `json:"email"`
+	FirstName string            `json:"first_name,omitempty"`
+	LastName  string            `json:"last_name,omitempty"`
+	Phone     string            `json:"phone,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+}
+
+// PaystackCustomerResponse represents a customer response
+type PaystackCustomerResponse struct {
+	Status  bool   `json:"status"`
+	Message string `json:"message"`
+	Data    struct {
+		ID           int    `json:"id"`
+		CustomerCode string `json:"customer_code"`
+		Email        string `json:"email"`
+		FirstName    string `json:"first_name"`
+		LastName     string `json:"last_name"`
+	} `json:"data"`
+}
+
+// PaystackSubscriptionResponse represents a subscription response
+type PaystackSubscriptionResponse struct {
+	Status  bool   `json:"status"`
+	Message string `json:"message"`
+	Data    struct {
+		ID               int    `json:"id"`
+		SubscriptionCode string `json:"subscription_code"`
+		Status           string `json:"status"`
+		NextPaymentDate  string `json:"next_payment_date"`
+	} `json:"data"`
+}
+
+// PaystackWebhookEvent represents a webhook event from Paystack
+type PaystackWebhookEvent struct {
+	Event string          `json:"event"`
+	Data  json.RawMessage `json:"data"`
+}
+
+// PaystackSubscriptionData represents subscription data from webhooks
+type PaystackSubscriptionData struct {
+	SubscriptionCode string `json:"subscription_code"`
+	CustomerCode     string `json:"customer_code"`
+	PlanCode         string `json:"plan_code,omitempty"`
+	Plan             struct {
+		PlanCode string `json:"plan_code"`
+		Name     string `json:"name"`
+		Amount   int    `json:"amount"`
+		Currency string `json:"currency"`
+		Interval string `json:"interval"`
+	} `json:"plan"`
+	Status          string `json:"status"`
+	Amount          int    `json:"amount"`
+	NextPaymentDate string `json:"next_payment_date"`
+}
+
+// PaystackInvoiceData represents invoice data from webhooks
+type PaystackInvoiceData struct {
+	SubscriptionCode string `json:"subscription_code"`
+	CustomerCode     string `json:"customer_code"`
+	Status           string `json:"status"` // success, failed
+	Amount           int    `json:"amount"`
+	PaidAt           string `json:"paid_at"`
+}
+
+// PaystackTransactionData represents transaction history
+type PaystackTransactionData struct {
+	ID        int    `json:"id"`
+	Reference string `json:"reference"`
+	Amount    int    `json:"amount"`
+	Currency  string `json:"currency"`
+	Status    string `json:"status"`
+	PaidAt    string `json:"paid_at"`
+	Channel   string `json:"channel"`
+}
+
+// PaystackTransactionListResponse represents a list of transactions
+type PaystackTransactionListResponse struct {
+	Status  bool                      `json:"status"`
+	Message string                    `json:"message"`
+	Data    []PaystackTransactionData `json:"data"`
+	Meta    struct {
+		Total     int `json:"total"`
+		Page      int `json:"page"`
+		PerPage   int `json:"perPage"`
+		PageCount int `json:"pageCount"`
+	} `json:"meta"`
+}
+
+// InitializePaymentRequest is the API request for initializing payment
+type InitializePaymentRequest struct {
+	Tier        models.SubscriptionTier `json:"tier" binding:"required"`
+	Currency    string                  `json:"currency" binding:"required"`
+	CallbackURL string                  `json:"callbackUrl,omitempty"`
+}
+
+// InitializePaymentResponse is the API response for payment initialization
+type InitializePaymentResponse struct {
+	AuthorizationURL string `json:"authorizationUrl"`
+	Reference        string `json:"reference"`
+	AccessCode       string `json:"accessCode"`
+}
+
+// InitializePayment creates a payment link for subscription
+func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req InitializePaymentRequest) (*InitializePaymentResponse, error) {
+	// Get user
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	// Get pricing for the tier and currency
+	tiers := models.GetPricingTiers()
+	var amount int
+	var found bool
+	for _, tier := range tiers {
+		if tier.Tier == req.Tier {
+			if price, ok := tier.Prices[req.Currency]; ok {
+				amount = price
+				found = true
+				break
+			}
+		}
+	}
+
+	if !found {
+		return nil, errors.New("invalid tier or currency")
+	}
+
+	if amount <= 0 {
+		return nil, errors.New("cannot initialize payment for free tier or enterprise (contact sales)")
+	}
+
+	// Get or create plan code
+	planCode, err := s.getOrCreatePlan(ctx, req.Tier, req.Currency, amount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan: %w", err)
+	}
+
+	// Initialize subscription payment
+	paystackReq := PaystackInitializeRequest{
+		Email:    user.Email,
+		Amount:   amount,
+		Currency: req.Currency,
+		Plan:     planCode,
+		Metadata: map[string]string{
+			"user_id": fmt.Sprintf("%d", userID),
+			"tier":    string(req.Tier),
+		},
+		Channels: []string{"card", "bank", "ussd", "bank_transfer"},
+	}
+
+	if req.CallbackURL != "" {
+		paystackReq.CallbackURL = req.CallbackURL
+	}
+
+	resp, err := s.doRequest(ctx, "POST", "/transaction/initialize", paystackReq)
+	if err != nil {
+		return nil, err
+	}
+
+	var initResp PaystackInitializeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&initResp); err != nil {
+		return nil, err
+	}
+	resp.Body.Close()
+
+	if !initResp.Status {
+		return nil, fmt.Errorf("paystack error: %s", initResp.Message)
+	}
+
+	return &InitializePaymentResponse{
+		AuthorizationURL: initResp.Data.AuthorizationURL,
+		Reference:        initResp.Data.Reference,
+		AccessCode:       initResp.Data.AccessCode,
+	}, nil
+}
+
+// getOrCreatePlan gets an existing plan or creates a new one
+func (s *BillingService) getOrCreatePlan(ctx context.Context, tier models.SubscriptionTier, currency string, amount int) (string, error) {
+	// Plan naming convention: logstack_<tier>_<currency>_monthly
+	planName := fmt.Sprintf("logstack_%s_%s_monthly", tier, currency)
+
+	// Check if plan exists (we could cache this)
+	listResp, err := s.doRequest(ctx, "GET", "/plan?perPage=100", nil)
+	if err != nil {
+		return "", err
+	}
+	defer listResp.Body.Close()
+
+	var plansResp struct {
+		Status bool `json:"status"`
+		Data   []struct {
+			PlanCode string `json:"plan_code"`
+			Name     string `json:"name"`
+			Currency string `json:"currency"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(listResp.Body).Decode(&plansResp); err != nil {
+		return "", err
+	}
+
+	for _, plan := range plansResp.Data {
+		if plan.Name == planName && plan.Currency == currency {
+			return plan.PlanCode, nil
+		}
+	}
+
+	// Create new plan
+	planReq := PaystackPlanRequest{
+		Name:        planName,
+		Amount:      amount,
+		Interval:    "monthly",
+		Currency:    currency,
+		Description: fmt.Sprintf("LogStack %s Plan - %s", tier, currency),
+	}
+
+	resp, err := s.doRequest(ctx, "POST", "/plan", planReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var planResp PaystackPlanResponse
+	if err := json.NewDecoder(resp.Body).Decode(&planResp); err != nil {
+		return "", err
+	}
+
+	if !planResp.Status {
+		return "", fmt.Errorf("failed to create plan: %s", planResp.Message)
+	}
+
+	return planResp.Data.PlanCode, nil
+}
+
+// HandleWebhook processes Paystack webhook events
+func (s *BillingService) HandleWebhook(ctx context.Context, body []byte, signature string) error {
+	// Verify signature
+	if !s.verifySignature(body, signature) {
+		return errors.New("invalid webhook signature")
+	}
+
+	var event PaystackWebhookEvent
+	if err := json.Unmarshal(body, &event); err != nil {
+		return fmt.Errorf("failed to parse webhook: %w", err)
+	}
+
+	switch event.Event {
+	case "subscription.create":
+		return s.handleSubscriptionCreate(ctx, event.Data)
+	case "subscription.disable":
+		return s.handleSubscriptionDisable(ctx, event.Data)
+	case "invoice.update":
+		return s.handleInvoiceUpdate(ctx, event.Data)
+	case "charge.success":
+		return s.handleChargeSuccess(ctx, event.Data)
+	default:
+		// Ignore unhandled events
+		return nil
+	}
+}
+
+// handleSubscriptionCreate activates a subscription
+func (s *BillingService) handleSubscriptionCreate(ctx context.Context, data json.RawMessage) error {
+	var subData PaystackSubscriptionData
+	if err := json.Unmarshal(data, &subData); err != nil {
+		return err
+	}
+
+	// Find user by customer code
+	var subscription models.Subscription
+	if err := s.db.WithContext(ctx).
+		Where("paystack_customer_code = ?", subData.CustomerCode).
+		First(&subscription).Error; err != nil {
+		return fmt.Errorf("subscription not found for customer: %s", subData.CustomerCode)
+	}
+
+	// Determine tier from plan code
+	tier := s.getTierFromPlanCode(subData.Plan.PlanCode)
+
+	// Parse next payment date
+	var periodEnd *time.Time
+	if subData.NextPaymentDate != "" {
+		if t, err := time.Parse(time.RFC3339, subData.NextPaymentDate); err == nil {
+			periodEnd = &t
+		}
+	}
+
+	now := time.Now().UTC()
+
+	// Update subscription
+	updates := map[string]interface{}{
+		"tier":                        tier,
+		"status":                      models.StatusActive,
+		"paystack_subscription_code":  subData.SubscriptionCode,
+		"paystack_plan_code":          subData.Plan.PlanCode,
+		"currency":                    subData.Plan.Currency,
+		"amount_cents":                subData.Plan.Amount,
+		"period_start":                &now,
+		"period_end":                  periodEnd,
+		"updated_at":                  now,
+	}
+
+	return s.db.WithContext(ctx).Model(&subscription).Updates(updates).Error
+}
+
+// handleSubscriptionDisable handles subscription cancellation
+func (s *BillingService) handleSubscriptionDisable(ctx context.Context, data json.RawMessage) error {
+	var subData PaystackSubscriptionData
+	if err := json.Unmarshal(data, &subData); err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+
+	// Find and update subscription
+	return s.db.WithContext(ctx).
+		Model(&models.Subscription{}).
+		Where("paystack_subscription_code = ?", subData.SubscriptionCode).
+		Updates(map[string]interface{}{
+			"status":       models.StatusCancelled,
+			"cancelled_at": &now,
+			"updated_at":   now,
+		}).Error
+}
+
+// handleInvoiceUpdate handles invoice payment status
+func (s *BillingService) handleInvoiceUpdate(ctx context.Context, data json.RawMessage) error {
+	var invoiceData PaystackInvoiceData
+	if err := json.Unmarshal(data, &invoiceData); err != nil {
+		return err
+	}
+
+	// Find subscription
+	var subscription models.Subscription
+	if err := s.db.WithContext(ctx).
+		Where("paystack_subscription_code = ?", invoiceData.SubscriptionCode).
+		First(&subscription).Error; err != nil {
+		return nil // Subscription not found, ignore
+	}
+
+	now := time.Now().UTC()
+
+	switch invoiceData.Status {
+	case "success":
+		// Payment successful - extend period
+		periodEnd := now.AddDate(0, 1, 0) // Add 1 month
+		return s.db.WithContext(ctx).Model(&subscription).Updates(map[string]interface{}{
+			"status":       models.StatusActive,
+			"period_end":   &periodEnd,
+			"updated_at":   now,
+		}).Error
+
+	case "failed":
+		// Payment failed - mark as past due
+		return s.db.WithContext(ctx).Model(&subscription).Updates(map[string]interface{}{
+			"status":     models.StatusPastDue,
+			"updated_at": now,
+		}).Error
+	}
+
+	return nil
+}
+
+// handleChargeSuccess handles successful one-time charges
+func (s *BillingService) handleChargeSuccess(ctx context.Context, data json.RawMessage) error {
+	// This could be used for one-time payments or upgrades
+	// For now, we rely on subscription events
+	return nil
+}
+
+// getTierFromPlanCode extracts the tier from a plan code
+func (s *BillingService) getTierFromPlanCode(planCode string) models.SubscriptionTier {
+	// Plan codes are like: PLN_xxxxx, but we named them logstack_<tier>_<currency>_monthly
+	// We need to fetch the plan to get the name, or use metadata
+	// For simplicity, we'll check known patterns
+	switch {
+	case contains(planCode, "starter"):
+		return models.TierStarter
+	case contains(planCode, "pro"):
+		return models.TierPro
+	case contains(planCode, "enterprise"):
+		return models.TierEnterprise
+	default:
+		return models.TierFree
+	}
+}
+
+// contains checks if a string contains a substring (case insensitive)
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsLower(s, substr))
+}
+
+func containsLower(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if equalFold(s[i:i+len(substr)], substr) {
+			return true
+		}
+	}
+	return false
+}
+
+func equalFold(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		ca, cb := a[i], b[i]
+		if ca >= 'A' && ca <= 'Z' {
+			ca += 'a' - 'A'
+		}
+		if cb >= 'A' && cb <= 'Z' {
+			cb += 'a' - 'A'
+		}
+		if ca != cb {
+			return false
+		}
+	}
+	return true
+}
+
+// verifySignature verifies the Paystack webhook signature
+func (s *BillingService) verifySignature(body []byte, signature string) bool {
+	mac := hmac.New(sha512.New, []byte(s.secretKey))
+	mac.Write(body)
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(expectedSig), []byte(signature))
+}
+
+// GetSubscription retrieves the subscription for a user
+func (s *BillingService) GetSubscription(ctx context.Context, userID uint) (*models.Subscription, error) {
+	var subscription models.Subscription
+	err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&subscription).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Create default free subscription
+			subscription = models.Subscription{
+				UserID:   userID,
+				Tier:     models.TierFree,
+				Status:   models.StatusActive,
+				Currency: "USD",
+			}
+			if err := s.db.WithContext(ctx).Create(&subscription).Error; err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+	return &subscription, nil
+}
+
+// GetTransactionHistory fetches transaction history from Paystack
+func (s *BillingService) GetTransactionHistory(ctx context.Context, customerCode string, page, perPage int) (*PaystackTransactionListResponse, error) {
+	endpoint := fmt.Sprintf("/transaction?customer=%s&page=%d&perPage=%d", customerCode, page, perPage)
+	
+	resp, err := s.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var txResp PaystackTransactionListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&txResp); err != nil {
+		return nil, err
+	}
+
+	return &txResp, nil
+}
+
+// CancelSubscription cancels a user's subscription
+func (s *BillingService) CancelSubscription(ctx context.Context, userID uint) error {
+	var subscription models.Subscription
+	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&subscription).Error; err != nil {
+		return err
+	}
+
+	if subscription.PaystackSubscriptionCode == nil {
+		return errors.New("no active subscription to cancel")
+	}
+
+	// First, get the subscription from Paystack to get the disable token
+	endpoint := fmt.Sprintf("/subscription/%s", *subscription.PaystackSubscriptionCode)
+	resp, err := s.doRequest(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var paystackSubResp struct {
+		Status bool `json:"status"`
+		Data   struct {
+			SubscriptionCode string `json:"subscription_code"`
+			DisableCode      string `json:"disable_code"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&paystackSubResp); err != nil {
+		return err
+	}
+
+	if !paystackSubResp.Status {
+		return errors.New("failed to fetch subscription details from Paystack")
+	}
+
+	// Disable subscription on Paystack using the disable token
+	disableEndpoint := "/subscription/disable"
+	body := map[string]string{
+		"code":      paystackSubResp.Data.SubscriptionCode,
+		"disable_code": paystackSubResp.Data.DisableCode,
+	}
+
+	resp2, err := s.doRequest(ctx, "POST", disableEndpoint, body)
+	if err != nil {
+		return err
+	}
+	resp2.Body.Close()
+
+	// Update local subscription
+	now := time.Now().UTC()
+	return s.db.WithContext(ctx).Model(&subscription).Updates(map[string]interface{}{
+		"status":       models.StatusCancelled,
+		"cancelled_at": &now,
+		"updated_at":   now,
+	}).Error
+}
+
+// CreateOrUpdateCustomer creates or updates a Paystack customer
+func (s *BillingService) CreateOrUpdateCustomer(ctx context.Context, user *models.User) (string, error) {
+	// Check if user already has a customer code
+	var subscription models.Subscription
+	if err := s.db.WithContext(ctx).Where("user_id = ?", user.ID).First(&subscription).Error; err == nil {
+		if subscription.PaystackCustomerCode != nil {
+			return *subscription.PaystackCustomerCode, nil
+		}
+	}
+
+	// Create customer on Paystack
+	customerReq := PaystackCustomerRequest{
+		Email:     user.Email,
+		FirstName: user.Name,
+		Metadata: map[string]string{
+			"user_id": fmt.Sprintf("%d", user.ID),
+		},
+	}
+
+	resp, err := s.doRequest(ctx, "POST", "/customer", customerReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var customerResp PaystackCustomerResponse
+	if err := json.NewDecoder(resp.Body).Decode(&customerResp); err != nil {
+		return "", err
+	}
+
+	if !customerResp.Status {
+		return "", fmt.Errorf("failed to create customer: %s", customerResp.Message)
+	}
+
+	// Update subscription with customer code
+	s.db.WithContext(ctx).Model(&subscription).Update("paystack_customer_code", customerResp.Data.CustomerCode)
+
+	return customerResp.Data.CustomerCode, nil
+}
+
+// doRequest makes an authenticated request to the Paystack API
+func (s *BillingService) doRequest(ctx context.Context, method, endpoint string, body interface{}) (*http.Response, error) {
+	var reqBody io.Reader
+	if body != nil {
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		reqBody = bytes.NewReader(jsonBody)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, paystackBaseURL+endpoint, reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.secretKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	return s.httpClient.Do(req)
+}
+
+// GetPricingTiers returns all available pricing tiers
+func (s *BillingService) GetPricingTiers() []models.PricingTier {
+	return models.GetPricingTiers()
+}

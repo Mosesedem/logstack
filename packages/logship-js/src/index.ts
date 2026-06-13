@@ -1,0 +1,628 @@
+import {
+  LogEntry,
+  LogStackConfig,
+  LogStackClient,
+  LogLevel,
+  LogContext,
+  Environment,
+  LogQueryOptions,
+  LogQueryResult,
+  LogRecord,
+  LogStackError,
+  LogStackErrorResponse,
+} from "./types";
+
+const DEFAULT_ENDPOINT = "https://api.logstack.tech";
+const DEFAULT_BATCH_SIZE = 100;
+const DEFAULT_FLUSH_INTERVAL = 5000; // 5 seconds
+const DEFAULT_MAX_RETRIES = 3;
+const RETRY_BASE_DELAY = 1000; // 1 second
+const OFFLINE_STORAGE_KEY = "logstack_offline_queue";
+const OFFLINE_STORAGE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+// Console colors for development mode
+const LEVEL_COLORS: Record<LogLevel, string> = {
+  debug: "\x1b[35m", // Magenta
+  info: "\x1b[36m", // Cyan
+  warn: "\x1b[33m", // Yellow
+  error: "\x1b[31m", // Red
+  critical: "\x1b[41m\x1b[37m", // White on Red background
+  fatal: "\x1b[45m\x1b[37m", // White on Magenta background
+};
+const RESET_COLOR = "\x1b[0m";
+
+// Browser-safe console styling
+const BROWSER_STYLES: Record<LogLevel, string> = {
+  debug: "color: #a371f7; font-weight: bold",
+  info: "color: #58a6ff; font-weight: bold",
+  warn: "color: #d29922; font-weight: bold",
+  error: "color: #f85149; font-weight: bold",
+  critical:
+    "background: #da3633; color: white; font-weight: bold; padding: 2px 6px; border-radius: 2px",
+  fatal:
+    "background: #8957e5; color: white; font-weight: bold; padding: 2px 6px; border-radius: 2px",
+};
+
+// Type-safe browser detection
+function isBrowserEnvironment(): boolean {
+  return (
+    typeof globalThis !== "undefined" &&
+    typeof (globalThis as Record<string, unknown>).window !== "undefined"
+  );
+}
+
+type BrowserLocationLike = {
+  href: string;
+  pathname: string;
+};
+
+type BrowserNavigatorLike = {
+  onLine: boolean;
+  userAgent?: string;
+};
+
+type BrowserWindowLike = {
+  location?: BrowserLocationLike;
+  navigator?: BrowserNavigatorLike;
+  addEventListener?: (event: string, listener: () => void) => void;
+};
+
+type BrowserStorageLike = {
+  setItem: (key: string, value: string) => void;
+  getItem: (key: string) => string | null;
+  removeItem: (key: string) => void;
+};
+
+function getBrowserWindow(): BrowserWindowLike | undefined {
+  if (!isBrowserEnvironment()) {
+    return undefined;
+  }
+
+  const win = (globalThis as Record<string, unknown>).window;
+  if (typeof win !== "object" || win === null) {
+    return undefined;
+  }
+
+  return win as BrowserWindowLike;
+}
+
+function getBrowserStorage(): BrowserStorageLike | undefined {
+  if (!isBrowserEnvironment()) {
+    return undefined;
+  }
+
+  const storage = (globalThis as Record<string, unknown>).localStorage;
+  if (typeof storage !== "object" || storage === null) {
+    return undefined;
+  }
+
+  return storage as BrowserStorageLike;
+}
+
+function getBrowserContext(): LogContext {
+  const win = getBrowserWindow();
+  if (!win) {
+    return {};
+  }
+
+  return {
+    url: win.location?.href,
+    route: win.location?.pathname,
+    userAgent: win.navigator?.userAgent,
+  };
+}
+
+class LogStack implements LogStackClient {
+  private config: Required<Omit<LogStackConfig, "onError" | "projectId">> &
+    Pick<LogStackConfig, "onError" | "projectId">;
+  private buffer: LogEntry[] = [];
+  private flushTimer: ReturnType<typeof setInterval> | null = null;
+  private isFlushing = false;
+  private isClosing = false;
+  private globalContext: LogContext = {};
+  private isBrowser: boolean;
+  private isOnline: boolean = true;
+  private offlineQueue: LogEntry[] = [];
+  private offlineRetryTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(config: LogStackConfig) {
+    this.isBrowser = isBrowserEnvironment();
+
+    // Auto-detect environment if not specified
+    const detectedEnvironment = this.detectEnvironment();
+
+    this.config = {
+      apiKey: config.apiKey,
+      endpoint: config.endpoint || DEFAULT_ENDPOINT,
+      batchSize: config.batchSize || DEFAULT_BATCH_SIZE,
+      flushInterval: config.flushInterval || DEFAULT_FLUSH_INTERVAL,
+      maxRetries: config.maxRetries || DEFAULT_MAX_RETRIES,
+      environment: config.environment || detectedEnvironment,
+      consoleInProduction: config.consoleInProduction || false,
+      captureContext: config.captureContext !== false,
+      onError: config.onError,
+      projectId: config.projectId,
+    };
+
+    // Only start flush timer in production mode
+    if (this.isProductionMode()) {
+      this.startFlushTimer();
+    }
+
+    // Auto-capture browser context
+    if (this.config.captureContext && this.isBrowser) {
+      this.captureDefaultContext();
+    }
+
+    // Setup offline detection in browser
+    if (this.isBrowser) {
+      this.setupOfflineDetection();
+      this.restoreOfflineQueue();
+    }
+  }
+
+  private detectEnvironment(): Environment {
+    // Check common environment variables
+    if (typeof process !== "undefined" && process.env) {
+      const nodeEnv = process.env.NODE_ENV;
+      if (nodeEnv === "development" || nodeEnv === "dev") return "development";
+      if (nodeEnv === "test") return "test";
+      if (nodeEnv === "staging") return "staging";
+    }
+    // Default to production for safety
+    return "production";
+  }
+
+  private setupOfflineDetection(): void {
+    const win = getBrowserWindow();
+    if (!win) return;
+
+    // Initial online status
+    this.isOnline = win.navigator?.onLine ?? true;
+
+    // Listen for online/offline events
+    win.addEventListener?.("online", () => {
+      this.isOnline = true;
+      // Try to flush pending logs when coming back online
+      this.flushOfflineQueue().catch(() => {});
+    });
+
+    win.addEventListener?.("offline", () => {
+      this.isOnline = false;
+    });
+  }
+
+  private async flushOfflineQueue(): Promise<void> {
+    if (this.offlineQueue.length === 0) {
+      return;
+    }
+
+    const logsToSend = [...this.offlineQueue];
+    this.offlineQueue = [];
+    this.saveOfflineQueue();
+
+    try {
+      await this.sendLogs(logsToSend);
+    } catch (error) {
+      // Put logs back in queue if send fails
+      this.offlineQueue = [...logsToSend, ...this.offlineQueue];
+      this.saveOfflineQueue();
+      throw error;
+    }
+  }
+
+  private saveOfflineQueue(): void {
+    if (!this.isBrowser) return;
+
+    const storage = getBrowserStorage();
+    if (!storage) return;
+
+    try {
+      const dataToStore = this.offlineQueue.map((log) => ({
+        ...log,
+        timestamp: log.timestamp || new Date().toISOString(),
+        savedAt: new Date().getTime(),
+      }));
+      storage.setItem(OFFLINE_STORAGE_KEY, JSON.stringify(dataToStore));
+    } catch (error) {
+      // Silently fail if localStorage is not available
+      if (this.config.onError && error instanceof Error) {
+        this.config.onError(error, []);
+      }
+    }
+  }
+
+  private restoreOfflineQueue(): void {
+    if (!this.isBrowser) return;
+
+    const storage = getBrowserStorage();
+    if (!storage) return;
+
+    try {
+      const stored = storage.getItem(OFFLINE_STORAGE_KEY);
+      if (stored) {
+        const logs = JSON.parse(stored) as Array<
+          LogEntry & { savedAt: number }
+        >;
+        const now = new Date().getTime();
+
+        // Filter out expired logs (older than 24 hours)
+        this.offlineQueue = logs
+          .filter((log) => now - log.savedAt < OFFLINE_STORAGE_TTL)
+          .map(({ savedAt, ...log }) => log);
+
+        this.saveOfflineQueue();
+      }
+    } catch (error) {
+      // Silently fail if localStorage is not available
+      storage.removeItem(OFFLINE_STORAGE_KEY);
+    }
+  }
+
+  private isProductionMode(): boolean {
+    return (
+      this.config.environment === "production" ||
+      this.config.environment === "staging"
+    );
+  }
+
+  private captureDefaultContext(): void {
+    this.globalContext = getBrowserContext();
+  }
+
+  private formatTimestamp(timestamp: string): string {
+    const date = new Date(timestamp);
+    return date.toISOString().replace("T", " ").slice(0, 23);
+  }
+
+  private logToConsole(entry: LogEntry): void {
+    const timestamp = this.formatTimestamp(
+      entry.timestamp || new Date().toISOString(),
+    );
+    const level = entry.level.toUpperCase().padEnd(8);
+
+    if (this.isBrowser) {
+      // Browser console with styling
+      const style = BROWSER_STYLES[entry.level];
+      const contextStr = entry.context?.url ? ` [${entry.context.url}]` : "";
+      console.log(
+        `%c${level}%c ${timestamp}${contextStr} - ${entry.message}`,
+        style,
+        "color: inherit",
+        entry.metadata || "",
+      );
+    } else {
+      // Node.js console with ANSI colors
+      const color = LEVEL_COLORS[entry.level];
+      const contextStr = entry.context?.url
+        ? ` [${entry.context.url}]`
+        : entry.context?.route
+          ? ` [${entry.context.route}]`
+          : "";
+      const metaStr = entry.metadata
+        ? ` ${JSON.stringify(entry.metadata)}`
+        : "";
+      console.log(
+        `${color}${level}${RESET_COLOR} ${timestamp}${contextStr} - ${entry.message}${metaStr}`,
+      );
+    }
+  }
+
+  private startFlushTimer(): void {
+    this.flushTimer = setInterval(() => {
+      if (this.buffer.length > 0 && !this.isFlushing) {
+        this.flush().catch(() => {});
+      }
+    }, this.config.flushInterval);
+  }
+
+  private stopFlushTimer(): void {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+  }
+
+  setContext(context: LogContext): void {
+    this.globalContext = { ...this.globalContext, ...context };
+  }
+
+  clearContext(): void {
+    this.globalContext = {};
+    if (this.config.captureContext && this.isBrowser) {
+      this.captureDefaultContext();
+    }
+  }
+
+  debug(message: string, metadata?: Record<string, unknown>): void {
+    this.log({ level: "debug", message, metadata });
+  }
+
+  info(message: string, metadata?: Record<string, unknown>): void {
+    this.log({ level: "info", message, metadata });
+  }
+
+  warn(message: string, metadata?: Record<string, unknown>): void {
+    this.log({ level: "warn", message, metadata });
+  }
+
+  error(message: string, metadata?: Record<string, unknown>): void {
+    this.log({ level: "error", message, metadata });
+  }
+
+  critical(message: string, metadata?: Record<string, unknown>): void {
+    this.log({ level: "critical", message, metadata });
+  }
+
+  fatal(message: string, metadata?: Record<string, unknown>): void {
+    this.log({ level: "fatal", message, metadata });
+  }
+
+  log(entry: LogEntry): void {
+    if (this.isClosing) {
+      console.warn("Logstack: Cannot log after close() has been called");
+      return;
+    }
+
+    const timestamp = entry.timestamp || new Date().toISOString();
+
+    // Merge global context with entry context
+    const context: LogContext = {
+      ...this.globalContext,
+      ...entry.context,
+    };
+
+    const logEntry: LogEntry = {
+      ...entry,
+      timestamp,
+      context: Object.keys(context).length > 0 ? context : undefined,
+    };
+
+    // ALWAYS log to console (both dev and prod, online and offline)
+    this.logToConsole(logEntry);
+
+    // Development mode: only log to console
+    if (!this.isProductionMode()) {
+      return;
+    }
+
+    // Production mode: handle offline and online scenarios
+    if (!this.isOnline) {
+      // Offline: queue the log
+      this.offlineQueue.push(logEntry);
+      this.saveOfflineQueue();
+      return;
+    }
+
+    // Online: send to server
+    this.buffer.push(logEntry);
+
+    // Auto-flush if buffer reaches batch size
+    if (this.buffer.length >= this.config.batchSize && !this.isFlushing) {
+      this.flush().catch(() => {});
+    }
+  }
+
+  async flush(): Promise<void> {
+    // No-op in development mode
+    if (!this.isProductionMode()) {
+      return;
+    }
+
+    if (this.buffer.length === 0 || this.isFlushing) {
+      return;
+    }
+
+    this.isFlushing = true;
+    const logsToSend = [...this.buffer];
+    this.buffer = [];
+
+    try {
+      await this.sendLogs(logsToSend);
+    } catch (error) {
+      // Put logs back in buffer for retry
+      this.buffer = [...logsToSend, ...this.buffer];
+
+      if (this.config.onError && error instanceof Error) {
+        this.config.onError(error, logsToSend);
+      }
+
+      throw error;
+    } finally {
+      this.isFlushing = false;
+    }
+  }
+
+  private async sendLogs(logs: LogEntry[], attempt = 1): Promise<void> {
+    try {
+      const response = await fetch(`${this.config.endpoint}/api/v1/logs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        body: JSON.stringify({ logs }),
+      });
+
+      if (!response.ok) {
+        if (response.status >= 500 && attempt < this.config.maxRetries) {
+          // Exponential backoff with jitter for server errors
+          const delay =
+            RETRY_BASE_DELAY * Math.pow(2, attempt - 1) + Math.random() * 100;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return this.sendLogs(logs, attempt + 1);
+        }
+
+        // Try to parse structured error response
+        let errorData: LogStackErrorResponse = {
+          code: "SEND_ERROR",
+          message: `Failed to send logs: ${response.status}`,
+        };
+
+        try {
+          // JSON parse returns unknown; coerce to any for inspection
+          const data: any = await response.json();
+          if (data && data.code && data.message) {
+            errorData = data as LogStackErrorResponse;
+          }
+        } catch {
+          // Use default error
+        }
+
+        throw new LogStackError(
+          errorData.code,
+          errorData.message,
+          response.status,
+        );
+      }
+    } catch (error) {
+      // If we get a network error while online, queue the logs for later
+      if (this.isOnline && error instanceof Error) {
+        this.offlineQueue.push(...logs);
+        this.saveOfflineQueue();
+        this.isOnline = false;
+        throw error;
+      }
+      throw error;
+    }
+  }
+
+  async getLogs(options: LogQueryOptions = {}): Promise<LogQueryResult> {
+    if (!this.config.projectId) {
+      throw new LogStackError(
+        "MISSING_PROJECT_ID",
+        "projectId is required in config for query operations",
+        400,
+      );
+    }
+
+    const params = new URLSearchParams();
+    params.set("projectId", this.config.projectId);
+
+    if (options.level) params.set("level", options.level);
+    if (options.search) params.set("search", options.search);
+    if (options.startTime) params.set("startTime", options.startTime);
+    if (options.endTime) params.set("endTime", options.endTime);
+    if (options.offset !== undefined)
+      params.set("offset", String(options.offset));
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+
+    const response = await this.fetchWithRetry(
+      `${this.config.endpoint}/api/v1/logs?${params.toString()}`,
+      { method: "GET" },
+    );
+
+    // cast to expected result type
+    return (await response.json()) as LogQueryResult;
+  }
+
+  async getLogById(logId: number): Promise<LogRecord> {
+    if (!this.config.projectId) {
+      throw new LogStackError(
+        "MISSING_PROJECT_ID",
+        "projectId is required in config for query operations",
+        400,
+      );
+    }
+
+    const params = new URLSearchParams();
+    params.set("projectId", this.config.projectId);
+
+    const response = await this.fetchWithRetry(
+      `${this.config.endpoint}/api/v1/logs/${logId}?${params.toString()}`,
+      { method: "GET" },
+    );
+
+    return (await response.json()) as LogRecord;
+  }
+
+  private async fetchWithRetry(
+    url: string,
+    options: RequestInit,
+    attempt = 1,
+  ): Promise<Response> {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.config.apiKey}`,
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status >= 500 && attempt < this.config.maxRetries) {
+        // Exponential backoff with jitter
+        const delay =
+          RETRY_BASE_DELAY * Math.pow(2, attempt - 1) + Math.random() * 100;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return this.fetchWithRetry(url, options, attempt + 1);
+      }
+
+      // Try to parse structured error response
+      let errorData: LogStackErrorResponse = {
+        code: "REQUEST_ERROR",
+        message: `Request failed: ${response.status}`,
+      };
+
+      try {
+        const data: any = await response.json();
+        if (data && data.code && data.message) {
+          errorData = data as LogStackErrorResponse;
+        }
+      } catch {
+        // Use default error
+      }
+
+      throw new LogStackError(
+        errorData.code,
+        errorData.message,
+        response.status,
+      );
+    }
+
+    return response;
+  }
+
+  async close(): Promise<void> {
+    this.isClosing = true;
+    this.stopFlushTimer();
+
+    if (this.offlineRetryTimer) {
+      clearInterval(this.offlineRetryTimer);
+      this.offlineRetryTimer = null;
+    }
+
+    // Final flush (only in production mode)
+    if (this.isProductionMode() && this.buffer.length > 0) {
+      await this.flush();
+    }
+
+    // Try to flush offline queue if online
+    if (this.isOnline && this.offlineQueue.length > 0) {
+      try {
+        await this.flushOfflineQueue();
+      } catch {
+        // Silently fail, logs are persisted in localStorage
+      }
+    }
+  }
+}
+
+export function createLogStack(config: LogStackConfig): LogStackClient {
+  return new LogStack(config);
+}
+
+export {
+  LogLevel,
+  LogEntry,
+  LogStackConfig,
+  LogStackClient,
+  LogContext,
+  Environment,
+  LogQueryOptions,
+  LogQueryResult,
+  LogRecord,
+  LogStackError,
+  LogStackErrorResponse,
+};

@@ -1,0 +1,95 @@
+---
+title: Installation
+description: Install Logstack SDK and set up your development environment.
+---
+
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+import { Callout } from "fumadocs-ui/components/callout";
+
+# Installation
+
+## Requirements
+
+- **Node.js** 16.0.0 or higher
+- **TypeScript** 4.7+ (optional, but recommended)
+
+## Package Installation
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tab value="npm">```bash npm install logstack-js ```</Tab>
+  <Tab value="yarn">```bash yarn add logstack-js ```</Tab>
+  <Tab value="pnpm">```bash pnpm add logstack-js ```</Tab>
+  <Tab value="bun">```bash bun add logstack-js ```</Tab>
+</Tabs>
+
+## TypeScript Setup
+
+Logstack is written in TypeScript and ships with full type definitions. No additional `@types` packages are needed.
+
+```typescript
+import { createLogStack, LogLevel, LogEntry } from "logstack-js";
+
+// Full IntelliSense and type checking
+const logstack = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+});
+```
+
+## Verify Installation
+
+```typescript
+import { createLogStack } from "logstack-js";
+
+const logstack = createLogStack({
+  apiKey: "ls_test_verify_installation",
+  endpoint: "https://api.logstack.tech", // or your self-hosted URL
+});
+
+// This will fail authentication but verifies the package works
+logstack.info("Installation test");
+await logstack.flush();
+
+console.log("Logstack SDK installed successfully!");
+```
+
+## Self-Hosted Setup
+
+If you're running a self-hosted Logstack instance:
+
+```typescript
+const logstack = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+  endpoint: "https://logs.your-domain.com", // Your self-hosted URL
+});
+```
+
+<Callout type="info">
+  Self-hosted instances use the same SDK. Just point to your own endpoint.
+</Callout>
+
+## CDN Usage (Browser)
+
+For browser environments or quick prototyping:
+
+```html
+<script type="module">
+  import { createLogStack } from "https://esm.sh/logstack-js";
+
+  const logstack = createLogStack({
+    apiKey: "ls_live_xxx",
+  });
+
+  logstack.info("Page loaded", { url: window.location.href });
+</script>
+```
+
+<Callout type="warn">
+  Never expose your production API key in client-side code. Use a backend proxy
+  for browser logging.
+</Callout>
+
+## Next Steps
+
+- [Configuration Guide](/docs/sdk/configuration) — Customize SDK behavior
+- [Logging Guide](/docs/sdk/logging) — Learn about log levels and metadata
+- [Framework Integrations](/docs/sdk/frameworks) — Express, Next.js, and more
