@@ -105,19 +105,9 @@ func (i *Ingestor) IngestBatch(ctx context.Context, projectID uuid.UUID, logs []
 		return nil, err
 	}
 
-	// If project is not production, still publish to Redis for real-time streaming
-	// but do not persist to DB and do not track usage.
-	// The API response includes "ephemeral: true" so clients know logs won't be queryable.
-	if project.Environment != "production" {
-		now := time.Now().UTC()
-		for idx := range logModels {
-			logModels[idx].CreatedAt = now
-		}
-		go i.publishLogs(ctx, projectID, logModels)
-		return logModels, nil
-	}
-
-	// Start transaction
+	// Persist logs for every environment so they are queryable from the dashboard
+	// (development and staging projects were previously dropped, which made local
+	// logging appear broken). Usage is only metered for production projects below.
 	tx := i.db.WithContext(ctx).Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -135,11 +125,13 @@ func (i *Ingestor) IngestBatch(ctx context.Context, projectID uuid.UUID, logs []
 		return nil, err
 	}
 
-	// Track usage in Redis for billing (async to not block response)
-	go func() {
-		bytesIngested := i.calculateBatchSize(logModels)
-		i.trackUsage(context.Background(), projectID, len(logModels), bytesIngested)
-	}()
+	// Meter usage in Redis for billing, production only (async to not block response).
+	if project.Environment == "production" {
+		go func() {
+			bytesIngested := i.calculateBatchSize(logModels)
+			i.trackUsage(context.Background(), projectID, len(logModels), bytesIngested)
+		}()
+	}
 
 	// Publish to Redis for real-time streaming
 	go i.publishLogs(ctx, projectID, logModels)

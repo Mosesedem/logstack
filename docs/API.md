@@ -283,7 +283,7 @@ Ingest a batch of logs. Requires API key auth (`Bearer ls_...`).
 }
 ```
 
-Valid levels: `info`, `warn`, `error`, `critical`
+Valid levels: `debug`, `info`, `warn`, `error`, `critical`, `fatal`
 
 **Response `201`:**
 
@@ -291,11 +291,13 @@ Valid levels: `info`, `warn`, `error`, `critical`
 {
   "message": "Logs ingested successfully",
   "count": 2,
-  "ephemeral": false
+  "persisted": true
 }
 ```
 
-> `ephemeral: true` means the project is non-production — logs are streamed in real-time but **not persisted** to the database.
+> Logs are persisted and queryable for **all** project environments
+> (development, staging, production). Usage is only metered for production
+> projects.
 
 **Errors:** `400 VALIDATION_ERROR`, `401 INVALID_API_KEY`, `429 USAGE_LIMIT_EXCEEDED`
 
@@ -580,9 +582,21 @@ Register a device push token. Requires JWT auth.
 
 Remove a push token. Requires JWT auth.
 
+### GET /stream
+
+WebSocket endpoint for real-time log streaming (web dashboard and other clients).
+
+**URL:** `ws://localhost:8080/v1/stream?projectId=<uuid>`
+
+**Auth:** the JWT may be supplied as `Authorization: Bearer <token>` (native
+clients) or — since browsers cannot set that header on a WebSocket — via the
+`Sec-WebSocket-Protocol` header (the subprotocol array) or a `?token=<jwt>`
+query parameter.
+
 ### GET /mobile/stream
 
-WebSocket endpoint for real-time log streaming. Requires JWT auth.
+Same real-time stream, kept under the `/mobile` namespace for native mobile
+clients. Requires JWT auth via the `Authorization` header.
 
 **URL:** `ws://localhost:8080/v1/mobile/stream?projectId=<uuid>`
 

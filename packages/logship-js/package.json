@@ -1,12 +1,21 @@
 {
   "name": "logstack-js",
   "version": "1.0.0",
-  "description": "Logstack JavaScript SDK for log ingestion",
+  "description": "Logstack JavaScript/TypeScript SDK for log ingestion and querying",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
@@ -22,8 +31,20 @@
     "monitoring",
     "observability"
   ],
-  "author": "",
+  "author": "Mosesedem",
   "license": "MIT",
+  "homepage": "https://github.com/Mosesedem/logstack/tree/main/packages/logship-js#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mosesedem/logstack.git",
+    "directory": "packages/logship-js"
+  },
+  "bugs": {
+    "url": "https://github.com/Mosesedem/logstack/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "eslint": "^8.55.0",

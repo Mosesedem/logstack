@@ -16,6 +16,7 @@ const DEFAULT_ENDPOINT = "https://api.logstack.tech";
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_FLUSH_INTERVAL = 5000; // 5 seconds
 const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_MAX_OFFLINE_QUEUE = 1000;
 const RETRY_BASE_DELAY = 1000; // 1 second
 const OFFLINE_STORAGE_KEY = "logstack_offline_queue";
 const OFFLINE_STORAGE_TTL = 24 * 60 * 60 * 1000; // 24 hours
@@ -139,13 +140,17 @@ class LogStack implements LogStackClient {
       maxRetries: config.maxRetries || DEFAULT_MAX_RETRIES,
       environment: config.environment || detectedEnvironment,
       consoleInProduction: config.consoleInProduction || false,
+      silent: config.silent || false,
+      disabled: config.disabled || false,
+      maxOfflineQueueSize:
+        config.maxOfflineQueueSize ?? DEFAULT_MAX_OFFLINE_QUEUE,
       captureContext: config.captureContext !== false,
       onError: config.onError,
       projectId: config.projectId,
     };
 
-    // Only start flush timer in production mode
-    if (this.isProductionMode()) {
+    // Start the flush timer whenever sending is enabled (any environment).
+    if (!this.config.disabled) {
       this.startFlushTimer();
     }
 
@@ -154,8 +159,8 @@ class LogStack implements LogStackClient {
       this.captureDefaultContext();
     }
 
-    // Setup offline detection in browser
-    if (this.isBrowser) {
+    // Setup offline detection in browser (only relevant when sending is enabled)
+    if (this.isBrowser && !this.config.disabled) {
       this.setupOfflineDetection();
       this.restoreOfflineQueue();
     }
@@ -264,6 +269,34 @@ class LogStack implements LogStackClient {
       this.config.environment === "production" ||
       this.config.environment === "staging"
     );
+  }
+
+  /**
+   * Whether this log should be written to the console. Always on in
+   * development/test; in production/staging only when consoleInProduction is set.
+   * `silent` disables console output entirely.
+   */
+  private shouldLogToConsole(): boolean {
+    if (this.config.silent) {
+      return false;
+    }
+    if (this.isProductionMode()) {
+      return this.config.consoleInProduction;
+    }
+    return true;
+  }
+
+  /**
+   * Append logs to the offline queue, dropping the oldest entries past the
+   * configured cap to avoid exceeding localStorage quota.
+   */
+  private enqueueOffline(logs: LogEntry[]): void {
+    this.offlineQueue.push(...logs);
+    const max = this.config.maxOfflineQueueSize;
+    if (this.offlineQueue.length > max) {
+      this.offlineQueue = this.offlineQueue.slice(-max);
+    }
+    this.saveOfflineQueue();
   }
 
   private captureDefaultContext(): void {
@@ -378,23 +411,24 @@ class LogStack implements LogStackClient {
       context: Object.keys(context).length > 0 ? context : undefined,
     };
 
-    // ALWAYS log to console (both dev and prod, online and offline)
-    this.logToConsole(logEntry);
+    // Console output (gated by environment / silent / consoleInProduction),
+    // independent of whether we ship the log to the server.
+    if (this.shouldLogToConsole()) {
+      this.logToConsole(logEntry);
+    }
 
-    // Development mode: only log to console
-    if (!this.isProductionMode()) {
+    // Console-only mode: never buffer, send, or queue.
+    if (this.config.disabled) {
       return;
     }
 
-    // Production mode: handle offline and online scenarios
+    // Offline: queue the log (bounded) for later delivery.
     if (!this.isOnline) {
-      // Offline: queue the log
-      this.offlineQueue.push(logEntry);
-      this.saveOfflineQueue();
+      this.enqueueOffline([logEntry]);
       return;
     }
 
-    // Online: send to server
+    // Online: buffer and ship to the server.
     this.buffer.push(logEntry);
 
     // Auto-flush if buffer reaches batch size
@@ -404,8 +438,8 @@ class LogStack implements LogStackClient {
   }
 
   async flush(): Promise<void> {
-    // No-op in development mode
-    if (!this.isProductionMode()) {
+    // Nothing to ship in console-only mode.
+    if (this.config.disabled) {
       return;
     }
 
@@ -435,7 +469,7 @@ class LogStack implements LogStackClient {
 
   private async sendLogs(logs: LogEntry[], attempt = 1): Promise<void> {
     try {
-      const response = await fetch(`${this.config.endpoint}/api/v1/logs`, {
+      const response = await fetch(`${this.config.endpoint}/v1/logs`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -478,8 +512,7 @@ class LogStack implements LogStackClient {
     } catch (error) {
       // If we get a network error while online, queue the logs for later
       if (this.isOnline && error instanceof Error) {
-        this.offlineQueue.push(...logs);
-        this.saveOfflineQueue();
+        this.enqueueOffline(logs);
         this.isOnline = false;
         throw error;
       }
@@ -508,7 +541,7 @@ class LogStack implements LogStackClient {
     if (options.limit !== undefined) params.set("limit", String(options.limit));
 
     const response = await this.fetchWithRetry(
-      `${this.config.endpoint}/api/v1/logs?${params.toString()}`,
+      `${this.config.endpoint}/v1/logs?${params.toString()}`,
       { method: "GET" },
     );
 
@@ -529,7 +562,7 @@ class LogStack implements LogStackClient {
     params.set("projectId", this.config.projectId);
 
     const response = await this.fetchWithRetry(
-      `${this.config.endpoint}/api/v1/logs/${logId}?${params.toString()}`,
+      `${this.config.endpoint}/v1/logs/${logId}?${params.toString()}`,
       { method: "GET" },
     );
 
@@ -593,8 +626,8 @@ class LogStack implements LogStackClient {
       this.offlineRetryTimer = null;
     }
 
-    // Final flush (only in production mode)
-    if (this.isProductionMode() && this.buffer.length > 0) {
+    // Final flush of any buffered logs (no-op in console-only mode).
+    if (!this.config.disabled && this.buffer.length > 0) {
       await this.flush();
     }
 

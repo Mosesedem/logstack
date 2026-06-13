@@ -43,7 +43,7 @@ export default function LoginPage() {
           variant: "destructive",
         });
       } else {
-        router.push("/logs");
+        router.push("/overview");
       }
     } catch (error) {
       toast({
@@ -59,7 +59,7 @@ export default function LoginPage() {
   const handleOAuthSignIn = async (provider: "google" | "github") => {
     setIsOAuthLoading(provider);
     try {
-      await signIn(provider, { callbackUrl: "/logs" });
+      await signIn(provider, { callbackUrl: "/overview" });
     } catch (error) {
       toast({
         title: "Error",

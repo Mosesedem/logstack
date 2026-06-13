@@ -41,7 +41,8 @@ const logstack = createLogStack({
   // Required: Your project API key
   apiKey: "ls_live_xxx",
 
-  // Optional: API endpoint (defaults to production)
+  // Optional: API endpoint host (SDK appends /v1/logs). Defaults to
+  // https://api.logstack.tech. For local dev: "http://localhost:8080".
   endpoint: "https://api.logstack.tech",
 
   // Optional: Number of logs to buffer before sending (default: 100)
@@ -53,6 +54,26 @@ const logstack = createLogStack({
   // Optional: Max retry attempts for failed requests (default: 3)
   maxRetries: 3,
 
+  // Optional: environment label ("development" | "staging" | "production" |
+  // "test"). Auto-detected from NODE_ENV when omitted. Logs are sent to the
+  // server in EVERY environment as long as apiKey is set and disabled is false.
+  environment: "production",
+
+  // Optional: also log to the console in production/staging. In development and
+  // test the console is always on (unless `silent`). Default: false.
+  consoleInProduction: false,
+
+  // Optional: disable all console output. Default: false.
+  silent: false,
+
+  // Optional: console-only mode — log to the console but never buffer, send, or
+  // queue. Use when no API key/endpoint is configured. Default: false.
+  disabled: false,
+
+  // Optional: cap on the offline (localStorage) queue; oldest entries are
+  // dropped past this. Default: 1000.
+  maxOfflineQueueSize: 1000,
+
   // Optional: Error callback
   onError: (error, logs) => {
     console.error("Failed to send logs:", error);
@@ -61,16 +82,23 @@ const logstack = createLogStack({
 });
 ```
 
+> **Console vs. server are independent.** Every log is written to the console
+> (per the rules above) regardless of whether it is also shipped to the server.
+> A missing API key degrades the client to console-only (`disabled`) — it never
+> becomes a silent no-op.
+
 ---
 
 ## Log Levels
 
 | Level      | Method               | Use Case                                        |
 | ---------- | -------------------- | ----------------------------------------------- |
+| `debug`    | `logstack.debug()`    | Verbose diagnostic detail (dev/troubleshooting) |
 | `info`     | `logstack.info()`     | General information, successful operations      |
 | `warn`     | `logstack.warn()`     | Warning conditions, potential issues            |
 | `error`    | `logstack.error()`    | Error conditions, failed operations             |
 | `critical` | `logstack.critical()` | Critical failures requiring immediate attention |
+| `fatal`    | `logstack.fatal()`    | Unrecoverable failures / process-ending errors  |
 
 ---
 

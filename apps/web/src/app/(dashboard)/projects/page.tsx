@@ -90,9 +90,12 @@ export default function ProjectsPage() {
       api.post<{ apiKey: string }>(`/projects/${id}/rotate-key`, {}),
     onSuccess: (data) => {
       refreshProjects();
+      // Show the new key in the secure modal (copy-to-clipboard), not a
+      // dismissible toast — it is only shown once and cannot be retrieved later.
+      setApiKeyToDisplay(data.apiKey ?? null);
       toast({
         title: "API Key rotated",
-        description: `New key: ${data.apiKey}`,
+        description: "Copy your new key now — it won't be shown again.",
       });
     },
     onError: (error: Error) => {

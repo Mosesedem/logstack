@@ -50,7 +50,7 @@ export const baseOptions: BaseLayoutProps = {
     },
     {
       text: "Dashboard",
-      url: "/logs",
+      url: "/overview",
     },
   ],
   githubUrl: "https://github.com/mosesedem/logstack",

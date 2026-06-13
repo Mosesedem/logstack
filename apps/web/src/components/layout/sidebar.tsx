@@ -14,10 +14,12 @@ import {
   CreditCard,
   Loader2,
   Users,
+  LayoutDashboard,
 } from "lucide-react";
 import type { UsageSummary } from "@/types";
 
 export const navItems = [
+  { href: "/overview", label: "Overview", icon: LayoutDashboard },
   { href: "/projects", label: "Projects", icon: FolderOpen },
   { href: "/logs", label: "Logs", icon: FileText },
   { href: "/alerts", label: "Alerts", icon: Bell },

@@ -48,7 +48,7 @@ export function AdminSidebar() {
       </nav>
       <div className="absolute bottom-4 left-0 w-full px-4">
         <Link
-          href="/logs"
+          href="/overview"
           className="flex items-center justify-center gap-2 rounded-lg border p-2 text-sm text-muted-foreground hover:bg-muted"
         >
           Back to App

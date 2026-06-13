@@ -3,8 +3,6 @@ import { Overpass } from "next/font/google";
 import "./globals.css"; // Your tailwind directives MUST be first
 // import "fumadocs-ui/style.css";
 import { Providers } from "./providers";
-import { Theme, ThemePanel } from "@radix-ui/themes";
-import { ThemeProvider } from "@/components/theme-provider";
 
 const overpass = Overpass({ subsets: ["latin"] });
 

@@ -71,16 +71,34 @@ export interface LogStackConfig {
   maxRetries?: number;
   onError?: (error: Error, logs: LogEntry[]) => void;
   /**
-   * Environment mode. In 'development' mode, logs are only output to console.
-   * In 'production' mode, logs are sent to the server.
-   * Defaults to 'production' if not specified.
+   * Environment label attached to logs and used for console gating (see
+   * `consoleInProduction`). Logs are sent to the server in every environment as
+   * long as an `apiKey` is set and `disabled` is not true. Auto-detected from
+   * `NODE_ENV` when omitted; defaults to 'production'.
    */
   environment?: Environment;
   /**
-   * Whether to also log to console in production mode.
-   * Defaults to false.
+   * Whether to log to the console in production/staging mode. In development and
+   * test, console output is always on (unless `silent`). Defaults to false, so
+   * production stays quiet on the console while still shipping logs to the server.
    */
   consoleInProduction?: boolean;
+  /**
+   * Disable all console output regardless of environment. Defaults to false.
+   */
+  silent?: boolean;
+  /**
+   * Console-only mode: log to the console but never buffer, send, or queue to the
+   * server. Use when no API key/endpoint is available (e.g. local dev without a
+   * configured project). Defaults to false.
+   */
+  disabled?: boolean;
+  /**
+   * Maximum number of logs retained in the offline (localStorage) queue. Oldest
+   * entries are dropped past this cap to avoid exceeding storage quota.
+   * Defaults to 1000.
+   */
+  maxOfflineQueueSize?: number;
   /**
    * Auto-capture context like URL, route, user agent.
    * Defaults to true.

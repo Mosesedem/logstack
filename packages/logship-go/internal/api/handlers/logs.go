@@ -55,17 +55,11 @@ func (h *LogsHandler) IngestBatch(c *gin.Context) {
 		return
 	}
 
-	// Check if logs are ephemeral (non-production environment)
-	var project models.Project
-	ephemeral := false
-	if err := h.ingestor.GetDB().Select("environment").First(&project, "id = ?", projectID).Error; err == nil {
-		ephemeral = project.Environment != "production"
-	}
-
+	// Logs are persisted and queryable for every environment.
 	c.JSON(http.StatusCreated, gin.H{
 		"message":   "Logs ingested successfully",
 		"count":     len(logs),
-		"ephemeral": ephemeral,
+		"persisted": true,
 	})
 }
 

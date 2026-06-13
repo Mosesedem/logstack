@@ -3,10 +3,13 @@ LogStack Client module.
 """
 
 import json
+import logging
 import threading
 import time
 from typing import Any, Dict, List, Optional
 import requests
+
+logger = logging.getLogger("logstack")
 
 
 class LogStackClient:
@@ -121,7 +124,7 @@ class LogStackClient:
 
         try:
             response = requests.post(
-                f"{self.api_url}/v1/logs/batch",
+                f"{self.api_url}/v1/logs",
                 json=payload,
                 headers={
                     "Content-Type": "application/json",
@@ -131,8 +134,7 @@ class LogStackClient:
             )
             response.raise_for_status()
         except requests.RequestException as e:
-            # In production, you might want to log this error
-            print(f"Failed to send logs: {e}")
+            logger.error("Failed to send logs to Logstack: %s", e)
 
     def close(self) -> None:
         """Close the client and flush any pending logs."""

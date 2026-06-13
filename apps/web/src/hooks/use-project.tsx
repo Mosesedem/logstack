@@ -11,6 +11,7 @@ interface ProjectContextType {
   currentProject: Project | null
   setCurrentProject: (project: Project) => void
   isLoading: boolean
+  error: Error | null
   refreshProjects: () => void
 }
 
@@ -20,7 +21,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const { data: session } = useSession()
   const [currentProject, setCurrentProjectState] = useState<Project | null>(null)
 
-  const { data: projects = [], isLoading, refetch } = useQuery({
+  const { data: projects = [], isLoading, error, refetch } = useQuery({
     queryKey: ['projects'],
     queryFn: () => api.get<Project[]>('/projects'),
     enabled: !!session,
@@ -51,6 +52,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         currentProject,
         setCurrentProject,
         isLoading,
+        error: (error as Error) ?? null,
         refreshProjects,
       }}
     >

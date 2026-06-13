@@ -60,7 +60,7 @@ export default function SignupPage() {
   const handleOAuthSignIn = async (provider: "google" | "github") => {
     setIsOAuthLoading(provider);
     try {
-      await signIn(provider, { callbackUrl: "/logs" });
+      await signIn(provider, { callbackUrl: "/overview" });
     } catch (error) {
       toast({
         title: "Error",

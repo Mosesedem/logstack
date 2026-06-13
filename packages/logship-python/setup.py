@@ -5,16 +5,17 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="logstack",
-    version="0.1.0",
-    author="Logstack Team",
+    version="1.0.0",
+    author="Mosesedem",
     author_email="team@logstack.tech",
     description="A Python SDK for the Logstack logging platform",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/mosesedem/logstack",
+    url="https://github.com/Mosesedem/logstack",
+    license="MIT",
     packages=find_packages(),
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",

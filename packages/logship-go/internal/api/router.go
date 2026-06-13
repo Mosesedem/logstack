@@ -94,6 +94,14 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 			logs.GET("/:id", logsHandler.GetByID)
 		}
 
+		// Real-time log stream (WebSocket). Uses WSAuth so browsers can pass the
+		// JWT via the Sec-WebSocket-Protocol header or ?token= query param. The
+		// mobile-namespaced /mobile/stream route below is kept for native clients.
+		v1.GET("/stream",
+			middleware.WSAuth(cfg.AuthService),
+			mobilehandlers.NewMobileHandler(cfg.DB, cfg.Hub).Stream,
+		)
+
 		// Dashboard routes (JWT auth)
 		protected := v1.Group("")
 		protected.Use(middleware.JWTAuth(cfg.AuthService))

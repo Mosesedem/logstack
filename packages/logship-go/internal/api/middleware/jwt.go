@@ -116,3 +116,67 @@ func OptionalJWTAuth(authService *services.AuthService) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// WSAuth authenticates WebSocket upgrade requests. Browsers cannot set the
+// Authorization header on a WebSocket connection, so the token may instead be
+// supplied via the `Sec-WebSocket-Protocol` header or a `token` query parameter.
+// The Authorization header is still honored for native clients (e.g. mobile).
+func WSAuth(authService *services.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := ""
+
+		// 1. Authorization: Bearer <token> (native clients)
+		if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+			if parts := strings.SplitN(authHeader, " ", 2); len(parts) == 2 &&
+				strings.EqualFold(parts[0], "bearer") {
+				token = strings.TrimSpace(parts[1])
+			}
+		}
+
+		// 2. Sec-WebSocket-Protocol: <token> (browsers, via the WebSocket
+		//    subprotocol array). Take the first offered value.
+		if token == "" {
+			if proto := c.GetHeader("Sec-WebSocket-Protocol"); proto != "" {
+				token = strings.TrimSpace(strings.SplitN(proto, ",", 2)[0])
+			}
+		}
+
+		// 3. ?token=<token> query parameter (fallback)
+		if token == "" {
+			token = strings.TrimSpace(c.Query("token"))
+		}
+
+		if token == "" {
+			c.JSON(http.StatusUnauthorized, AuthError{
+				Code:    "MISSING_TOKEN",
+				Message: "WebSocket auth token is required",
+			})
+			c.Abort()
+			return
+		}
+
+		claims, err := authService.ValidateToken(token)
+		if err != nil || authService.IsTokenBlacklisted(c.Request.Context(), token) {
+			c.JSON(http.StatusUnauthorized, AuthError{
+				Code:    "INVALID_TOKEN",
+				Message: "Token is invalid, expired, or revoked",
+			})
+			c.Abort()
+			return
+		}
+
+		if claims.UserID == 0 {
+			c.JSON(http.StatusUnauthorized, AuthError{
+				Code:    "INVALID_CLAIMS",
+				Message: "Token contains invalid claims",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Set("userID", claims.UserID)
+		c.Set("userEmail", claims.Email)
+		c.Set("token", token)
+		c.Next()
+	}
+}

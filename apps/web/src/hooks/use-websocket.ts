@@ -28,7 +28,7 @@ export function useWebSocket({ projectId, enabled = true }: UseWebSocketOptions)
   const connect = useCallback(() => {
     if (!projectId || !session?.accessToken || !enabled) return
 
-    const ws = new WebSocket(`${WS_URL}/mobile/stream?projectId=${projectId}`, [
+    const ws = new WebSocket(`${WS_URL}/stream?projectId=${projectId}`, [
       session.accessToken,
     ])
 
