@@ -7,12 +7,12 @@ import (
 
 	"github.com/mosesedem/logstack/internal/api"
 	"github.com/mosesedem/logstack/internal/config"
+	redisdb "github.com/mosesedem/logstack/internal/db"
 	"github.com/mosesedem/logstack/internal/models"
 	"github.com/mosesedem/logstack/internal/services"
 	"github.com/mosesedem/logstack/internal/services/notification"
 	"github.com/mosesedem/logstack/internal/websocket"
 	"github.com/mosesedem/logstack/internal/workers"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -41,9 +41,11 @@ func main() {
 	}
 
 	// Connect to Redis
-	rdb := redis.NewClient(&redis.Options{
-		Addr: cfg.RedisURL,
-	})
+	rdb, err := redisdb.NewRedis(cfg.RedisURL, cfg.RedisPoolSize)
+	if err != nil {
+		slog.Error("Failed to connect to Redis", "error", err)
+		os.Exit(1)
+	}
 
 	// Test Redis connection
 	if err := rdb.Ping(ctx).Err(); err != nil {

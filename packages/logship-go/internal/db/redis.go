@@ -7,10 +7,13 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func NewRedis(url string) (*redis.Client, error) {
+func NewRedis(url string, poolSize int) (*redis.Client, error) {
 	opts, err := redis.ParseURL(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse redis URL: %w", err)
+	}
+	if poolSize > 0 {
+		opts.PoolSize = poolSize
 	}
 
 	client := redis.NewClient(opts)
