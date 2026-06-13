@@ -14,7 +14,9 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
+  DialogFooter,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -72,7 +74,7 @@ export default function ProjectsPage() {
       setIsFormOpen(false);
       setNewProjectName("");
       // Show API key in a modal instead of toast for better security UX
-      setApiKeyToDisplay(project.apiKey);
+      setApiKeyToDisplay(project.apiKey ?? null);
     },
     onError: (error: Error) => {
       toast({
@@ -283,13 +285,18 @@ export default function ProjectsPage() {
 
       {/* API Key Display Modal */}
       {apiKeyToDisplay && (
-        <Dialog open={!!apiKeyToDisplay} onOpenChange={setApiKeyToDisplay}>
+        <Dialog
+          open={!!apiKeyToDisplay}
+          onOpenChange={(open) => {
+            if (!open) setApiKeyToDisplay(null);
+          }}
+        >
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Project Created</DialogTitle>
               <DialogDescription>
-                Your API key has been generated. Store it securely — it will
-                not be shown again.
+                Your API key has been generated. Store it securely — it will not
+                be shown again.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
