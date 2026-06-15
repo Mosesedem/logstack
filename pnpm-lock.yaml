@@ -11,6 +11,7 @@ overrides:
   fumadocs-core: 14.7.7
   fumadocs-ui: 14.7.7
   fumadocs-mdx: 14.2.6
+  lucide-react: 1.18.0
 
 importers:
 
@@ -101,8 +102,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/logstack-js
       lucide-react:
-        specifier: ^0.312.0
-        version: 0.312.0(react@19.2.3)
+        specifier: 1.18.0
+        version: 1.18.0(react@19.2.3)
       next:
         specifier: 15.3.1
         version: 15.3.1(react-dom@19.2.3)(react@19.2.3)
@@ -5182,7 +5183,7 @@ packages:
       class-variance-authority: 0.7.1
       fumadocs-core: 14.7.7(@types/react@19.2.8)(next@15.3.1)(react-dom@19.2.3)(react@19.2.3)
       lodash.merge: 4.6.2
-      lucide-react: 0.473.0(react@19.2.3)
+      lucide-react: 1.18.0(react@19.2.3)
       next: 15.3.1(react-dom@19.2.3)(react@19.2.3)
       next-themes: 0.4.6(react-dom@19.2.3)(react@19.2.3)
       postcss-selector-parser: 7.1.4
@@ -5907,16 +5908,8 @@ packages:
       yallist: 4.0.0
     dev: false
 
-  /lucide-react@0.312.0(react@19.2.3):
-    resolution: {integrity: sha512-3UZsqyswRXjW4t+nw+InICewSimjPKHuSxiFYqTshv9xkK3tPPntXk/lvXc9pKlXIxm3v9WKyoxcrB6YHhP+dg==}
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0
-    dependencies:
-      react: 19.2.3
-    dev: false
-
-  /lucide-react@0.473.0(react@19.2.3):
-    resolution: {integrity: sha512-KW6u5AKeIjkvrxXZ6WuCu9zHE/gEYSXCay+Gre2ZoInD0Je/e3RBtP4OHpJVJ40nDklSvjVKjgH7VU8/e2dzRw==}
+  /lucide-react@1.18.0(react@19.2.3):
+    resolution: {integrity: sha512-LZDb7H/0YfM+RJncD0hDQRCAu+vSGODqpe35TuVI8EuXaRjkczbsx7p8dY4J87F/MUSj6bpYqeI8nw8qXaAdmA==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
     dependencies:
