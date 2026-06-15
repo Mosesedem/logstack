@@ -224,7 +224,7 @@ gcloud secrets create firebase-service-account \
 
 ```bash
 # Send a test alert (assuming you have user with push tokens)
-curl -X POST http://localhost:8080/api/logs \
+curl -X POST http://localhost:8080/v1/logs \
   -H "Authorization: Bearer YOUR_JWT" \
   -H "Content-Type: application/json" \
   -d '{

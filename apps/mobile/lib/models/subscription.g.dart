@@ -7,19 +7,19 @@ part of 'subscription.dart';
 // **************************************************************************
 
 Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
-      id: json['id'] as int,
-      userId: json['userId'] as int,
+      id: (json['id'] as num).toInt(),
+      userId: (json['userId'] as num).toInt(),
       tier: $enumDecode(_$SubscriptionTierEnumMap, json['tier']),
       status: $enumDecode(_$SubscriptionStatusEnumMap, json['status']),
       currency: json['currency'] as String,
-      amountCents: json['amountCents'] as int,
+      amountCents: (json['amountCents'] as num).toInt(),
       periodStart: json['periodStart'] == null
           ? null
           : DateTime.parse(json['periodStart'] as String),
       periodEnd: json['periodEnd'] == null
           ? null
           : DateTime.parse(json['periodEnd'] as String),
-      logLimit: json['logLimit'] as int,
+      logLimit: (json['logLimit'] as num).toInt(),
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
 
@@ -52,18 +52,14 @@ const _$SubscriptionStatusEnumMap = {
   SubscriptionStatus.paused: 'paused',
 };
 
-T $enumDecode<T>(Map<T, dynamic> map, dynamic value) {
-  return map.entries.firstWhere((e) => e.value == value).key;
-}
-
 UsageSummary _$UsageSummaryFromJson(Map<String, dynamic> json) => UsageSummary(
-      userId: json['userId'] as int,
+      userId: (json['userId'] as num).toInt(),
       month: json['month'] as String,
-      totalLogCount: json['totalLogCount'] as int,
-      totalBytesIngested: json['totalBytesIngested'] as int,
-      activeProjects: json['activeProjects'] as int,
+      totalLogCount: (json['totalLogCount'] as num).toInt(),
+      totalBytesIngested: (json['totalBytesIngested'] as num).toInt(),
+      activeProjects: (json['activeProjects'] as num).toInt(),
       tier: $enumDecode(_$SubscriptionTierEnumMap, json['tier']),
-      logLimit: json['logLimit'] as int,
+      logLimit: (json['logLimit'] as num).toInt(),
       usagePercentage: (json['usagePercentage'] as num).toDouble(),
       isOverLimit: json['isOverLimit'] as bool,
     );

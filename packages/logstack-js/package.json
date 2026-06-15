@@ -33,11 +33,11 @@
   ],
   "author": "Mosesedem",
   "license": "MIT",
-  "homepage": "https://github.com/Mosesedem/logstack/tree/main/packages/logship-js#readme",
+  "homepage": "https://github.com/Mosesedem/logstack/tree/main/packages/logstack-js#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Mosesedem/logstack.git",
-    "directory": "packages/logship-js"
+    "directory": "packages/logstack-js"
   },
   "bugs": {
     "url": "https://github.com/Mosesedem/logstack/issues"

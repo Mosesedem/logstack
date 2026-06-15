@@ -16,7 +16,7 @@ List all projects for the authenticated user.
 ### Request
 
 ```bash
-curl https://api.logstack.tech/api/v1/projects \
+curl https://api.logstack.tech/v1/projects \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -59,7 +59,7 @@ Create a new project.
 ### Request
 
 ```bash
-curl -X POST https://api.logstack.tech/api/v1/projects \
+curl -X POST https://api.logstack.tech/v1/projects \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -95,7 +95,7 @@ Get a single project with full API key.
 ### Request
 
 ```bash
-curl https://api.logstack.tech/api/v1/projects/proj_abc123 \
+curl https://api.logstack.tech/v1/projects/proj_abc123 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -121,7 +121,7 @@ Update a project.
 ### Request
 
 ```bash
-curl -X PUT https://api.logstack.tech/api/v1/projects/proj_abc123 \
+curl -X PUT https://api.logstack.tech/v1/projects/proj_abc123 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -151,7 +151,7 @@ Delete a project and all associated logs.
 ### Request
 
 ```bash
-curl -X DELETE https://api.logstack.tech/api/v1/projects/proj_abc123 \
+curl -X DELETE https://api.logstack.tech/v1/projects/proj_abc123 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -173,7 +173,7 @@ Rotate the API key for a project.
 ### Request
 
 ```bash
-curl -X POST https://api.logstack.tech/api/v1/projects/proj_abc123/rotate-key \
+curl -X POST https://api.logstack.tech/v1/projects/proj_abc123/rotate-key \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 

@@ -21,7 +21,7 @@ Ingest logs for a project. Supports batch ingestion.
 ### Request
 
 ```bash
-curl -X POST https://api.logstack.io/api/v1/logs/ingest \
+curl -X POST https://api.logstack.tech/v1/logs/ingest \
   -H "X-API-Key: ls_live_abc123xyz789" \
   -H "Content-Type: application/json" \
   -d '{
@@ -86,7 +86,7 @@ Query logs with filters.
 ### Request
 
 ```bash
-curl "https://api.logstack.io/api/v1/logs?projectId=proj_123&level=error&offset=0&limit=50" \
+curl "https://api.logstack.tech/v1/logs?projectId=proj_123&level=error&offset=0&limit=50" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -137,7 +137,7 @@ Get a single log entry by ID.
 ### Request
 
 ```bash
-curl https://api.logstack.io/api/v1/logs/log_abc123 \
+curl https://api.logstack.tech/v1/logs/log_abc123 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -185,7 +185,7 @@ logstack.error("Database connection failed", {
 For custom integrations or non-JavaScript environments:
 
 ```bash
-curl -X POST https://api.logstack.io/api/v1/logs/ingest \
+curl -X POST https://api.logstack.tech/v1/logs/ingest \
   -H "X-API-Key: ls_live_abc123xyz789" \
   -H "Content-Type: application/json" \
   -d '{

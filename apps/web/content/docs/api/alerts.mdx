@@ -16,7 +16,7 @@ List all alert rules for a project.
 ### Request
 
 ```bash
-curl "https://api.logstack.tech/api/v1/alerts?projectId=proj_abc123" \
+curl "https://api.logstack.tech/v1/alerts?projectId=proj_abc123" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -52,7 +52,7 @@ Create a new alert rule.
 ### Request
 
 ```bash
-curl -X POST https://api.logstack.tech/api/v1/alerts \
+curl -X POST https://api.logstack.tech/v1/alerts \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -110,7 +110,7 @@ Update an alert rule.
 ### Request
 
 ```bash
-curl -X PUT https://api.logstack.tech/api/v1/alerts/alert_456 \
+curl -X PUT https://api.logstack.tech/v1/alerts/alert_456 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -152,7 +152,7 @@ Delete an alert rule.
 ### Request
 
 ```bash
-curl -X DELETE https://api.logstack.tech/api/v1/alerts/alert_456 \
+curl -X DELETE https://api.logstack.tech/v1/alerts/alert_456 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -169,7 +169,7 @@ Get alert trigger history.
 ### Request
 
 ```bash
-curl "https://api.logstack.tech/api/v1/alerts/alert_456/history?limit=10" \
+curl "https://api.logstack.tech/v1/alerts/alert_456/history?limit=10" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 

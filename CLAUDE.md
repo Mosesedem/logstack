@@ -8,19 +8,16 @@ dashboard with alerts & billing. Git remote: `github.com/Mosesedem/logstack`.
 
 > **Naming rule:** the canonical product/package name is **`logstack`** (git remote, npm
 > `logstack-js`, PyPI `logstack`, Go module `.../logstack-go-sdk`, API `api.logstack.tech`,
-> UI title). Directories are named `logship-*` — that is a half-applied rename we are **not**
-> completing. Do **not** do a sweeping rename. Keep `logstack` in code/packages/docs; if a
-> `logstack`/`logship` mismatch actually breaks a build/import/endpoint, fix that one spot
-> toward `logstack` and flag it. Folder names (`logship-*`) can stay.
+> UI title). All directories, module paths and references now use `logstack-*` (rename completed).
 
 ## Layout (monorepo: pnpm + turbo)
 - `apps/web` — Next.js 15 dashboard + landing + docs (fumadocs). `@logstack/web`.
 - `apps/mobile` — Flutter app.
-- `packages/logship-go` — **Go backend** (Gin, GORM/Postgres, Redis, WebSocket). Module
+- `packages/logstack-go` — **Go backend** (Gin, GORM/Postgres, Redis, WebSocket). Module
   `github.com/mosesedem/logstack`. Entry `cmd/server/main.go`.
-- `packages/logship-js` — JS/TS SDK, npm name `logstack-js`. Source `src/index.ts` → `dist/`.
-- `packages/logship-go-sdk` — Go SDK (`logstack.go`).
-- `packages/logship-python` — Python SDK (`logstack`).
+- `packages/logstack-js` — JS/TS SDK, npm name `logstack-js`. Source `src/index.ts` → `dist/`.
+- `packages/logstack-go-sdk` — Go SDK (`logstack.go`).
+- `packages/logstack-python` — Python SDK (`logstack`).
 - `packages/shared-types` — shared TS types.
 - `docs/` — reference docs. `docs/progress.md` is the live progress tracker.
 
@@ -28,7 +25,7 @@ dashboard with alerts & billing. Git remote: `github.com/Mosesedem/logstack`.
 ```bash
 docker compose -f docker-compose.dev.yml up -d     # postgres:5432 + redis:6379
 cp .env.example .env                                # then fill secrets
-# Backend (from packages/logship-go):
+# Backend (from packages/logstack-go):
 go run ./cmd/server                                 # serves http://localhost:8080/v1
 # Frontend:
 pnpm --filter @logstack/web dev                     # or: pnpm dev (turbo, all)
@@ -40,7 +37,7 @@ pnpm --filter @logstack/web dev                     # or: pnpm dev (turbo, all)
 - All: `pnpm build` · `pnpm lint` · `pnpm test` (turbo).
 - Web: `pnpm --filter @logstack/web build` · `... type-check` · `... lint`.
 - JS SDK: `pnpm --filter logstack-js build` (tsup → `dist/`) · `... test` (vitest).
-- Go: from `packages/logship-go`: `go build ./...` · `go vet ./...` · `go test ./...`.
+- Go: from `packages/logstack-go`: `go build ./...` · `go vet ./...` · `go test ./...`.
 
 ## Code style
 Follow the **`go-and-typescript` skill** (`.claude/skills/go-and-typescript/SKILL.md`) for both

@@ -1,0 +1,154 @@
+Metadata-Version: 2.4
+Name: logstack
+Version: 1.0.0
+Summary: A Python SDK for the Logstack logging platform
+Home-page: https://github.com/Mosesedem/logstack
+Author: Mosesedem
+Author-email: Mosesedem <team@logstack.tech>
+License: MIT
+Project-URL: Homepage, https://github.com/Mosesedem/logstack
+Project-URL: Repository, https://github.com/Mosesedem/logstack
+Project-URL: Issues, https://github.com/Mosesedem/logstack/issues
+Keywords: logstack,logging,logs,monitoring,observability
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests>=2.28.0
+Provides-Extra: django
+Requires-Dist: django>=3.2; extra == "django"
+Provides-Extra: fastapi
+Requires-Dist: fastapi>=0.95.0; extra == "fastapi"
+Provides-Extra: async
+Requires-Dist: aiohttp>=3.8.0; extra == "async"
+Dynamic: author
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-python
+
+# Logstack Python SDK
+
+A Python SDK for the Logstack logging platform.
+
+## Installation
+
+```bash
+pip install logstack
+```
+
+## Usage
+
+### Basic Usage
+
+```python
+from logstack import LogStackClient
+
+# Create a client
+client = LogStackClient(
+    api_key="your-api-key",
+    environment="production",
+)
+
+# Send logs
+client.info("Application started", metadata={"version": "1.0.0"})
+client.error("Database connection failed", metadata={"error": "connection refused"})
+
+# Flush and close
+client.close()
+```
+
+### Using Context Manager
+
+```python
+from logstack import LogStackClient
+
+with LogStackClient(api_key="your-api-key") as client:
+    client.info("Application started")
+    client.error("Something went wrong")
+```
+
+### Django Integration
+
+```python
+# settings.py
+MIDDLEWARE = [
+    # ...
+    'logstack.middleware.DjangoMiddleware',
+    # ...
+]
+
+# Or with custom client
+MIDDLEWARE = [
+    # ...
+    'logstack.middleware.DjangoMiddleware',
+    # ...
+]
+
+# In your code
+from logstack import DjangoMiddleware, LogStackClient
+
+client = LogStackClient(api_key="your-api-key")
+middleware = DjangoMiddleware(get_response, client=client)
+```
+
+### FastAPI Integration
+
+```python
+from fastapi import FastAPI
+from logstack import LogStackClient, FastAPIMiddleware
+
+app = FastAPI()
+client = LogStackClient(api_key="your-api-key")
+FastAPIMiddleware(app, client=client)
+```
+
+## API Reference
+
+### `LogStackClient(api_key, api_url="https://api.logstack.tech", environment="production", flush_interval=5.0, batch_size=100)`
+
+Create a new Logstack client.
+
+### `info(message, metadata=None)`
+
+Send an info level log.
+
+### `debug(message, metadata=None)`
+
+Send a debug level log.
+
+### `warn(message, metadata=None)`
+
+Send a warn level log.
+
+### `error(message, metadata=None)`
+
+Send an error level log.
+
+### `critical(message, metadata=None)`
+
+Send a critical level log.
+
+### `fatal(message, metadata=None)`
+
+Send a fatal level log and flush immediately.
+
+### `flush()`
+
+Manually flush the batch of logs.
+
+### `close()`
+
+Close the client and flush any pending logs.
+
+## License
+
+MIT

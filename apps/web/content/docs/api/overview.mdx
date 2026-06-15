@@ -14,8 +14,8 @@ Logstack provides a RESTful API for log ingestion, querying, and management.
 
 | Environment | URL                              |
 | ----------- | -------------------------------- |
-| Production  | `https://api.logstack.tech/api/v1`  |
-| Self-hosted | `https://your-domain.com/api/v1` |
+| Production  | `https://api.logstack.tech/v1`  |
+| Self-hosted | `https://your-domain.com/v1` |
 
 ## Authentication
 
@@ -106,7 +106,7 @@ All responses use JSON format:
 List endpoints support offset/limit pagination (use `offset` starting at `0`):
 
 ```http
-GET /api/v1/logs?projectId=proj_123&offset=0&limit=50
+GET /v1/logs?projectId=proj_123&offset=0&limit=50
 ```
 
 Response includes pagination metadata:

@@ -13,7 +13,7 @@ class AppTheme {
       centerTitle: true,
       elevation: 0,
     ),
-    cardTheme: const CardTheme(
+    cardTheme: const CardThemeData(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.zero,
@@ -30,21 +30,30 @@ class AppTheme {
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.zero,
         ),
-        padding: const EdgeInsets.        padding: const EdgeInsets.        padding: const EdgeInsettatic final dark = ThemeData(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      ),
+    ),
+  );
+
+  static final dark = ThemeData(
     useMaterial3: true,
     colorScheme: ColorScheme.fromSeed(
-      seedColor:       seedColor:       seedCo  bri      seedColor: ss.dark      seedColor:       seeogleFonts.interTextTheme(ThemeData.dark().textTheme),
+      seedColor: const Color(0xFF6366F1),
+      brightness: Brightness.dark,
+    ),
+    textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
     appBarTheme: const AppBarTheme(
       centerTitle: true,
       elevation: 0,
     ),
-                             e(
+    cardTheme: const CardThemeData(
       elevation: 0,
-      shape: RoundedRectangleB     (
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.zero,
       ),
     ),
-    inputDecorationTheme: const     inputDecorationTheme: const     inplineInputBorder(
+    inputDecorationTheme: const InputDecorationTheme(
+      border: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
       ),
       filled: true,
@@ -53,7 +62,8 @@ class AppTheme {
       style: ElevatedButton.styleFrom(
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.zero,
-                                            .symmetric(horizontal: 24, vertical: 12),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       ),
     ),
   );

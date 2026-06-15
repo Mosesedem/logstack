@@ -36,4 +36,4 @@ Repository = "https://github.com/Mosesedem/logstack"
 Issues = "https://github.com/Mosesedem/logstack/issues"
 
 [tool.setuptools.packages.find]
-include = ["logship*"]
+include = ["logstack*"]
