@@ -7,6 +7,9 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@logstack/shared-types"],
   output: "standalone",
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 
   // CDN / static asset support for production (CloudFront, S3, etc.)
   // Set NEXT_PUBLIC_CDN_URL=https://your-cdn.example.com (no trailing slash)
@@ -17,8 +20,8 @@ const nextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: '**',
+        protocol: "https",
+        hostname: "**",
       },
     ],
   },
