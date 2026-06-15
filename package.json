@@ -18,7 +18,11 @@
   "pnpm": {
     "overrides": {
       "@types/react": "19.2.8",
-      "@types/react-dom": "19.2.3"
+      "@types/react-dom": "19.2.3",
+      "next": "15.3.1",
+      "fumadocs-core": "14.7.7",
+      "fumadocs-ui": "14.7.7",
+      "fumadocs-mdx": "14.2.6"
     }
   },
   "packageManager": "pnpm@8.15.0",
