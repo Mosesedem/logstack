@@ -23,7 +23,7 @@ type AuditLog struct {
 
 	// Relationships
 	Organization Organization `json:"-" gorm:"foreignKey:OrganizationID;constraint:OnDelete:CASCADE"`
-	User         User         `json:"user,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:SET NULL"`
+	User         User         `json:"user,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:RESTRICT"`
 }
 
 // AuditLogDetails is a flexible JSON field for storing action-specific details
