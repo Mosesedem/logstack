@@ -84,9 +84,34 @@ jobs:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          echo "Deploying to production..."
-          # Add your deployment commands here
-          # For example:
-          # ssh -i $DEPLOY_KEY $DEPLOY_USER@$DEPLOY_HOST "cd /app && docker-compose pull && docker-compose up -d"
+          set -euo pipefail
+
+          if [ -z "${DEPLOY_KEY:-}" ] || [ -z "${DEPLOY_HOST:-}" ] || [ -z "${DEPLOY_USER:-}" ]; then
+            echo "Missing DEPLOY_KEY, DEPLOY_HOST, or DEPLOY_USER secret" >&2
+            exit 1
+          fi
+
+          DEPLOY_PATH="${DEPLOY_PATH:-/opt/logstack}"
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" "DEPLOY_PATH=$DEPLOY_PATH bash -s" <<'EOF'
+          set -euo pipefail
+
+          cd "$DEPLOY_PATH"
+          git fetch --all --prune
+          git checkout main
+          git pull --ff-only origin main
+          docker compose up -d --build --remove-orphans
+          docker compose ps
+          EOF
+
+          rm -f ~/.ssh/deploy_key
+
           echo "Deployment complete!"

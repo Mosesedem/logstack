@@ -1,0 +1,41 @@
+name: Publish JS Package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "logstack-js-v*"
+
+jobs:
+  publish:
+    name: Publish logstack-js to npm
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: packages/logstack-js
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build package
+        run: pnpm build
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
