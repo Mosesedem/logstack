@@ -5,7 +5,7 @@ This guide is for the common case where Logstack is already running on an AWS EC
 It assumes:
 
 - Your app is running on one EC2 host.
-- The code lives in a working directory such as `/opt/logstack`.
+- The code lives in a working directory such as `/opt/logstack` or `~/logstack`.
 - Docker and Docker Compose are already installed.
 - Your production `.env` file already exists on the server.
 
@@ -14,16 +14,16 @@ It assumes:
 If the instance is new, SSH in and clone the repo once:
 
 ```bash
-ssh ec2-user@YOUR_EC2_HOST
-cd /opt
+ssh ubuntu@18.225.219.208
+cd ~
 git clone https://github.com/Mosesedem/logstack.git logstack
-cd /opt/logstack
+cd ~/logstack
 ```
 
 Copy your production env file into place and make sure secrets are real, not placeholder values:
 
 ```bash
-cp /path/to/your/.env /opt/logstack/.env
+cp /path/to/your/.env ~/logstack/.env
 ```
 
 Start the stack:
@@ -37,8 +37,8 @@ docker compose up -d --build
 When you have already pushed code to GitHub and want the EC2 host to pick it up:
 
 ```bash
-ssh ec2-user@YOUR_EC2_HOST
-cd /opt/logstack
+ssh ubuntu@18.225.219.208
+cd ~/logstack
 git pull --ff-only origin main
 docker compose up -d --build --remove-orphans
 ```
@@ -75,8 +75,8 @@ docker compose logs -f --tail 200 api web
 Then test the public endpoints:
 
 ```bash
-curl http://YOUR_EC2_HOST:8080/health
-curl http://YOUR_EC2_HOST:3000
+curl http://18.225.219.208:8080/health
+curl http://18.225.219.208:3000
 ```
 
 If you front the instance with nginx or an ALB, use the public domain instead of the raw host.
@@ -99,6 +99,9 @@ docker compose up -d --build --remove-orphans
 ## 5. Common gotchas
 
 - Make sure the `.env` file on the server still has the final production values.
+- If the backend image fails with a message like `go.mod requires go >= 1.25.0`, rebuild with the updated backend Dockerfile. The API image now uses `golang:1.25-alpine`.
+- If something else is already bound to host port `8080`, the API container will not start until you stop that process/container or change the host mapping. The same rule applies to the web port (`3000` by default in this repo).
+- Port `4000` only matters if you mapped one of your services to `4000`; this repo does not use that port by default.
 - If browser clients break after a deploy, confirm `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` still point at the public AWS URL, not `localhost`.
 - If database migrations were added, run them before or during the deploy window.
 - If the instance uses CloudFront or nginx, clear or refresh the cache for any changed static assets.
@@ -108,7 +111,7 @@ docker compose up -d --build --remove-orphans
 If you just want the shortest possible update flow, use:
 
 ```bash
-ssh ec2-user@YOUR_EC2_HOST 'cd /opt/logstack && git pull --ff-only origin main && docker compose up -d --build --remove-orphans'
+ssh ubuntu@18.225.219.208 'cd ~/logstack && git pull --ff-only origin main && docker compose up -d --build --remove-orphans'
 ```
 
 That is the default path for pushing a new version to an existing Docker host on AWS.
