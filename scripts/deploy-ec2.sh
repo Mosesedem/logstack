@@ -13,7 +13,7 @@ set -euo pipefail
 DEPLOY_HOST="${DEPLOY_HOST:-ubuntu@18.225.219.208}"
 DEPLOY_PATH="${DEPLOY_PATH:-~/logstack}"
 GIT_REF="${GIT_REF:-main}"
-COMPOSE_FILE="docker-compose.prod.yml"
+COMPOSE_FILE="docker-compose.host.yml"
 BACKUP_DB=false
 API_DOMAIN="${API_DOMAIN:-api.logstack.tech}"
 
@@ -25,7 +25,8 @@ Options:
   --host HOST         SSH target (default: ubuntu@18.225.219.208)
   --path PATH         Repo path on the server (default: ~/logstack)
   --ref REF           Git ref to deploy (default: main)
-  --direct            Use docker-compose.api.yml (host port, no nginx/TLS)
+  --prod              Use docker-compose.prod.yml (Docker nginx + bundled Postgres/Redis)
+  --direct            Use docker-compose.api.yml (all-in-one with local Postgres/Redis)
   --backup-db         pg_dump before updating
   -h, --help          Show this help
 EOF
@@ -36,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --host) DEPLOY_HOST="$2"; shift 2 ;;
     --path) DEPLOY_PATH="$2"; shift 2 ;;
     --ref) GIT_REF="$2"; shift 2 ;;
+    --prod) COMPOSE_FILE="docker-compose.prod.yml"; shift ;;
     --direct) COMPOSE_FILE="docker-compose.api.yml"; shift ;;
     --backup-db) BACKUP_DB=true; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -75,7 +77,15 @@ git pull --ff-only origin "${GIT_REF}"
 docker compose -f "${COMPOSE_FILE}" up -d --build --remove-orphans
 docker compose -f "${COMPOSE_FILE}" ps
 
-if [[ "${COMPOSE_FILE}" == "docker-compose.prod.yml" ]]; then
+if [[ "${COMPOSE_FILE}" == "docker-compose.host.yml" ]]; then
+  api_port="$(docker compose -f "${COMPOSE_FILE}" port api 8080 2>/dev/null | cut -d: -f2 || echo 8082)"
+  curl -fsS --max-time 10 "http://127.0.0.1:${api_port}/health" >/dev/null && echo "API health OK on 127.0.0.1:${api_port}"
+  if curl -fsS --max-time 10 "https://${API_DOMAIN}/health" >/dev/null 2>&1; then
+    echo "HTTPS health OK: https://${API_DOMAIN}/health"
+  else
+    echo "HTTPS not ready — set DNS and run: sudo ./scripts/setup-host-nginx.sh && sudo certbot --nginx -d ${API_DOMAIN}"
+  fi
+elif [[ "${COMPOSE_FILE}" == "docker-compose.prod.yml" ]]; then
   if curl -fsS --max-time 10 "https://${API_DOMAIN}/health" >/dev/null 2>&1; then
     echo "HTTPS health OK: https://${API_DOMAIN}/health"
     curl -fsS --max-time 10 "https://${API_DOMAIN}/ready" >/dev/null && echo "HTTPS ready OK"

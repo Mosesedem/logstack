@@ -1,0 +1,30 @@
+# API-only on a shared EC2 host (external Postgres + Redis, host nginx for TLS).
+# Use when 80/443 are already taken by system nginx and DB/Redis are managed services.
+#
+# Usage:
+#   docker compose -f docker-compose.host.yml up -d --build
+#
+# Point host nginx at 127.0.0.1:${API_HOST_PORT:-8082} (see infra/nginx/host-api.logstack.tech.conf).
+
+services:
+  api:
+    build:
+      context: ./packages/logstack-go
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8082}:8080"
+    env_file:
+      - .env
+    environment:
+      - PORT=8080
+      - ENV=${ENV:-production}
+      - BASE_URL=${BASE_URL:-https://api.logstack.tech}
+      - PAYSTACK_WEBHOOK_URL=${PAYSTACK_WEBHOOK_URL:-https://api.logstack.tech/v1/webhooks/paystack}
+      - LOG_JSON=${LOG_JSON:-true}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
