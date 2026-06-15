@@ -1,6 +1,8 @@
 # AWS EC2 Docker Deploy
 
-This guide is for the common case where Logstack is already running on an AWS EC2 instance with Docker Compose, and you want to push a new version without rebuilding the whole setup from scratch.
+> **Full production setup** (domain, Let's Encrypt, nginx, Route53): see **[AWS_PRODUCTION.md](./AWS_PRODUCTION.md)**.
+
+This guide covers quick updates for an API-only instance already running on EC2.
 
 ## API-only production (recommended)
 
@@ -21,7 +23,7 @@ Logstack production on EC2 is **API-only**: Go backend + Postgres + Redis. No we
 Deploy / update:
 
 ```bash
-docker compose -f docker-compose.api.yml up -d --build --remove-orphans
+docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
 # or from your laptop:
 ./scripts/deploy-ec2.sh
 ```

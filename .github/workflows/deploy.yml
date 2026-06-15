@@ -1,8 +1,15 @@
-name: Deploy
+name: Deploy API
 
 on:
   push:
     branches: [main]
+    paths:
+      - "packages/logstack-go/**"
+      - "docker-compose.prod.yml"
+      - "docker-compose.api.yml"
+      - "infra/**"
+      - "scripts/deploy-ec2.sh"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 env:
@@ -10,8 +17,8 @@ env:
   IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
-  build-and-push:
-    name: Build and Push Images
+  build-and-push-api:
+    name: Build and Push API Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,8 +37,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (API)
-        id: meta-api
+      - name: Extract metadata
+        id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-api
@@ -45,39 +52,14 @@ jobs:
           context: ./packages/logstack-go
           file: ./packages/logstack-go/Dockerfile
           push: true
-          tags: ${{ steps.meta-api.outputs.tags }}
-          labels: ${{ steps.meta-api.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract metadata (Web)
-        id: meta-web
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-web
-          tags: |
-            type=sha
-            type=raw,value=latest
-
-      - name: Build and push Web image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./apps/web/Dockerfile
-          push: true
-          tags: ${{ steps.meta-web.outputs.tags }}
-          labels: ${{ steps.meta-web.outputs.labels }}
-          build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
-            NEXT_PUBLIC_WS_URL=${{ vars.NEXT_PUBLIC_WS_URL }}
-            NEXT_PUBLIC_LOGSTACK_API_KEY=${{ secrets.NEXT_PUBLIC_LOGSTACK_API_KEY }}
-            NEXT_PUBLIC_CDN_URL=${{ vars.NEXT_PUBLIC_CDN_URL }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   deploy:
-    name: Deploy to Production
-    needs: build-and-push
+    name: Deploy API to EC2
+    needs: build-and-push-api
     runs-on: ubuntu-latest
     environment: production
 
@@ -98,7 +80,7 @@ jobs:
             exit 1
           fi
 
-          DEPLOY_PATH="${DEPLOY_PATH:-/opt/logstack}"
+          DEPLOY_PATH="${DEPLOY_PATH:-/home/ubuntu/logstack}"
 
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
@@ -106,17 +88,17 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
-          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" "DEPLOY_PATH=$DEPLOY_PATH bash -s" <<'EOF'
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_PATH=$DEPLOY_PATH COMPOSE_FILE=docker-compose.prod.yml API_DOMAIN=api.logstack.tech bash -s" <<'EOF'
           set -euo pipefail
-
           cd "$DEPLOY_PATH"
           git fetch --all --prune
           git checkout main
           git pull --ff-only origin main
-          docker compose up -d --build --remove-orphans
-          docker compose ps
+          docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+          docker compose -f docker-compose.prod.yml ps
+          curl -fsS --max-time 15 https://api.logstack.tech/health || echo "HTTPS health check skipped or failed"
           EOF
 
           rm -f ~/.ssh/deploy_key
-
-          echo "Deployment complete!"
+          echo "API deployment complete!"

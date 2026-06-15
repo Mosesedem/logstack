@@ -1,0 +1,87 @@
+# Production API stack: Go API + Postgres + Redis + nginx (TLS termination).
+# The API is NOT published to the host — only nginx exposes 80/443.
+# This avoids port conflicts with other apps on 8080, 3000, etc.
+#
+# First-time setup:
+#   1. Copy .env.production.example → .env and fill secrets
+#   2. Point api.logstack.tech DNS to this host
+#   3. ./scripts/setup-ssl.sh
+#   4. docker compose -f docker-compose.prod.yml up -d --build
+#
+# Updates:
+#   ./scripts/deploy-ec2.sh
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.api.conf:/etc/nginx/nginx.conf:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./packages/logstack-go
+      dockerfile: Dockerfile
+    expose:
+      - "8080"
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-logstack}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-logstack}?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - PORT=8080
+      - ENV=production
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - BASE_URL=${BASE_URL:-https://api.logstack.tech}
+      - BREVO_API_KEY=${BREVO_API_KEY:-}
+      - FCM_SERVICE_ACCOUNT_PATH=${FCM_SERVICE_ACCOUNT_PATH:-}
+      - FCM_PROJECT_ID=${FCM_PROJECT_ID:-}
+      - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY:-}
+      - PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY:-}
+      - PAYSTACK_WEBHOOK_URL=${PAYSTACK_WEBHOOK_URL:-https://api.logstack.tech/v1/webhooks/paystack}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_JSON=${LOG_JSON:-true}
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-logstack}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - POSTGRES_DB=${POSTGRES_DB:-logstack}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: logstack_postgres_data
+  redis_data:
+    name: logstack_redis_data
+  certbot_conf:
+    name: logstack_certbot_conf
+  certbot_www:
+    name: logstack_certbot_www
