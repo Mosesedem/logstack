@@ -1,32 +1,35 @@
 package db
 
 import (
+	"fmt"
+
 	"github.com/mosesedem/logstack/internal/models"
 	"gorm.io/gorm"
 )
 
+func ensureEnumType(db *gorm.DB, name, values string) error {
+	var exists bool
+	if err := db.Raw(
+		"SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = ?)",
+		name,
+	).Scan(&exists).Error; err != nil {
+		return fmt.Errorf("check enum %s: %w", name, err)
+	}
+	if exists {
+		return nil
+	}
+	// Plain CREATE TYPE (Neon/serverless PG rejects CREATE TYPE inside DO blocks).
+	if err := db.Exec(fmt.Sprintf("CREATE TYPE %s AS ENUM (%s)", name, values)).Error; err != nil {
+		return fmt.Errorf("create enum %s: %w", name, err)
+	}
+	return nil
+}
+
 func RunMigrations(db *gorm.DB) error {
-	// Create enum types if they don't exist
-	// PostgreSQL enums need to be created before tables that use them
-	err := db.Exec(`
-		DO $$ BEGIN
-			CREATE TYPE subscription_tier AS ENUM ('free', 'starter', 'pro', 'enterprise');
-		EXCEPTION
-			WHEN duplicate_object THEN null;
-		END $$;
-	`).Error
-	if err != nil {
+	if err := ensureEnumType(db, "subscription_tier", "'free', 'starter', 'pro', 'enterprise'"); err != nil {
 		return err
 	}
-
-	err = db.Exec(`
-		DO $$ BEGIN
-			CREATE TYPE subscription_status AS ENUM ('active', 'cancelled', 'past_due', 'trialing', 'paused');
-		EXCEPTION
-			WHEN duplicate_object THEN null;
-		END $$;
-	`).Error
-	if err != nil {
+	if err := ensureEnumType(db, "subscription_status", "'active', 'cancelled', 'past_due', 'trialing', 'paused'"); err != nil {
 		return err
 	}
 
