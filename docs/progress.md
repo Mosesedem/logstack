@@ -38,12 +38,12 @@
 ## Phase 3 — SDK correctness + publish
 | Item | Status | Notes |
 | ---- | ------ | ----- |
-| SDK behavior/endpoints sweep (JS/Go/Python) | ⏳ | |
-| LICENSE files (root + per package) | ⏳ | MIT, Mosesedem |
-| JS package.json metadata | ⏳ | repository/homepage/bugs/author |
-| Python pyproject.toml + version 1.0.0 | ⏳ | |
-| Go module path resolution | ⏸ | needs publish-strategy decision |
-| Publish (npm/PyPI/Go) | ⏸ | needs registry credentials |
+| SDK behavior/endpoints sweep (JS/Go/Python) | ✅ | Fixed ingest path in all three (`/v1/logs/batch`→`/v1/logs`, JS `/api/v1/logs`→`/v1/logs`); Go now accepts 201, no lock held over network I/O, wrapped errors; Python uses `logging` not `print` |
+| LICENSE files (root + per package) | ✅ | MIT, Mosesedem, at root + js/go-sdk/python |
+| JS package.json metadata | ✅ | repository/homepage/bugs/author/publishConfig/exports; `npm pack` ships LICENSE+README+dist |
+| Python pyproject.toml + version 1.0.0 | ✅ | added pyproject.toml; bumped setup.py + `__version__` to 1.0.0; fixed repo URL casing |
+| Go module path resolution | ✅ | `github.com/Mosesedem/logstack/packages/logship-go-sdk` (monorepo subdir); READMEs updated |
+| Publish (npm/PyPI/Go) | ⏸ | **Needs your credentials** — see note below |
 
 ## Phase 4 — Landing forced-dark + theme reconcile
 | Item | Status | Notes |
@@ -66,3 +66,25 @@
 | 2026-06-13 | Phase 1: fixed dashboard no-op logger; decoupled SDK console/send + silent/disabled/queue-cap; fixed SDK ingest path `/api/v1/logs`→`/v1/logs`; backend persists all-env logs; rebuilt SDK. Verified via builds/tests/type-check/Node smoke. |
 | 2026-06-13 | Phase 2 (core): added `WSAuth` (browser WebSocket token via subprotocol/query); decoupled `/v1/stream` from `/mobile`; updated web hook; surfaced projects-query errors. Audit `/v1/v1` and post-login redirect were already correct. |
 | 2026-06-13 | Phase 4: landing + auth forced dark via `dark` wrapper; removed dead Radix theme imports. |
+| 2026-06-13 | Phase 2 (logs viewer): `/logs` now real viewer (paginated + live WS, dedupe, cap); stats → `/overview` + nav; key rotate uses secure modal. |
+| 2026-06-13 | Phase 5: deleted 4 stale docs; refreshed README/API.md/SDK.md. |
+| 2026-06-13 | Phase 3: fixed ingest-path/status bugs in Go+Python SDKs; Go lock-over-IO fix; LICENSE×4; JS metadata; Python pyproject+v1.0.0; Go module path; self-contained READMEs. Publish pending credentials. |
+
+---
+
+## Publishing — what's needed from you
+
+All three SDKs are prepared and build clean. To actually publish (you chose publish-all):
+
+- **npm (`logstack-js`)**: `npm login` (or an `NPM_TOKEN`). Then from `packages/logship-js`:
+  `npm publish` (package is public via `publishConfig`). Verify the name `logstack-js` is
+  available/owned by you.
+- **PyPI (`logstack`)**: a PyPI API token. Build with `python -m build` (needs `pip install build`)
+  from `packages/logship-python`, then `twine upload dist/*`. Verify the name `logstack` is
+  available on PyPI.
+- **Go**: no registry push — pkg.go.dev indexes from a Git tag. Since the module lives in a
+  subdir, the tag must be path-scoped, e.g. `packages/logship-go-sdk/v1.0.0`. Push that tag to
+  `github.com/Mosesedem/logstack` and the module resolves for `go get`.
+
+I paused here rather than guessing credentials. Tell me when you're authed (or provide tokens)
+and which to publish, and I'll run them.

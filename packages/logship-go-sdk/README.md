@@ -5,7 +5,7 @@ A Go SDK for the Logstack logging platform.
 ## Installation
 
 ```bash
-go get github.com/mosesedem/logstack-go-sdk
+go get github.com/Mosesedem/logstack/packages/logship-go-sdk
 ```
 
 ## Usage
@@ -16,7 +16,8 @@ package main
 import (
     "context"
     "log"
-    "github.com/mosesedem/logstack-go-sdk"
+
+    logstack "github.com/Mosesedem/logstack/packages/logship-go-sdk"
 )
 
 func main() {
