@@ -8,7 +8,7 @@ import (
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
-		
+
 		// Check if origin is allowed
 		allowed := false
 		for _, allowedOrigin := range allowedOrigins {
@@ -19,7 +19,7 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 		}
 
 		if allowed && origin != "" {
-			if allowedOrigins[0] == "*" {
+			if len(allowedOrigins) > 0 && allowedOrigins[0] == "*" {
 				c.Header("Access-Control-Allow-Origin", "*")
 			} else {
 				c.Header("Access-Control-Allow-Origin", origin)
@@ -48,7 +48,7 @@ func RequestID() gin.HandlerFunc {
 		if requestID == "" {
 			requestID = uuid.New().String()
 		}
-		
+
 		c.Set("requestID", requestID)
 		c.Header("X-Request-ID", requestID)
 		c.Next()

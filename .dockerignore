@@ -1,0 +1,26 @@
+# Dependencies and build artifacts (installed/built inside the image)
+node_modules
+**/node_modules
+**/.next
+**/dist
+.turbo
+
+# Local env and secrets — never bake into images
+.env
+.env.*
+!.env.example
+
+# Git and editor noise
+.git
+.gitignore
+**/.DS_Store
+
+# Unneeded packages for the web/api compose stack
+apps/mobile
+packages/logstack-python
+packages/logstack-go-sdk
+
+# Docs and dev-only files
+docs
+**/*.md
+!apps/web/content/**/*.mdx

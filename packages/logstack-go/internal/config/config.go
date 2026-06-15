@@ -1,41 +1,44 @@
 package config
 
 import (
+	"bufio"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Config struct {
 	// Database
-	DatabaseURL     string
-	DBMaxIdleConns  int
-	DBMaxOpenConns  int
-	DBConnMaxLife   time.Duration
+	DatabaseURL    string
+	DBMaxIdleConns int
+	DBMaxOpenConns int
+	DBConnMaxLife  time.Duration
 
 	// Redis
-	RedisURL        string
-	RedisPoolSize   int
+	RedisURL      string
+	RedisPoolSize int
 
 	// Auth
-	JWTSecret           string
-	AccessTokenExpiry   time.Duration
-	RefreshTokenExpiry  time.Duration
+	JWTSecret          string
+	AccessTokenExpiry  time.Duration
+	RefreshTokenExpiry time.Duration
 
 	// External services
-	BrevoAPIKey string
+	BrevoAPIKey           string
 	FCMServiceAccountPath string
-	FCMProjectID string
-	BaseURL string
+	FCMProjectID          string
+	BaseURL               string
 
 	// Server
-	Port            string
-	Env             string
-	AllowedOrigins  []string
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
+	Port           string
+	Env            string
+	AllowedOrigins []string
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
+	IdleTimeout    time.Duration
 
 	// Rate limiting
 	RateLimitRequests int
@@ -55,41 +58,45 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
+	if err := loadDotEnv(); err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		// Database
-		DatabaseURL:    getEnv("DATABASE_URL", "postgresql://neondb_owner:npg_7uoBpXj0EPzU@ep-sparkling-shape-ah5kbew2-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require"),
-		DBMaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 10),
-		DBMaxOpenConns: getEnvInt("DB_MAX_OPEN_CONNS", 100),
-		DBConnMaxLife:  getEnvDuration("DB_CONN_MAX_LIFE", 30*time.Minute),
+		DatabaseURL:    getEnv("DATABASE_URL", ""),
+		DBMaxIdleConns: getEnvInt("DB_MAX_IDLE_CONNS", 0),
+		DBMaxOpenConns: getEnvInt("DB_MAX_OPEN_CONNS", 0),
+		DBConnMaxLife:  getEnvDuration("DB_CONN_MAX_LIFE", 0),
 
 		// Redis
-		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
-		RedisPoolSize: getEnvInt("REDIS_POOL_SIZE", 10),
+		RedisURL:      getEnv("REDIS_URL", ""),
+		RedisPoolSize: getEnvInt("REDIS_POOL_SIZE", 0),
 
 		// Auth
-		JWTSecret:          getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production"),
-		AccessTokenExpiry:  getEnvDuration("ACCESS_TOKEN_EXPIRY", 15*time.Minute),
-		RefreshTokenExpiry: getEnvDuration("REFRESH_TOKEN_EXPIRY", 7*24*time.Hour),
+		JWTSecret:          getEnv("JWT_SECRET", ""),
+		AccessTokenExpiry:  getEnvDuration("ACCESS_TOKEN_EXPIRY", 0),
+		RefreshTokenExpiry: getEnvDuration("REFRESH_TOKEN_EXPIRY", 0),
 
 		// External services
-		BrevoAPIKey: getEnv("BREVO_API_KEY", ""),
+		BrevoAPIKey:           getEnv("BREVO_API_KEY", ""),
 		FCMServiceAccountPath: getEnv("FCM_SERVICE_ACCOUNT_PATH", ""),
-		FCMProjectID: getEnv("FCM_PROJECT_ID", ""),
-		BaseURL: getEnv("BASE_URL", "http://localhost:3000"),
+		FCMProjectID:          getEnv("FCM_PROJECT_ID", ""),
+		BaseURL:               getEnv("BASE_URL", ""),
 
 		// Server
-		Port:         getEnv("PORT", "8080"),
-		Env:          getEnv("ENV", "development"),
-		ReadTimeout:  getEnvDuration("READ_TIMEOUT", 15*time.Second),
-		WriteTimeout: getEnvDuration("WRITE_TIMEOUT", 15*time.Second),
-		IdleTimeout:  getEnvDuration("IDLE_TIMEOUT", 60*time.Second),
+		Port:         getEnv("PORT", ""),
+		Env:          getEnv("ENV", ""),
+		ReadTimeout:  getEnvDuration("READ_TIMEOUT", 0),
+		WriteTimeout: getEnvDuration("WRITE_TIMEOUT", 0),
+		IdleTimeout:  getEnvDuration("IDLE_TIMEOUT", 0),
 
 		// Rate limiting
-		RateLimitRequests: getEnvInt("RATE_LIMIT_REQUESTS", 100),
-		RateLimitWindow:   getEnvDuration("RATE_LIMIT_WINDOW", time.Minute),
+		RateLimitRequests: getEnvInt("RATE_LIMIT_REQUESTS", 0),
+		RateLimitWindow:   getEnvDuration("RATE_LIMIT_WINDOW", 0),
 
 		// Logging
-		LogLevel: getEnv("LOG_LEVEL", "info"),
+		LogLevel: getEnv("LOG_LEVEL", ""),
 		LogJSON:  getEnvBool("LOG_JSON", false),
 
 		// Paystack (Billing)
@@ -98,16 +105,11 @@ func Load() (*Config, error) {
 		PaystackWebhookURL: getEnv("PAYSTACK_WEBHOOK_URL", ""),
 
 		// Usage tracking
-		UsageSyncInterval: getEnvDuration("USAGE_SYNC_INTERVAL", 1*time.Minute),
+		UsageSyncInterval: getEnvDuration("USAGE_SYNC_INTERVAL", 0),
 	}
 
 	// Parse allowed origins
-	origins := getEnv("ALLOWED_ORIGINS", "*")
-	if origins == "*" {
-		cfg.AllowedOrigins = []string{"*"}
-	} else {
-		cfg.AllowedOrigins = splitAndTrim(origins, ",")
-	}
+	cfg.AllowedOrigins = splitAndTrim(getEnv("ALLOWED_ORIGINS", ""), ",")
 
 	// Validate required fields in production
 	if err := cfg.Validate(); err != nil {
@@ -118,18 +120,82 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) Validate() error {
+	if c.DatabaseURL == "" {
+		return errors.New("DATABASE_URL must be set")
+	}
+	if c.RedisURL == "" {
+		return errors.New("REDIS_URL must be set")
+	}
+	if c.JWTSecret == "" {
+		return errors.New("JWT_SECRET must be set")
+	}
+	if c.Port == "" {
+		return errors.New("PORT must be set")
+	}
+	if c.Env == "" {
+		return errors.New("ENV must be set")
+	}
+	if c.BaseURL == "" {
+		return errors.New("BASE_URL must be set")
+	}
+
 	if c.IsProduction() {
-		if c.JWTSecret == "" || c.JWTSecret == "development-secret-change-in-production" {
-			return errors.New("JWT_SECRET must be set in production")
-		}
 		if len(c.JWTSecret) < 32 {
 			return errors.New("JWT_SECRET must be at least 32 characters")
 		}
 	}
+	return nil
+}
 
-	// Use default in development
-	if c.JWTSecret == "" {
-		c.JWTSecret = "development-secret-change-in-production"
+func loadDotEnv() error {
+	file, err := os.Open(".env")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("open .env: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+
+		equalsIndex := strings.Index(line, "=")
+		if equalsIndex < 1 {
+			continue
+		}
+
+		key := strings.TrimSpace(line[:equalsIndex])
+		value := strings.TrimSpace(line[equalsIndex+1:])
+		if key == "" {
+			continue
+		}
+
+		if !strings.HasPrefix(value, "\"") && !strings.HasPrefix(value, "'") {
+			if commentIndex := strings.Index(value, " #"); commentIndex >= 0 {
+				value = strings.TrimSpace(value[:commentIndex])
+			} else if commentIndex := strings.Index(value, "\t#"); commentIndex >= 0 {
+				value = strings.TrimSpace(value[:commentIndex])
+			}
+		}
+
+		value = strings.Trim(value, `"'`)
+		if _, exists := os.LookupEnv(key); !exists {
+			if err := os.Setenv(key, value); err != nil {
+				return fmt.Errorf("set %s from .env: %w", key, err)
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("read .env: %w", err)
 	}
 
 	return nil
@@ -171,41 +237,12 @@ func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 
 func splitAndTrim(s, sep string) []string {
 	parts := make([]string, 0)
-	for _, p := range splitString(s, sep) {
-		if trimmed := trimSpace(p); trimmed != "" {
+	for _, p := range strings.Split(s, sep) {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
 			parts = append(parts, trimmed)
 		}
 	}
 	return parts
-}
-
-func splitString(s, sep string) []string {
-	if s == "" {
-		return nil
-	}
-	result := make([]string, 0)
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if i+len(sep) <= len(s) && s[i:i+len(sep)] == sep {
-			result = append(result, s[start:i])
-			start = i + len(sep)
-			i += len(sep) - 1
-		}
-	}
-	result = append(result, s[start:])
-	return result
-}
-
-func trimSpace(s string) string {
-	start := 0
-	end := len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t') {
-		start++
-	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t') {
-		end--
-	}
-	return s[start:end]
 }
 
 func (c *Config) IsDevelopment() bool {
@@ -215,4 +252,3 @@ func (c *Config) IsDevelopment() bool {
 func (c *Config) IsProduction() bool {
 	return c.Env == "production"
 }
-

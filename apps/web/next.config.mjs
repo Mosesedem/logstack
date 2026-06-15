@@ -1,4 +1,8 @@
+import path from "path";
+import { fileURLToPath } from "url";
 import { createMDX } from "fumadocs-mdx/next";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const withMDX = createMDX();
 
@@ -7,6 +11,8 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@logstack/shared-types"],
   output: "standalone",
+  // Required for correct standalone tracing when built from the monorepo root (Docker/EC2).
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   eslint: {
     ignoreDuringBuilds: true,
   },
