@@ -8,7 +8,6 @@ import (
 	"github.com/mosesedem/logstack/internal/api"
 	"github.com/mosesedem/logstack/internal/config"
 	redisdb "github.com/mosesedem/logstack/internal/db"
-	"github.com/mosesedem/logstack/internal/models"
 	"github.com/mosesedem/logstack/internal/services"
 	"github.com/mosesedem/logstack/internal/services/notification"
 	"github.com/mosesedem/logstack/internal/websocket"
@@ -34,8 +33,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Run migrations
-	if err := runMigrations(db); err != nil {
+	// Run migrations (creates PG enums, then AutoMigrate)
+	if err := redisdb.RunMigrations(db); err != nil {
 		slog.Error("Failed to run migrations", "error", err)
 		os.Exit(1)
 	}
@@ -121,18 +120,4 @@ func main() {
 	}
 }
 
-func runMigrations(db *gorm.DB) error {
-	// Auto migrate models
-	return db.AutoMigrate(
-		&models.User{},
-		&models.Project{},
-		&models.Subscription{},
-		&models.AlertRule{},
-		&models.AlertHistory{},
-		&models.AuditLog{},
-		&models.UsageLog{},
-		&models.Organization{},
-		&models.OrganizationMember{},
-		&models.PushToken{},
-	)
-}
+

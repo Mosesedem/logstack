@@ -42,5 +42,6 @@ func RunMigrations(db *gorm.DB) error {
 		&models.PushToken{},
 		&models.AlertHistory{},
 		&models.Subscription{},
+		&models.UsageLog{},
 	)
 }
