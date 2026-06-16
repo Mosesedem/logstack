@@ -6,7 +6,7 @@ This setup matches the **shared EC2 host** in production:
 
 - API runs in Docker via `docker-compose.host.yml` on `127.0.0.1:8082`
 - Host nginx terminates TLS for `https://api.logstack.tech`
-- Postgres (Neon) and Redis (Upstash) are external — configured in the server `.env`
+- Postgres and Redis run in Docker (same compose stack) — data persisted in named volumes
 
 ---
 
@@ -65,7 +65,7 @@ Use this to redeploy without a code change, or to retry a failed run.
 
 - EC2 instance running with Logstack API already healthy
 - Repo cloned at `/home/ubuntu/logstack` on the server
-- Server `.env` configured (Neon, Upstash `rediss://`, `JWT_SECRET`, etc.)
+- Server `.env` configured (`POSTGRES_PASSWORD`, `JWT_SECRET`, `DATABASE_URL` → `postgres:5432`, `REDIS_URL` → `redis:6379`)
 - `https://api.logstack.tech/health` returns OK
 
 See [AWS_PRODUCTION.md](./AWS_PRODUCTION.md) for the full production bootstrap.
@@ -194,8 +194,8 @@ curl http://127.0.0.1:8082/health
 
 Common causes:
 
-- Redis URL must be `rediss://` for Upstash (TLS)
-- Neon DB connection string wrong or DB unreachable
+- `POSTGRES_PASSWORD` missing from `.env` (required by compose)
+- Postgres/Redis containers not healthy — `docker compose -f docker-compose.host.yml ps`
 - API still running migrations (wait and redeploy)
 
 ### Deploy runs but site still shows old behavior

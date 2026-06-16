@@ -149,9 +149,25 @@ crontab -e
 ## 5. Start production stack
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f --tail 100 api nginx
+docker compose -f docker-compose.host.yml up -d --build
+docker compose -f docker-compose.host.yml ps
+docker compose -f docker-compose.host.yml logs -f --tail 100 api postgres redis
+```
+
+### Migrating from Neon / Upstash to Docker
+
+If you previously used external Postgres or Redis:
+
+```bash
+./scripts/migrate-to-docker-datastores.sh   # backs up Neon + rewrites .env
+docker compose -f docker-compose.host.yml up -d --build
+```
+
+Restore data into Docker Postgres (if a backup was created):
+
+```bash
+cat backups/neon-pre-docker-*.sql | docker compose -f docker-compose.host.yml exec -T postgres \
+  psql -U logstack -d logstack
 ```
 
 ### Verify
@@ -237,7 +253,7 @@ docker compose -f docker-compose.host.yml up -d --build --remove-orphans
 
 | File | When to use |
 | ---- | ----------- |
-| `docker-compose.host.yml` | **Your production** — API on `127.0.0.1:8082`, host nginx + Neon + Upstash |
+| `docker-compose.host.yml` | **Your production** — API + Postgres + Redis in Docker; host nginx on 80/443 |
 | `docker-compose.prod.yml` | Dedicated host — Docker nginx + bundled Postgres/Redis |
 | `docker-compose.api.yml` | Direct API on host port `8082` (no TLS, debugging) |
 | `docker-compose.yml` | Full stack with web frontend (not used in this setup) |

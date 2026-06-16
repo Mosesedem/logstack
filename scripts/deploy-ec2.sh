@@ -63,8 +63,8 @@ if [[ "${BACKUP_DB}" == "true" ]]; then
     stamp="$(date +%Y%m%d-%H%M%S)"
     backup_file="backup-${stamp}.sql"
     echo "Backing up database to ${backup_file}"
-    pg_container="$(docker compose -f "${COMPOSE_FILE}" ps -q postgres)"
-    docker exec "${pg_container}" pg_dump -U logstack logstack > "${backup_file}"
+    docker compose -f "${COMPOSE_FILE}" exec -T postgres \
+      pg_dump -U logstack logstack > "${backup_file}"
   else
     echo "postgres not running; skipping backup" >&2
   fi
