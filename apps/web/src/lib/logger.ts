@@ -8,15 +8,13 @@ declare const process: {
   };
 };
 
-const apiKey =
-  process.env.NEXT_PUBLIC_LOGSTACK_API_KEY ||
-  "ls_d0280576d490c39f2bfd8cd3d338dac3d653c2c3ba9099cee1031c05708cd331";
+const apiKey = process.env.NEXT_PUBLIC_LOGSTACK_API_KEY;
 
 // The SDK appends `/v1/logs` to its endpoint, while NEXT_PUBLIC_API_URL already
 // ends in `/v1` (it is the apiClient base). Strip the trailing `/v1` so the SDK
 // builds the correct ingestion URL.
 const endpoint = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/v1"
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8082/v1"
 ).replace(/\/v1\/?$/, "");
 
 // Always create a real client so console output works locally. When no API key
