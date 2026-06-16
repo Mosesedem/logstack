@@ -56,7 +56,7 @@ jobs:
 
           if [ -z "${DEPLOY_KEY:-}" ] || [ -z "${DEPLOY_HOST:-}" ] || [ -z "${DEPLOY_USER:-}" ]; then
             echo "::error::Missing DEPLOY_KEY, DEPLOY_HOST, or DEPLOY_USER repository secret." >&2
-            echo "Run scripts/setup-github-deploy.sh on the server, then add secrets — see docs/AWS_PRODUCTION.md" >&2
+            echo "Run scripts/setup-github-deploy.sh on the server, then add secrets — see docs/GITHUB_AUTO_DEPLOY.md" >&2
             exit 1
           fi
 

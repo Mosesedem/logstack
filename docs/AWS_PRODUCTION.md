@@ -190,6 +190,8 @@ curl -X POST https://api.logstack.tech/v1/logs \
 
 ### Auto-deploy from GitHub (push to `main`)
 
+See **[GITHUB_AUTO_DEPLOY.md](./GITHUB_AUTO_DEPLOY.md)** for the full guide.
+
 Workflow: `.github/workflows/deploy.yml`
 
 1. **One-time: create deploy SSH key on EC2**
