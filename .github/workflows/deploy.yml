@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "packages/logstack-go/**"
+      - "docker-compose.host.yml"
       - "docker-compose.prod.yml"
       - "docker-compose.api.yml"
       - "infra/**"
@@ -15,58 +16,36 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
+  COMPOSE_FILE: docker-compose.host.yml
+  API_DOMAIN: api.logstack.tech
 
 jobs:
-  build-and-push-api:
-    name: Build and Push API Image
+  build-api:
+    name: Verify API Docker build
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-api
-          tags: |
-            type=sha
-            type=raw,value=latest
-
-      - name: Build and push API image
+      - name: Build API image (CI gate)
         uses: docker/build-push-action@v5
         with:
           context: ./packages/logstack-go
           file: ./packages/logstack-go/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   deploy:
     name: Deploy API to EC2
-    needs: build-and-push-api
+    needs: build-api
     runs-on: ubuntu-latest
     environment: production
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to server
+      - name: Deploy via SSH
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -76,7 +55,8 @@ jobs:
           set -euo pipefail
 
           if [ -z "${DEPLOY_KEY:-}" ] || [ -z "${DEPLOY_HOST:-}" ] || [ -z "${DEPLOY_USER:-}" ]; then
-            echo "Missing DEPLOY_KEY, DEPLOY_HOST, or DEPLOY_USER secret" >&2
+            echo "::error::Missing DEPLOY_KEY, DEPLOY_HOST, or DEPLOY_USER repository secret." >&2
+            echo "Run scripts/setup-github-deploy.sh on the server, then add secrets — see docs/AWS_PRODUCTION.md" >&2
             exit 1
           fi
 
@@ -86,18 +66,39 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
-            "DEPLOY_PATH=$DEPLOY_PATH COMPOSE_FILE=docker-compose.prod.yml API_DOMAIN=api.logstack.tech bash -s" <<'EOF'
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' COMPOSE_FILE='$COMPOSE_FILE' API_DOMAIN='$API_DOMAIN' bash -s" <<'EOF'
           set -euo pipefail
           cd "$DEPLOY_PATH"
+
+          if [ ! -f .env ]; then
+            echo "Missing .env on server" >&2
+            exit 1
+          fi
+
           git fetch --all --prune
           git checkout main
           git pull --ff-only origin main
-          docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
-          docker compose -f docker-compose.prod.yml ps
-          curl -fsS --max-time 15 https://api.logstack.tech/health || echo "HTTPS health check skipped or failed"
+
+          docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans
+          docker compose -f "$COMPOSE_FILE" ps
+
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 3 "http://127.0.0.1:8082/health" >/dev/null 2>&1; then
+              echo "Local health OK"
+              break
+            fi
+            sleep 2
+          done
+
+          curl -fsS --max-time 15 "https://${API_DOMAIN}/health"
+          echo ""
+          curl -fsS --max-time 15 "https://${API_DOMAIN}/ready"
+          echo ""
+          echo "Deploy finished at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           EOF
 
           rm -f ~/.ssh/deploy_key

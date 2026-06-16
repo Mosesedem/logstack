@@ -188,25 +188,45 @@ curl -X POST https://api.logstack.tech/v1/logs \
 ./scripts/deploy-ec2.sh --backup-db
 ```
 
-### From GitHub Actions
+### Auto-deploy from GitHub (push to `main`)
 
-Set repository secrets:
+Workflow: `.github/workflows/deploy.yml`
 
-| Secret | Example |
-| ------ | ------- |
-| `DEPLOY_KEY` | Private SSH key (PEM) |
-| `DEPLOY_HOST` | Elastic IP or hostname |
+1. **One-time: create deploy SSH key on EC2**
+
+```bash
+ssh ubuntu@18.225.219.208
+cd ~/logstack
+./scripts/setup-github-deploy.sh
+```
+
+Copy the printed **private key** into GitHub.
+
+2. **Add repository secrets** (Settings → Secrets and variables → Actions)
+
+| Secret | Value |
+| ------ | ----- |
+| `DEPLOY_KEY` | Full private key from setup script |
+| `DEPLOY_HOST` | `18.225.219.208` |
 | `DEPLOY_USER` | `ubuntu` |
 | `DEPLOY_PATH` | `/home/ubuntu/logstack` |
 
-Push to `main` (changes under `packages/logstack-go/`) triggers build + deploy.
+3. **Optional:** create a `production` environment (Settings → Environments) for deploy approval gates.
+
+4. **Trigger:** push to `main` when files change under `packages/logstack-go/`, compose files, `infra/`, or the workflow itself. Or run **Deploy API** manually from the Actions tab.
+
+**What the workflow does:**
+
+1. Builds the API Docker image in CI (fails fast if broken).
+2. SSHs to EC2 → `git pull` → `docker compose -f docker-compose.host.yml up -d --build`.
+3. Verifies `https://api.logstack.tech/health` and `/ready`.
 
 ### Manual on server
 
 ```bash
 cd ~/logstack
 git pull --ff-only origin main
-docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+docker compose -f docker-compose.host.yml up -d --build --remove-orphans
 ```
 
 ---
@@ -215,7 +235,8 @@ docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
 
 | File | When to use |
 | ---- | ----------- |
-| `docker-compose.prod.yml` | **Production** — nginx + TLS + API (ports 80/443 only) |
+| `docker-compose.host.yml` | **Your production** — API on `127.0.0.1:8082`, host nginx + Neon + Upstash |
+| `docker-compose.prod.yml` | Dedicated host — Docker nginx + bundled Postgres/Redis |
 | `docker-compose.api.yml` | Direct API on host port `8082` (no TLS, debugging) |
 | `docker-compose.yml` | Full stack with web frontend (not used in this setup) |
 
