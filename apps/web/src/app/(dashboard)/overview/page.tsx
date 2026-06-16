@@ -46,9 +46,7 @@ export default function OverviewPage() {
         api.get<{ logs: { level: string }[]; total: number }>(
           `/projects/${projectId}/logs?limit=1&offset=0`,
         ),
-        api.get<{ alerts: { enabled: boolean }[] }>(
-          `/alerts?projectId=${projectId}`,
-        ),
+        api.get<{ enabled: boolean }[]>(`/alerts?projectId=${projectId}`),
       ]);
 
       const totalLogsToday =
@@ -59,7 +57,7 @@ export default function OverviewPage() {
           : 0;
       const activeAlerts =
         alertsResult.status === "fulfilled"
-          ? alertsResult.value.alerts.filter((a) => a.enabled).length
+          ? alertsResult.value.filter((a) => a.enabled).length
           : 0;
 
       setStats({

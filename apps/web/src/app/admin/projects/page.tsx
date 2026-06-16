@@ -83,7 +83,11 @@ export default function ProjectsPage() {
                     )}
                   </td>
                   <td className="p-4 align-middle">
-                    {new Date(project.createdAt).toLocaleDateString()}
+                    {new Date(project.createdAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
                   </td>
                 </tr>
               ))}

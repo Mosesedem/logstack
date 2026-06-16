@@ -27,14 +27,32 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     enabled: !!session,
   })
 
-  // Set first project as current if none selected
+  // Keep current project in sync with the authenticated user's project list.
+  // A stale localStorage id (from another account) causes 403s on logs + WS.
   useEffect(() => {
-    if (projects.length > 0 && !currentProject) {
-      const savedProjectId = localStorage.getItem('currentProjectId')
-      const savedProject = projects.find((p) => p.id === savedProjectId)
-      setCurrentProjectState(savedProject || projects[0])
+    if (!session) {
+      setCurrentProjectState(null)
+      localStorage.removeItem('currentProjectId')
+      return
     }
-  }, [projects, currentProject])
+    if (isLoading) return
+
+    if (projects.length === 0) {
+      if (currentProject) setCurrentProjectState(null)
+      localStorage.removeItem('currentProjectId')
+      return
+    }
+
+    const isCurrentValid =
+      currentProject && projects.some((p) => p.id === currentProject.id)
+    if (isCurrentValid) return
+
+    const savedProjectId = localStorage.getItem('currentProjectId')
+    const savedProject = projects.find((p) => p.id === savedProjectId)
+    const next = savedProject ?? projects[0]
+    setCurrentProjectState(next)
+    localStorage.setItem('currentProjectId', next.id)
+  }, [projects, currentProject, session, isLoading])
 
   const setCurrentProject = useCallback((project: Project) => {
     setCurrentProjectState(project)

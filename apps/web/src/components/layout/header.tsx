@@ -75,7 +75,10 @@ export function Header() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => signOut()}
+          onClick={() => {
+            localStorage.removeItem("currentProjectId");
+            signOut({ callbackUrl: "/login" });
+          }}
           className="text-muted-foreground hover:text-foreground hover:bg-accent/10"
         >
           <LogOut className="h-4 w-4" />

@@ -82,7 +82,11 @@ export default function UsersPage() {
                     </Badge>
                   </td>
                   <td className="p-4 align-middle [&:has([role=checkbox])]:pr-0">
-                    {new Date(user.createdAt).toLocaleDateString()}
+                    {new Date(user.createdAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
                   </td>
                 </tr>
               ))}

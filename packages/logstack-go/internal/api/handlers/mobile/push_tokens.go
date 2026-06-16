@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -105,8 +106,15 @@ func (h *MobileHandler) Stream(c *gin.Context) {
 		return
 	}
 
-	// Upgrade to WebSocket
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	// Echo Sec-WebSocket-Protocol when clients pass the JWT as a subprotocol.
+	responseHeader := http.Header{}
+	if proto := c.GetHeader("Sec-WebSocket-Protocol"); proto != "" {
+		if selected := strings.TrimSpace(strings.SplitN(proto, ",", 2)[0]); selected != "" {
+			responseHeader.Set("Sec-WebSocket-Protocol", selected)
+		}
+	}
+
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, responseHeader)
 	if err != nil {
 		return
 	}

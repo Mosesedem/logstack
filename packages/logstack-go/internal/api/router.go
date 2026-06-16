@@ -102,6 +102,10 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 			mobilehandlers.NewMobileHandler(cfg.DB, cfg.Hub).Stream,
 		)
 
+		// Public pricing (landing page + marketing)
+		billingHandler := handlers.NewBillingHandler(cfg.BillingService, cfg.UsageSyncWorker)
+		v1.GET("/billing/pricing", billingHandler.GetPricing)
+
 		// Dashboard routes (JWT auth)
 		protected := v1.Group("")
 		protected.Use(middleware.JWTAuth(cfg.AuthService))
@@ -152,8 +156,6 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 			// Billing
 			billing := protected.Group("/billing")
 			{
-				billingHandler := handlers.NewBillingHandler(cfg.BillingService, cfg.UsageSyncWorker)
-				billing.GET("/pricing", billingHandler.GetPricing)
 				billing.GET("/subscription", billingHandler.GetSubscription)
 				billing.GET("/usage", billingHandler.GetUsage)
 				billing.POST("/initialize", billingHandler.InitializePayment)

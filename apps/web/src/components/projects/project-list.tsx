@@ -68,7 +68,12 @@ export function ProjectList({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Created {new Date(project.createdAt).toLocaleDateString()}
+                Created{" "}
+                {new Date(project.createdAt).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
               </p>
             </div>
           </CardContent>

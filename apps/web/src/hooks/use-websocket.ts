@@ -28,9 +28,14 @@ export function useWebSocket({ projectId, enabled = true }: UseWebSocketOptions)
   const connect = useCallback(() => {
     if (!projectId || !session?.accessToken || !enabled) return
 
-    const ws = new WebSocket(`${WS_URL}/stream?projectId=${projectId}`, [
-      session.accessToken,
-    ])
+    // Pass JWT via query param — browsers cannot set Authorization on WS, and
+    // using the token as a subprotocol requires the server to echo it back in
+    // the upgrade response (fragile with long JWTs).
+    const params = new URLSearchParams({
+      projectId,
+      token: session.accessToken,
+    })
+    const ws = new WebSocket(`${WS_URL}/stream?${params.toString()}`)
 
     ws.onopen = () => {
       setIsConnected(true)
@@ -46,13 +51,19 @@ export function useWebSocket({ projectId, enabled = true }: UseWebSocketOptions)
       }
     }
 
-    ws.onerror = (event) => {
-      console.error('WebSocket error:', event)
+    ws.onerror = () => {
       setError(new Error('WebSocket connection error'))
     }
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       setIsConnected(false)
+      if (event.code !== 1000) {
+        setError(
+          new Error(
+            `WebSocket closed (${event.code}${event.reason ? `: ${event.reason}` : ''})`,
+          ),
+        )
+      }
       // Reconnect after 3 seconds
       reconnectTimeoutRef.current = setTimeout(() => {
         connect()

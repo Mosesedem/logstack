@@ -8,7 +8,9 @@ declare const process: {
   };
 };
 
-const apiKey = process.env.NEXT_PUBLIC_LOGSTACK_API_KEY;
+const apiKey =
+  process.env.NEXT_PUBLIC_LOGSTACK_API_KEY ||
+  "ls_d0280576d490c39f2bfd8cd3d338dac3d653c2c3ba9099cee1031c05708cd331";
 
 // The SDK appends `/v1/logs` to its endpoint, while NEXT_PUBLIC_API_URL already
 // ends in `/v1` (it is the apiClient base). Strip the trailing `/v1` so the SDK
