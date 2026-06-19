@@ -26,6 +26,13 @@
 | Rebuild SDK `dist/`                                                                   | ✅     | tsup build + vitest pass                                                                                                                                                      |
 | Verified                                                                              | ✅     | SDK build+test, Go build/vet/test, web type-check, Node console smoke test all pass. Full stack e2e (dev project→log→dashboard) recommended as manual check once stack is up. |
 
+## Phase 1.1 — Browser CORS compatibility
+
+| Item                                   | Status | Notes                                                                                  |
+| -------------------------------------- | ------ | -------------------------------------------------------------------------------------- |
+| Backend CORS wildcard with credentials | ✅     | `Access-Control-Allow-Origin` now reflects the request origin when `ALLOWED_ORIGINS=*` |
+| CORS regression test                   | ✅     | Added middleware coverage for explicit, wildcard, disallowed, and preflight requests   |
+
 ## Phase 2 — Dashboard → project journey
 
 | Item                                                                | Status | Notes                                                                                                                                                              |
@@ -78,6 +85,7 @@
 | 2026-06-13 | Phase 3: fixed ingest-path/status bugs in Go+Python SDKs; Go lock-over-IO fix; LICENSE×4; JS metadata; Python pyproject+v1.0.0; Go module path; self-contained READMEs. Publish pending credentials.                                         |
 | 2026-06-15 | Added focused AWS EC2 Docker deploy doc for updating an already-running instance; linked it from docs index.                                                                                                                                 |
 | 2026-06-15 | Backend config now loads `.env` on startup and reads env-driven values instead of hardcoded fallback literals; CORS no longer panics on empty origins.                                                                                       |
+| 2026-06-19 | Fixed browser CORS wildcard handling in backend middleware so credentialed requests no longer emit invalid `*` origin headers; added focused middleware tests.                                                                               |
 
 ---
 
