@@ -75,20 +75,20 @@ packages/logstack-go/
 
 ### Optional Variables
 
-| Variable                   | Description                            | Default               |
-| -------------------------- | -------------------------------------- | --------------------- |
-| `BREVO_API_KEY`            | Email service API key                  | -                     |
-| `FCM_SERVICE_ACCOUNT_PATH` | Path to FCM credentials JSON           | -                     |
-| `FCM_PROJECT_ID`           | Firebase project ID                    | -                     |
-| `PAYSTACK_SECRET_KEY`      | Paystack secret key                    | -                     |
-| `PAYSTACK_PUBLIC_KEY`      | Paystack public key                    | -                     |
-| `BASE_URL`                 | Frontend application URL               | http://localhost:3000 |
-| `ALLOWED_ORIGINS`          | CORS allowed origins (comma-separated) | \*                    |
-| `ACCESS_TOKEN_EXPIRY`      | JWT access token duration              | 15m                   |
-| `REFRESH_TOKEN_EXPIRY`     | JWT refresh token duration             | 7d                    |
-| `RATE_LIMIT_REQUESTS`      | Rate limit per window                  | 100                   |
-| `RATE_LIMIT_WINDOW`        | Rate limit window duration             | 1m                    |
-| `USAGE_SYNC_INTERVAL`      | Usage sync frequency                   | 1m                    |
+| Variable                   | Description                            | Default                                         |
+| -------------------------- | -------------------------------------- | ----------------------------------------------- |
+| `BREVO_API_KEY`            | Email service API key                  | -                                               |
+| `FCM_SERVICE_ACCOUNT_PATH` | Path to FCM credentials JSON           | -                                               |
+| `FCM_PROJECT_ID`           | Firebase project ID                    | -                                               |
+| `PAYSTACK_SECRET_KEY`      | Paystack secret key                    | -                                               |
+| `PAYSTACK_PUBLIC_KEY`      | Paystack public key                    | -                                               |
+| `BASE_URL`                 | Frontend application URL               | http://localhost:3000                           |
+| `ALLOWED_ORIGINS`          | CORS allowed origins (comma-separated) | https://logstack.tech,https://www.logstack.tech |
+| `ACCESS_TOKEN_EXPIRY`      | JWT access token duration              | 15m                                             |
+| `REFRESH_TOKEN_EXPIRY`     | JWT refresh token duration             | 7d                                              |
+| `RATE_LIMIT_REQUESTS`      | Rate limit per window                  | 100                                             |
+| `RATE_LIMIT_WINDOW`        | Rate limit window duration             | 1m                                              |
+| `USAGE_SYNC_INTERVAL`      | Usage sync frequency                   | 1m                                              |
 
 ### Configuration Loading
 
