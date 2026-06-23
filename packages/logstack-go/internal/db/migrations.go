@@ -15,7 +15,8 @@ type sqlMigration struct {
 }
 
 // sqlMigrations holds every numbered migration in order.
-// Add new migrations here; they will be applied once and tracked in schema_migrations.
+// These run before AutoMigrate so data can be backfilled before NOT NULL constraints
+// are enforced by the ORM.
 var sqlMigrations = []sqlMigration{
 	{
 		Version: "015_alter_alert_rules_trigger_patterns",
@@ -32,7 +33,6 @@ UPDATE alert_rules
 		Version: "016_alter_projects_add_archived_at",
 		Up: `
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived_at timestamptz;
-
 CREATE INDEX IF NOT EXISTS idx_projects_archived_at ON projects(archived_at);
 `,
 	},
@@ -49,26 +49,8 @@ CREATE TABLE IF NOT EXISTS invites (
     expires_at      timestamptz  NOT NULL,
     created_at      timestamptz  NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);
 CREATE INDEX IF NOT EXISTS idx_invites_org_id ON invites(organization_id);
-`,
-	},
-	{
-		Version: "019_alert_rules_fix_jsonb_not_null",
-		Up: `
--- Backfill any rows where trigger_patterns or channels are still NULL
-UPDATE alert_rules SET trigger_patterns = '[]'::jsonb WHERE trigger_patterns IS NULL;
-UPDATE alert_rules SET channels = '[]'::jsonb WHERE channels IS NULL;
-
--- Now safe to set NOT NULL and DEFAULT
-ALTER TABLE alert_rules
-  ALTER COLUMN trigger_patterns SET DEFAULT '[]'::jsonb,
-  ALTER COLUMN trigger_patterns SET NOT NULL;
-
-ALTER TABLE alert_rules
-  ALTER COLUMN channels SET DEFAULT '[]'::jsonb,
-  ALTER COLUMN channels SET NOT NULL;
 `,
 	},
 	{
@@ -86,9 +68,27 @@ CREATE TABLE IF NOT EXISTS invoices (
     created_at   timestamptz  NOT NULL DEFAULT NOW(),
     updated_at   timestamptz  NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_reference ON invoices(reference);
+`,
+	},
+	{
+		Version: "019_alert_rules_add_channels_jsonb",
+		Up: `
+-- Add channels column (may not exist if instance was set up without migration 015 adding it)
+ALTER TABLE alert_rules
+  ADD COLUMN IF NOT EXISTS channels jsonb DEFAULT '[]'::jsonb;
+
+-- Backfill NULLs in both jsonb columns
+UPDATE alert_rules SET trigger_patterns = '[]'::jsonb WHERE trigger_patterns IS NULL;
+UPDATE alert_rules SET channels = '[]'::jsonb WHERE channels IS NULL;
+
+-- Set NOT NULL + default on both columns
+ALTER TABLE alert_rules
+  ALTER COLUMN trigger_patterns SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN trigger_patterns SET NOT NULL,
+  ALTER COLUMN channels SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN channels SET NOT NULL;
 `,
 	},
 }
@@ -104,14 +104,12 @@ func ensureEnumType(db *gorm.DB, name, values string) error {
 	if exists {
 		return nil
 	}
-	// Plain CREATE TYPE (Neon/serverless PG rejects CREATE TYPE inside DO blocks).
 	if err := db.Exec(fmt.Sprintf("CREATE TYPE %s AS ENUM (%s)", name, values)).Error; err != nil {
 		return fmt.Errorf("create enum %s: %w", name, err)
 	}
 	return nil
 }
 
-// ensureMigrationsTable creates the schema_migrations tracking table if it does not exist.
 func ensureMigrationsTable(db *gorm.DB) error {
 	return db.Exec(`
 		CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -121,7 +119,6 @@ func ensureMigrationsTable(db *gorm.DB) error {
 	`).Error
 }
 
-// appliedVersions returns the set of migration versions already recorded in schema_migrations.
 func appliedVersions(db *gorm.DB) (map[string]bool, error) {
 	var versions []string
 	if err := db.Raw("SELECT version FROM schema_migrations").Scan(&versions).Error; err != nil {
@@ -134,34 +131,28 @@ func appliedVersions(db *gorm.DB) (map[string]bool, error) {
 	return set, nil
 }
 
-// runSQLMigrations applies any pending numbered migrations in order.
 func runSQLMigrations(db *gorm.DB) error {
 	if err := ensureMigrationsTable(db); err != nil {
 		return fmt.Errorf("ensure migrations table: %w", err)
 	}
-
 	applied, err := appliedVersions(db)
 	if err != nil {
 		return err
 	}
-
 	for _, m := range sqlMigrations {
 		if applied[m.Version] {
 			continue
 		}
-
 		slog.Info("Applying SQL migration", "version", m.Version)
 		if err := db.Exec(m.Up).Error; err != nil {
 			return fmt.Errorf("apply migration %s: %w", m.Version, err)
 		}
-
 		if err := db.Exec(
 			"INSERT INTO schema_migrations (version) VALUES (?)", m.Version,
 		).Error; err != nil {
 			return fmt.Errorf("record migration %s: %w", m.Version, err)
 		}
 	}
-
 	return nil
 }
 
@@ -173,14 +164,13 @@ func RunMigrations(db *gorm.DB) error {
 		return err
 	}
 
-	// Run numbered SQL migrations first (adds/alters columns, backfills data).
-	// This must run before AutoMigrate so that NOT NULL constraints are only set
-	// after existing rows have been backfilled.
+	// SQL migrations run FIRST: they add columns and backfill data before AutoMigrate
+	// tries to enforce NOT NULL constraints on those columns.
 	if err := runSQLMigrations(db); err != nil {
 		return err
 	}
 
-	// AutoMigrate creates any missing tables/columns based on current model structs.
+	// AutoMigrate creates missing tables/columns for all models.
 	return db.AutoMigrate(
 		&models.User{},
 		&models.Organization{},
