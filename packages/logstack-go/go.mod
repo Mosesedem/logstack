@@ -10,11 +10,12 @@ require (
 	github.com/gorilla/websocket v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.4.0
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	golang.org/x/crypto v0.53.0
 	google.golang.org/api v0.231.0
-	gorm.io/datatypes v1.2.7
-	gorm.io/driver/postgres v1.5.4
-	gorm.io/gorm v1.30.0
+	gorm.io/datatypes v1.2.4
+	gorm.io/driver/postgres v1.5.11
+	gorm.io/gorm v1.25.12
 )
 
 require (
@@ -72,7 +73,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.1.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
