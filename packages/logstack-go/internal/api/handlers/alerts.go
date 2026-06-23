@@ -7,9 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"github.com/mosesedem/logstack/internal/models"
 	"github.com/mosesedem/logstack/internal/services"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -123,10 +123,10 @@ func (h *AlertsHandler) Create(c *gin.Context) {
 
 	// Set multi-value fields from request
 	if len(req.TriggerPatterns) > 0 {
-		rule.TriggerPatterns = pq.StringArray(req.TriggerPatterns)
+		rule.TriggerPatterns = datatypes.JSONSlice[string](req.TriggerPatterns)
 	}
 	if len(req.Channels) > 0 {
-		rule.Channels = pq.StringArray(req.Channels)
+		rule.Channels = datatypes.JSONSlice[string](req.Channels)
 	}
 
 	if err := h.alertEngine.CreateRule(c.Request.Context(), &rule); err != nil {
@@ -241,10 +241,10 @@ func (h *AlertsHandler) Update(c *gin.Context) {
 		rule.Enabled = *req.Enabled
 	}
 	if len(req.TriggerPatterns) > 0 {
-		rule.TriggerPatterns = pq.StringArray(req.TriggerPatterns)
+		rule.TriggerPatterns = datatypes.JSONSlice[string](req.TriggerPatterns)
 	}
 	if len(req.Channels) > 0 {
-		rule.Channels = pq.StringArray(req.Channels)
+		rule.Channels = datatypes.JSONSlice[string](req.Channels)
 	}
 
 	if err := h.alertEngine.UpdateRule(c.Request.Context(), rule); err != nil {
@@ -256,7 +256,6 @@ func (h *AlertsHandler) Update(c *gin.Context) {
 		return
 	}
 
-	slog.Info("Alert rule updated", "ruleId", rule.ID)
 	slog.Info("Alert rule updated", "ruleId", rule.ID)
 	c.JSON(http.StatusOK, rule)
 }

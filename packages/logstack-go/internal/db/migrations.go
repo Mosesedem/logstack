@@ -55,6 +55,23 @@ CREATE INDEX IF NOT EXISTS idx_invites_org_id ON invites(organization_id);
 `,
 	},
 	{
+		Version: "019_alert_rules_fix_jsonb_not_null",
+		Up: `
+-- Backfill any rows where trigger_patterns or channels are still NULL
+UPDATE alert_rules SET trigger_patterns = '[]'::jsonb WHERE trigger_patterns IS NULL;
+UPDATE alert_rules SET channels = '[]'::jsonb WHERE channels IS NULL;
+
+-- Now safe to set NOT NULL and DEFAULT
+ALTER TABLE alert_rules
+  ALTER COLUMN trigger_patterns SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN trigger_patterns SET NOT NULL;
+
+ALTER TABLE alert_rules
+  ALTER COLUMN channels SET DEFAULT '[]'::jsonb,
+  ALTER COLUMN channels SET NOT NULL;
+`,
+	},
+	{
 		Version: "018_create_invoices",
 		Up: `
 CREATE TABLE IF NOT EXISTS invoices (
@@ -156,8 +173,15 @@ func RunMigrations(db *gorm.DB) error {
 		return err
 	}
 
-	// Run AutoMigrate for base model tables.
-	if err := db.AutoMigrate(
+	// Run numbered SQL migrations first (adds/alters columns, backfills data).
+	// This must run before AutoMigrate so that NOT NULL constraints are only set
+	// after existing rows have been backfilled.
+	if err := runSQLMigrations(db); err != nil {
+		return err
+	}
+
+	// AutoMigrate creates any missing tables/columns based on current model structs.
+	return db.AutoMigrate(
 		&models.User{},
 		&models.Organization{},
 		&models.OrganizationMember{},
@@ -169,10 +193,5 @@ func RunMigrations(db *gorm.DB) error {
 		&models.AlertHistory{},
 		&models.Subscription{},
 		&models.UsageLog{},
-	); err != nil {
-		return err
-	}
-
-	// Run numbered SQL migrations (015–018) in order.
-	return runSQLMigrations(db)
+	)
 }

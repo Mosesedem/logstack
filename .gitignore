@@ -29,9 +29,9 @@ build/
 Thumbs.db
 
 # Logs
-*.log
-logs/
-!apps/web/src/components/logs/
+# *.log
+# logs/
+# !apps/web/src/components/logs/
 
 # Testing
 coverage/

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
+	"gorm.io/datatypes"
 )
 
 type AlertChannel string
@@ -16,19 +16,19 @@ const (
 )
 
 type AlertRule struct {
-	ID              uint           `gorm:"primaryKey" json:"id"`
-	ProjectID       uuid.UUID      `gorm:"type:uuid;index;not null" json:"projectId"`
-	Name            string         `gorm:"size:100;not null" json:"name"`
-	TriggerPattern  string         `gorm:"size:500" json:"triggerPattern,omitempty"`  // kept for DB compatibility
-	TriggerPatterns pq.StringArray `gorm:"type:jsonb" json:"triggerPatterns"`
-	TriggerLevel    LogLevel       `gorm:"size:10" json:"triggerLevel,omitempty"`
-	Channel         AlertChannel   `gorm:"size:20" json:"channel,omitempty"` // kept for DB compatibility
-	Channels        pq.StringArray `gorm:"type:jsonb" json:"channels"`
-	Recipient       string         `gorm:"type:text;not null" json:"recipient"`
-	CooldownMinutes int            `gorm:"default:15" json:"cooldownMinutes"`
-	Enabled         bool           `gorm:"default:true" json:"enabled"`
-	CreatedAt       time.Time      `json:"createdAt"`
-	UpdatedAt       time.Time      `json:"updatedAt"`
+	ID              uint                      `gorm:"primaryKey" json:"id"`
+	ProjectID       uuid.UUID                 `gorm:"type:uuid;index;not null" json:"projectId"`
+	Name            string                    `gorm:"size:100;not null" json:"name"`
+	TriggerPattern  string                    `gorm:"size:500" json:"triggerPattern,omitempty"` // kept for DB compatibility
+	TriggerPatterns datatypes.JSONSlice[string] `gorm:"type:jsonb" json:"triggerPatterns"`
+	TriggerLevel    LogLevel                  `gorm:"size:10" json:"triggerLevel,omitempty"`
+	Channel         AlertChannel              `gorm:"size:20" json:"channel,omitempty"` // kept for DB compatibility
+	Channels        datatypes.JSONSlice[string] `gorm:"type:jsonb" json:"channels"`
+	Recipient       string                    `gorm:"type:text;not null" json:"recipient"`
+	CooldownMinutes int                       `gorm:"default:15" json:"cooldownMinutes"`
+	Enabled         bool                      `gorm:"default:true" json:"enabled"`
+	CreatedAt       time.Time                 `json:"createdAt"`
+	UpdatedAt       time.Time                 `json:"updatedAt"`
 
 	// Relations
 	Project      Project        `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
