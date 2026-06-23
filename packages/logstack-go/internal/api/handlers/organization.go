@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -56,8 +57,20 @@ func (h *OrganizationHandler) GetMyOrganization(c *gin.Context) {
 
 	org, err := h.orgService.GetUserOrganization(c.Request.Context(), uid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get organization"})
-		return
+		if errors.Is(err, services.ErrOrganizationNotFound) {
+			// First time this user visits the team page — auto-create a personal org
+			newOrg, createErr := h.orgService.CreatePersonalOrganization(c.Request.Context(), uid)
+			if createErr != nil {
+				slog.Error("Failed to auto-create organization", "userID", uid, "error", createErr)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create organization"})
+				return
+			}
+			org = newOrg
+		} else {
+			slog.Error("Failed to get user organization", "userID", uid, "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get organization"})
+			return
+		}
 	}
 
 	role, err := h.orgService.GetMemberRole(c.Request.Context(), org.ID, uid)

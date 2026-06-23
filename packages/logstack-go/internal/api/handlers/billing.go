@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mosesedem/logstack/internal/models"
@@ -139,7 +140,21 @@ func (h *BillingHandler) InitializePayment(c *gin.Context) {
 
 	resp, err := h.billingService.InitializePayment(c.Request.Context(), userID.(uint), paymentReq)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		errMsg := err.Error()
+		// Paystack returns "Invalid key" when credentials are placeholder/invalid.
+		// Also catches "No API key supplied" for missing keys.
+		// Surface as 503 so the frontend shows a helpful "not configured" message.
+		if strings.Contains(errMsg, "Invalid key") ||
+			strings.Contains(errMsg, "invalid key") ||
+			strings.Contains(errMsg, "No API key") ||
+			strings.Contains(errMsg, "Authorization") {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "Payment processing is not configured. Please contact support to set up billing.",
+				"code":  "BILLING_NOT_CONFIGURED",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
 	}
 

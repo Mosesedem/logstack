@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"strings"
@@ -47,6 +48,54 @@ func (s *OrganizationService) GetUserOrganization(ctx context.Context, userID ui
 	}
 
 	return &membership.Organization, nil
+}
+
+// CreatePersonalOrganization creates a default personal organization for a user who has none.
+// This is called automatically on first access to the team/org endpoints.
+func (s *OrganizationService) CreatePersonalOrganization(ctx context.Context, userID uint) (*models.Organization, error) {
+	// Fetch the user's name for the org name
+	var user models.User
+	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	orgName := user.Name + "'s Organization"
+	if orgName == "'s Organization" {
+		orgName = user.Email + "'s Organization"
+	}
+
+	// Generate a unique slug from email
+	slug := strings.ToLower(strings.ReplaceAll(user.Email, "@", "-"))
+	slug = strings.ReplaceAll(slug, ".", "-")
+	slug = slug[:min(len(slug), 50)]
+
+	// Ensure slug uniqueness by appending a random suffix if needed
+	var existing models.Organization
+	if err := s.db.WithContext(ctx).Where("slug = ?", slug).First(&existing).Error; err == nil {
+		b := make([]byte, 4)
+		rand.Read(b)
+		slug = slug + "-" + fmt.Sprintf("%x", b)
+	}
+
+	org := models.Organization{
+		Name: orgName,
+		Slug: slug,
+	}
+	if err := s.db.WithContext(ctx).Create(&org).Error; err != nil {
+		return nil, fmt.Errorf("failed to create organization: %w", err)
+	}
+
+	// Add the user as owner
+	membership := models.OrganizationMember{
+		OrganizationID: org.ID,
+		UserID:         userID,
+		Role:           "owner",
+	}
+	if err := s.db.WithContext(ctx).Create(&membership).Error; err != nil {
+		return nil, fmt.Errorf("failed to create membership: %w", err)
+	}
+
+	return &org, nil
 }
 
 // GetOrganizationMembers returns all members of an organization

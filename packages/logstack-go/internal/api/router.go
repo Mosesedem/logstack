@@ -60,9 +60,10 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 	// API v1
 	v1 := r.Group("/v1")
 	{
-		// Auth routes (public with stricter rate limiting)
+		// Auth routes — public, with a generous rate limit for programmatic clients
+		// (NextAuth calls /refresh and /oauth automatically; 10/min was too tight).
 		auth := v1.Group("/auth")
-		authLimiter := middleware.NewRateLimiter(cfg.Redis, 10, time.Minute)
+		authLimiter := middleware.NewRateLimiter(cfg.Redis, 60, time.Minute)
 		auth.Use(authLimiter.Limit())
 		var authEmailNotifier *notification.EmailNotifier
 		if cfg.NotificationService != nil {

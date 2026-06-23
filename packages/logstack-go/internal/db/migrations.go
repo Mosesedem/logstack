@@ -171,17 +171,38 @@ func RunMigrations(db *gorm.DB) error {
 	}
 
 	// AutoMigrate creates missing tables/columns for all models.
-	return db.AutoMigrate(
-		&models.User{},
-		&models.Organization{},
-		&models.OrganizationMember{},
-		&models.AuditLog{},
-		&models.Project{},
-		&models.Log{},
-		&models.AlertRule{},
-		&models.PushToken{},
-		&models.AlertHistory{},
-		&models.Subscription{},
-		&models.UsageLog{},
-	)
+	// We guard this with a version key so it only runs when the schema version changes,
+	// not on every startup (which would hammer a remote DB with 100+ inspection queries).
+	const autoMigrateVersion = "automigrate_v2"
+	applied, err := appliedVersions(db)
+	if err != nil {
+		return err
+	}
+	if !applied[autoMigrateVersion] {
+		slog.Info("Running AutoMigrate (first time or schema version changed)")
+		if err := db.AutoMigrate(
+			&models.User{},
+			&models.Organization{},
+			&models.OrganizationMember{},
+			&models.AuditLog{},
+			&models.Project{},
+			&models.Log{},
+			&models.AlertRule{},
+			&models.PushToken{},
+			&models.AlertHistory{},
+			&models.Subscription{},
+			&models.UsageLog{},
+		); err != nil {
+			return err
+		}
+		if err := db.Exec(
+			"INSERT INTO schema_migrations (version) VALUES (?) ON CONFLICT DO NOTHING",
+			autoMigrateVersion,
+		).Error; err != nil {
+			return fmt.Errorf("record automigrate version: %w", err)
+		}
+		slog.Info("AutoMigrate completed")
+	}
+
+	return nil
 }
