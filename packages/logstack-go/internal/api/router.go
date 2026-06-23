@@ -46,15 +46,16 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 	r.Use(middleware.CORS(cfg.Config.AllowedOrigins))
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger())
-	
-	// Global rate limiter
-	globalLimiter := middleware.NewRateLimiter(cfg.Redis, cfg.Config.RateLimitRequests, cfg.Config.RateLimitWindow)
-	r.Use(globalLimiter.Limit())
 
-	// Health check (no auth required)
+	// Health check routes — registered BEFORE the global rate limiter
+	// so Docker/nginx health probes are never rate-limited.
 	r.GET("/health", handlers.Health(cfg.DB, cfg.Redis))
 	r.GET("/ready", handlers.Ready(cfg.DB, cfg.Redis))
 	r.GET("/test", handlers.Test())
+
+	// Global rate limiter (applied after health routes)
+	globalLimiter := middleware.NewRateLimiter(cfg.Redis, cfg.Config.RateLimitRequests, cfg.Config.RateLimitWindow)
+	r.Use(globalLimiter.Limit())
 
 	// API v1
 	v1 := r.Group("/v1")
