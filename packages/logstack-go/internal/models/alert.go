@@ -20,10 +20,10 @@ type AlertRule struct {
 	ProjectID       uuid.UUID      `gorm:"type:uuid;index;not null" json:"projectId"`
 	Name            string         `gorm:"size:100;not null" json:"name"`
 	TriggerPattern  string         `gorm:"size:500" json:"triggerPattern,omitempty"`  // kept for DB compatibility
-	TriggerPatterns pq.StringArray `gorm:"type:jsonb;default:'[]'" json:"triggerPatterns"`
+	TriggerPatterns pq.StringArray `gorm:"type:jsonb;default:'[]'::jsonb" json:"triggerPatterns"`
 	TriggerLevel    LogLevel       `gorm:"size:10" json:"triggerLevel,omitempty"`
 	Channel         AlertChannel   `gorm:"size:20" json:"channel,omitempty"` // kept for DB compatibility
-	Channels        pq.StringArray `gorm:"type:jsonb;default:'[]'" json:"channels"`
+	Channels        pq.StringArray `gorm:"type:jsonb;default:'[]'::jsonb" json:"channels"`
 	Recipient       string         `gorm:"type:text;not null" json:"recipient"`
 	CooldownMinutes int            `gorm:"default:15" json:"cooldownMinutes"`
 	Enabled         bool           `gorm:"default:true" json:"enabled"`

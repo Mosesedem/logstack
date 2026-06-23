@@ -21,11 +21,11 @@ var sqlMigrations = []sqlMigration{
 		Version: "015_alter_alert_rules_trigger_patterns",
 		Up: `
 ALTER TABLE alert_rules
-  ADD COLUMN IF NOT EXISTS trigger_patterns jsonb NOT NULL DEFAULT '[]';
+  ADD COLUMN IF NOT EXISTS trigger_patterns jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 UPDATE alert_rules
   SET trigger_patterns = jsonb_build_array(trigger_pattern)
-  WHERE trigger_patterns = '[]' AND trigger_pattern IS NOT NULL AND trigger_pattern != '';
+  WHERE trigger_patterns::text = '[]' AND trigger_pattern IS NOT NULL AND trigger_pattern <> '';
 `,
 	},
 	{
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     amount_cents integer      NOT NULL,
     currency     varchar(3)   NOT NULL,
     status       varchar(20)  NOT NULL DEFAULT 'pending',
-    line_items   jsonb        NOT NULL DEFAULT '[]',
+    line_items   jsonb        NOT NULL DEFAULT '[]'::jsonb,
     paid_at      timestamptz,
     created_at   timestamptz  NOT NULL DEFAULT NOW(),
     updated_at   timestamptz  NOT NULL DEFAULT NOW()

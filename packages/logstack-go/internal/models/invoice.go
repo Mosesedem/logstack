@@ -22,7 +22,7 @@ type Invoice struct {
 	AmountCents int            `gorm:"not null" json:"amountCents"`
 	Currency    string         `gorm:"size:3;not null" json:"currency"`
 	Status      string         `gorm:"size:20;not null;default:'pending'" json:"status"` // pending | paid | failed
-	LineItems   datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"lineItems"`
+	LineItems   datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'::jsonb" json:"lineItems"`
 	PaidAt      *time.Time     `json:"paidAt,omitempty"`
 	CreatedAt   time.Time      `json:"createdAt"`
 	UpdatedAt   time.Time      `json:"updatedAt"`
