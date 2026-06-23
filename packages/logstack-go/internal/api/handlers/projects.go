@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -28,9 +29,15 @@ type UpdateProjectRequest struct {
 // List handles GET /v1/projects
 func (h *ProjectsHandler) List(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
+	includeArchived := c.Query("includeArchived") == "true"
+
+	query := h.db.Where("owner_id = ?", userID)
+	if !includeArchived {
+		query = query.Where("archived_at IS NULL")
+	}
 
 	var projects []models.Project
-	if err := h.db.Where("owner_id = ?", userID).Order("created_at DESC").Find(&projects).Error; err != nil {
+	if err := query.Order("created_at DESC").Find(&projects).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Code:    "INTERNAL_ERROR",
 			Message: "Failed to fetch projects",
@@ -222,4 +229,37 @@ func (h *ProjectsHandler) RotateAPIKey(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"apiKey": newAPIKey})
+}
+
+// Archive handles PATCH /v1/projects/:id/archive
+func (h *ProjectsHandler) Archive(c *gin.Context) {
+	projectID := c.MustGet("projectID").(uuid.UUID)
+
+	now := time.Now()
+	result := h.db.Model(&models.Project{}).Where("id = ?", projectID).Update("archived_at", &now)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to archive project",
+		})
+		return
+	}
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Code:    "PROJECT_NOT_FOUND",
+			Message: "Project not found",
+		})
+		return
+	}
+
+	var project models.Project
+	if err := h.db.Where("id = ?", projectID).First(&project).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to fetch updated project",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, project.ToResponse())
 }

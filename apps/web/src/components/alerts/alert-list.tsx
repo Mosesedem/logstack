@@ -60,25 +60,47 @@ export function AlertList({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <span>Trigger Level:</span>
                 {alert.triggerLevel && (
                   <LevelBadge level={alert.triggerLevel} />
                 )}
               </div>
-              <div>
-                <span>Pattern: {alert.triggerPattern}</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="shrink-0">Patterns:</span>
+                {alert.triggerPatterns?.length ? (
+                  alert.triggerPatterns.map((pattern) => (
+                    <span
+                      key={pattern}
+                      className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded font-mono"
+                    >
+                      {pattern}
+                    </span>
+                  ))
+                ) : (
+                  <span>None</span>
+                )}
               </div>
               <div>
                 <span>Cooldown: {alert.cooldownMinutes}m</span>
               </div>
             </div>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-xs bg-muted px-2 py-1 rounded">
-                {alert.channel}
-              </span>
-              <span className="text-xs text-muted-foreground">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground shrink-0">Channels:</span>
+              {alert.channels?.length ? (
+                alert.channels.map((ch) => (
+                  <span
+                    key={ch}
+                    className="text-xs bg-muted text-foreground px-2 py-0.5 rounded-full font-medium capitalize"
+                  >
+                    {ch}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground">None</span>
+              )}
+              <span className="text-xs text-muted-foreground ml-auto">
                 {alert.recipient}
               </span>
             </div>

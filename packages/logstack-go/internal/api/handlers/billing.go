@@ -3,24 +3,28 @@ package handlers
 import (
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mosesedem/logstack/internal/models"
 	"github.com/mosesedem/logstack/internal/services"
 	"github.com/mosesedem/logstack/internal/workers"
+	"gorm.io/gorm"
 )
 
 // BillingHandler handles billing-related requests
 type BillingHandler struct {
 	billingService  *services.BillingService
 	usageSyncWorker *workers.UsageSyncWorker
+	db              *gorm.DB
 }
 
 // NewBillingHandler creates a new billing handler
-func NewBillingHandler(billingService *services.BillingService, usageSyncWorker *workers.UsageSyncWorker) *BillingHandler {
+func NewBillingHandler(billingService *services.BillingService, usageSyncWorker *workers.UsageSyncWorker, db *gorm.DB) *BillingHandler {
 	return &BillingHandler{
 		billingService:  billingService,
 		usageSyncWorker: usageSyncWorker,
+		db:              db,
 	}
 }
 
@@ -217,6 +221,63 @@ func (h *BillingHandler) CancelSubscription(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "subscription cancelled successfully"})
+}
+
+// GetInvoices returns a paginated list of invoices for the authenticated user
+// GET /v1/billing/invoices?page=1
+func (h *BillingHandler) GetInvoices(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	const limit = 20
+
+	var invoices []models.Invoice
+	var total int64
+
+	if err := h.db.Model(&models.Invoice{}).
+		Where("user_id = ?", userID).
+		Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to count invoices"})
+		return
+	}
+
+	if err := h.db.Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Offset((page - 1) * limit).
+		Limit(limit).
+		Find(&invoices).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get invoices"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"invoices": invoices,
+		"total":    total,
+		"page":     page,
+	})
+}
+
+// GetInvoice returns a single invoice by ID with ownership check
+// GET /v1/billing/invoices/:id
+func (h *BillingHandler) GetInvoice(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+	id := c.Param("id")
+
+	var invoice models.Invoice
+	if err := h.db.Where("id = ?", id).First(&invoice).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
+		return
+	}
+
+	if invoice.UserID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+		return
+	}
+
+	c.JSON(http.StatusOK, invoice)
 }
 
 // HandleWebhook handles Paystack webhook events

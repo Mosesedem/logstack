@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/mosesedem/logstack/internal/models"
 	"github.com/mosesedem/logstack/internal/services"
 	"gorm.io/gorm"
@@ -120,6 +121,14 @@ func (h *AlertsHandler) Create(c *gin.Context) {
 		Enabled:         enabled,
 	}
 
+	// Set multi-value fields from request
+	if len(req.TriggerPatterns) > 0 {
+		rule.TriggerPatterns = pq.StringArray(req.TriggerPatterns)
+	}
+	if len(req.Channels) > 0 {
+		rule.Channels = pq.StringArray(req.Channels)
+	}
+
 	if err := h.alertEngine.CreateRule(c.Request.Context(), &rule); err != nil {
 		slog.Error("Failed to create alert rule", "error", err, "projectId", project.ID)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -231,6 +240,12 @@ func (h *AlertsHandler) Update(c *gin.Context) {
 	if req.Enabled != nil {
 		rule.Enabled = *req.Enabled
 	}
+	if len(req.TriggerPatterns) > 0 {
+		rule.TriggerPatterns = pq.StringArray(req.TriggerPatterns)
+	}
+	if len(req.Channels) > 0 {
+		rule.Channels = pq.StringArray(req.Channels)
+	}
 
 	if err := h.alertEngine.UpdateRule(c.Request.Context(), rule); err != nil {
 		slog.Error("Failed to update alert rule", "error", err, "ruleId", rule.ID)
@@ -289,6 +304,16 @@ func (h *AlertsHandler) Delete(c *gin.Context) {
 
 	slog.Info("Alert rule deleted", "ruleId", id)
 	c.JSON(http.StatusOK, gin.H{"message": "Alert rule deleted successfully"})
+}
+
+// GetOptions handles GET /v1/alerts/options
+func (h *AlertsHandler) GetOptions(c *gin.Context) {
+	c.JSON(http.StatusOK, models.AlertOptionsResponse{
+		Channels:        []string{"email", "push", "webhook"},
+		TriggerPatterns: []string{".*error.*", ".*exception.*", ".*fatal.*", ".*critical.*", ".*timeout.*", ".*panic.*"},
+		TriggerLevels:   []string{"debug", "info", "warn", "error", "critical", "fatal"},
+		CooldownOptions: []int{5, 10, 15, 30, 60},
+	})
 }
 
 // GetHistory handles GET /v1/alerts/:id/history

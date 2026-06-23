@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CreditCard, TrendingUp, AlertTriangle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, FileText, ChevronRight } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -11,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +26,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PricingTable } from "@/components/billing/pricing-table";
 import { UsageProgressBar } from "@/components/billing/usage-progress-bar";
-import { TransactionHistory } from "@/components/billing/transaction-history";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import type {
@@ -31,18 +33,32 @@ import type {
   UsageSummary,
   PricingResponse,
   SubscriptionTier,
-  Transaction,
+  Invoice,
 } from "@/types";
 
 export default function BillingPage() {
   const { toast } = useToast();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [pricing, setPricing] = useState<PricingResponse | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isInitializing, setIsInitializing] = useState(false);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+
+  // Invoice list via TanStack Query
+  const {
+    data: invoicesData,
+    isLoading: invoicesLoading,
+  } = useQuery({
+    queryKey: ["invoices"],
+    queryFn: () =>
+      api.get<{ invoices: Invoice[]; total: number; page: number }>(
+        "/billing/invoices"
+      ),
+  });
+
+  const invoices = invoicesData?.invoices ?? [];
 
   const loadBillingData = useCallback(async () => {
     try {
@@ -54,10 +70,9 @@ export default function BillingPage() {
         api.get<PricingResponse>("/billing/pricing"),
       ]);
 
-      // Load non-critical data separately
-      const [usageResult, txResult] = await Promise.allSettled([
+      // Load usage separately (non-critical)
+      const usageResult = await Promise.allSettled([
         api.get<UsageSummary>("/billing/usage"),
-        api.get<{ transactions: Transaction[] }>("/billing/transactions"),
       ]);
 
       // Handle Subscription
@@ -77,19 +92,11 @@ export default function BillingPage() {
         setPricing(pricingResult.value);
       }
 
-      // Handle Usage (Non-critical blocking, but good to have)
-      if (usageResult.status === "fulfilled") {
-        setUsage(usageResult.value);
+      // Handle Usage (non-critical)
+      if (usageResult[0].status === "fulfilled") {
+        setUsage(usageResult[0].value);
       } else {
-        console.warn("Failed to load usage data:", usageResult.reason);
-      }
-
-      // Handle Transactions (Non-critical)
-      if (txResult.status === "fulfilled") {
-        setTransactions(txResult.value.transactions || []);
-      } else {
-        console.warn("Failed to load transactions:", txResult.reason);
-        // Don't show error toast for transactions failure to avoid noise
+        console.warn("Failed to load usage data:", usageResult[0].reason);
       }
     } catch (error) {
       console.error("Unexpected error loading billing data:", error);
@@ -174,6 +181,24 @@ export default function BillingPage() {
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
+  };
+
+  const getInvoiceStatusBadge = (status: Invoice["status"]) => {
+    switch (status) {
+      case "paid":
+        return <Badge className="bg-green-500 text-white">Paid</Badge>;
+      case "pending":
+        return <Badge className="bg-yellow-500 text-white">Pending</Badge>;
+      case "failed":
+        return <Badge variant="destructive">Failed</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const formatInvoiceAmount = (amountCents: number, currency: string) => {
+    const amount = (amountCents / 100).toFixed(2);
+    return `${currency} ${amount}`;
   };
 
   if (isLoading) {
@@ -324,7 +349,77 @@ export default function BillingPage() {
         <div className="grid gap-4">
           <h2 className="text-xl font-medium">Invoices</h2>
           <Card>
-            <TransactionHistory transactions={transactions} />
+            <CardHeader>
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Invoice History
+              </CardTitle>
+              <CardDescription>
+                Your billing invoices. Click a row to view details.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {invoicesLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between py-3 border-b last:border-0"
+                    >
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-5 w-14 rounded-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : invoices.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No invoices yet
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {invoices.map((invoice) => (
+                    <button
+                      key={invoice.id}
+                      type="button"
+                      onClick={() => router.push(`/invoice/${invoice.id}`)}
+                      className="w-full flex items-center justify-between py-3 px-2 rounded-md border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer text-left"
+                    >
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium font-mono">
+                          {invoice.reference}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(invoice.createdAt).toLocaleDateString(
+                            "en-US",
+                            {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            }
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium">
+                          {formatInvoiceAmount(
+                            invoice.amountCents,
+                            invoice.currency
+                          )}
+                        </span>
+                        {getInvoiceStatusBadge(invoice.status)}
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
           </Card>
         </div>
       </div>

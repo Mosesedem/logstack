@@ -27,13 +27,20 @@ export interface Project {
 
 export type AlertChannel = "email" | "push" | "webhook";
 
+export interface AlertOptions {
+  channels: string[];
+  triggerPatterns: string[];
+  triggerLevels: string[];
+  cooldownOptions: number[];
+}
+
 export interface AlertRule {
   id: number;
   projectId: string;
   name: string;
-  triggerPattern: string;
+  triggerPatterns: string[];
   triggerLevel?: LogLevel;
-  channel: AlertChannel;
+  channels: string[];
   recipient: string;
   cooldownMinutes: number;
   enabled: boolean;
@@ -165,4 +172,32 @@ export interface TransactionListResponse {
     perPage?: number;
     pageCount?: number;
   };
+}
+
+export interface Invite {
+  id: string;
+  organizationId: string;
+  email: string;
+  role: "admin" | "member" | "viewer";
+  status: "pending" | "accepted" | "expired";
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface InvoiceLineItem {
+  description: string;
+  amount: number;
+  quantity: number;
+}
+
+export interface Invoice {
+  id: string;
+  userId: number;
+  reference: string;
+  amountCents: number;
+  currency: string;
+  status: "pending" | "paid" | "failed";
+  lineItems: InvoiceLineItem[];
+  paidAt?: string;
+  createdAt: string;
 }

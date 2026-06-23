@@ -3,16 +3,22 @@ package handlers
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/mosesedem/logstack/internal/models"
 	"github.com/mosesedem/logstack/internal/services"
 	"github.com/mosesedem/logstack/internal/services/notification"
+	qrcode "github.com/skip2/go-qrcode"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -543,3 +549,373 @@ func (h *AuthHandler) recordVerificationSent(ctx context.Context, email string) 
 	// Also record in PostgreSQL for fallback
 	h.db.Exec("INSERT INTO verification_rate_limits (email, sent_at) VALUES (?, ?)", email, time.Now())
 }
+
+// QRSession represents the Redis-persisted state for a QR login session.
+type QRSession struct {
+	Status    string `json:"status"`           // "pending" | "confirmed" | "expired"
+	UserID    uint   `json:"userId,omitempty"` // populated after confirmation
+	CreatedAt int64  `json:"createdAt"`
+}
+
+// GetQRStatus handles GET /v1/auth/qr/:token/status (public)
+// Reads the QR session from Redis. Returns 410 if expired/missing, otherwise returns the session status.
+func (h *AuthHandler) GetQRStatus(c *gin.Context) {
+	token := c.Param("token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:    "MISSING_TOKEN",
+			Message: "Token parameter is required",
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+	key := "qr:session:" + token
+
+	val, err := h.redis.Get(ctx, key).Result()
+	if err != nil {
+		// redis.Nil means key not found (expired or never existed)
+		c.JSON(http.StatusGone, ErrorResponse{
+			Code:    "QR_EXPIRED",
+			Message: "QR code has expired or does not exist",
+		})
+		return
+	}
+
+	var session QRSession
+	if jsonErr := json.Unmarshal([]byte(val), &session); jsonErr != nil {
+		slog.Error("Failed to parse QR session", "error", jsonErr, "token", token)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to read session",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": session.Status})
+}
+
+// ConfirmQRRequest is the body expected for POST /v1/auth/qr/:token/confirm.
+type ConfirmQRRequest struct {
+	Email    string `json:"email"    binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+}
+
+// ConfirmQR handles POST /v1/auth/qr/:token/confirm (public — called by mobile client).
+//
+// Flow:
+//  1. Read QR session from Redis; missing key → 410 QR_EXPIRED.
+//  2. Session already confirmed → 409 QR_ALREADY_USED.
+//  3. Validate email + password credentials (same logic as Login).
+//  4. Update session to {status:"confirmed", userId:<id>} with 1-minute TTL.
+//  5. Return JWT token pair to mobile caller.
+func (h *AuthHandler) ConfirmQR(c *gin.Context) {
+	token := c.Param("token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:    "MISSING_TOKEN",
+			Message: "Token is required",
+		})
+		return
+	}
+
+	// --- 1. Read session from Redis ---
+	redisKey := "qr:session:" + token
+	ctx := c.Request.Context()
+
+	raw, err := h.redis.Get(ctx, redisKey).Bytes()
+	if err == redis.Nil {
+		// Key missing or expired
+		c.JSON(http.StatusGone, ErrorResponse{
+			Code:    "QR_EXPIRED",
+			Message: "QR code has expired",
+		})
+		return
+	}
+	if err != nil {
+		slog.Error("Failed to read QR session from Redis", "error", err, "token", token)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to read QR session",
+		})
+		return
+	}
+
+	var session QRSession
+	if err := json.Unmarshal(raw, &session); err != nil {
+		slog.Error("Failed to parse QR session JSON", "error", err, "token", token)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to parse QR session",
+		})
+		return
+	}
+
+	// --- 2. Check if already confirmed ---
+	if session.Status == "confirmed" {
+		c.JSON(http.StatusConflict, ErrorResponse{
+			Code:    "QR_ALREADY_USED",
+			Message: "This QR code has already been used",
+		})
+		return
+	}
+
+	// --- 3. Validate credentials ---
+	var req ConfirmQRRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:    "VALIDATION_ERROR",
+			Message: err.Error(),
+		})
+		return
+	}
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	var user models.User
+	if err := h.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Code:    "INVALID_CREDENTIALS",
+			Message: "Invalid email or password",
+		})
+		return
+	}
+	if !user.CheckPassword(req.Password) {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Code:    "INVALID_CREDENTIALS",
+			Message: "Invalid email or password",
+		})
+		return
+	}
+
+	// --- 4. Update session to confirmed with 1-minute TTL ---
+	confirmedSession := QRSession{
+		Status:    "confirmed",
+		UserID:    user.ID,
+		CreatedAt: session.CreatedAt,
+	}
+	confirmedBytes, err := json.Marshal(confirmedSession)
+	if err != nil {
+		slog.Error("Failed to marshal confirmed QR session", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to update QR session",
+		})
+		return
+	}
+	if err := h.redis.Set(ctx, redisKey, confirmedBytes, 1*time.Minute).Err(); err != nil {
+		slog.Error("Failed to update QR session in Redis", "error", err, "token", token)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to update QR session",
+		})
+		return
+	}
+
+	// --- 5. Return JWT token pair ---
+	tokens, err := h.authService.GenerateTokens(&user)
+	if err != nil {
+		slog.Error("Failed to generate tokens for QR login", "error", err, "userID", user.ID)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to generate authentication tokens",
+		})
+		return
+	}
+
+	slog.Info("QR login confirmed", "userID", user.ID, "token", token)
+
+	c.JSON(http.StatusOK, tokens)
+}
+
+// GenerateQR handles POST /v1/auth/qr/generate (JWT-protected).
+// It generates a UUID token, stores a pending QR session in Redis with a 5-minute TTL,
+// generates a QR code PNG encoding the QR-login URL, and returns the token + base64 image.
+func (h *AuthHandler) GenerateQR(c *gin.Context) {
+	if h.redis == nil {
+		slog.Error("GenerateQR: Redis client is nil")
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "QR login is not available",
+		})
+		return
+	}
+
+	// 1. Generate a UUID token
+	token := uuid.New().String()
+
+	// 2. Store the pending session in Redis with a 5-minute TTL
+	session := QRSession{
+		Status:    "pending",
+		CreatedAt: time.Now().Unix(),
+	}
+	sessionJSON, err := json.Marshal(session)
+	if err != nil {
+		slog.Error("GenerateQR: failed to marshal session", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to create QR session",
+		})
+		return
+	}
+
+	redisKey := "qr:session:" + token
+	ctx := c.Request.Context()
+	if err := h.redis.Set(ctx, redisKey, string(sessionJSON), 5*time.Minute).Err(); err != nil {
+		slog.Error("GenerateQR: failed to store session in Redis", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to create QR session",
+		})
+		return
+	}
+
+	// 3. Build the QR login URL using the FRONTEND_URL env var
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:3000"
+	}
+	qrLoginURL := fmt.Sprintf("%s/auth/qr-login?token=%s", frontendURL, token)
+
+	// 4. Generate the QR code PNG (256×256)
+	pngBytes, err := qrcode.Encode(qrLoginURL, qrcode.Medium, 256)
+	if err != nil {
+		slog.Error("GenerateQR: failed to generate QR code", "error", err)
+		// Clean up the Redis key we just set
+		h.redis.Del(ctx, redisKey)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to generate QR code",
+		})
+		return
+	}
+
+	// 5. Base64-encode the PNG and build the data URL
+	encoded := base64.StdEncoding.EncodeToString(pngBytes)
+	qrImageURL := "data:image/png;base64," + encoded
+
+	slog.Info("QR session created", "token", token)
+
+	c.JSON(http.StatusOK, gin.H{
+		"token":      token,
+		"qrImageUrl": qrImageURL,
+	})
+}
+
+// AcceptInvite handles GET /v1/auth/accept-invite?token=<t> (public).
+//
+// Flow:
+//  1. Read token from query param; missing → 400.
+//  2. Look up Invite by token; not found → 410 INVITE_EXPIRED.
+//  3. Check invite.ExpiresAt > NOW(); expired → 410 INVITE_EXPIRED.
+//  4. Find or create User by invite email (placeholder user if new — no password set).
+//  5. Create OrganizationMember{OrganizationID, UserID, Role} if not already a member.
+//  6. Update invite status to "accepted".
+//  7. Return 200 with JWT token pair + user info.
+func (h *AuthHandler) AcceptInvite(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:    "MISSING_TOKEN",
+			Message: "Invite token is required",
+		})
+		return
+	}
+
+	// --- 1. Look up invite by token ---
+	var invite models.Invite
+	if err := h.db.Where("token = ?", token).First(&invite).Error; err != nil {
+		// Not found — treat as expired/invalid
+		c.JSON(http.StatusGone, ErrorResponse{
+			Code:    "INVITE_EXPIRED",
+			Message: "This invite link is invalid or has expired",
+		})
+		return
+	}
+
+	// --- 2. Check expiry ---
+	if invite.IsExpired() {
+		c.JSON(http.StatusGone, ErrorResponse{
+			Code:    "INVITE_EXPIRED",
+			Message: "This invite link has expired",
+		})
+		return
+	}
+
+	// --- 3. Find or create user by invite email ---
+	email := strings.ToLower(strings.TrimSpace(invite.Email))
+	var user models.User
+	err := h.db.Where("email = ?", email).First(&user).Error
+	if err != nil {
+		// User doesn't exist — create a placeholder (no password, not verified)
+		user = models.User{
+			Email:         email,
+			Name:          email, // use email as placeholder name
+			EmailVerified: false,
+		}
+		// Set a random unusable password hash so the not-null constraint is satisfied
+		randomBytes := make([]byte, 32)
+		if _, randErr := rand.Read(randomBytes); randErr == nil {
+			user.PasswordHash = hex.EncodeToString(randomBytes)
+		}
+
+		if createErr := h.db.Create(&user).Error; createErr != nil {
+			slog.Error("AcceptInvite: failed to create placeholder user", "error", createErr, "email", email)
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to create user account",
+			})
+			return
+		}
+		slog.Info("AcceptInvite: placeholder user created", "userID", user.ID, "email", email)
+	}
+
+	// --- 4. Create OrganizationMember if not already a member ---
+	var existingMember models.OrganizationMember
+	memberErr := h.db.Where("organization_id = ? AND user_id = ?", invite.OrganizationID, user.ID).
+		First(&existingMember).Error
+	if memberErr != nil {
+		// Not a member yet — create the record
+		member := models.OrganizationMember{
+			OrganizationID: invite.OrganizationID,
+			UserID:         user.ID,
+			Role:           invite.Role,
+		}
+		if createErr := h.db.Create(&member).Error; createErr != nil {
+			slog.Error("AcceptInvite: failed to create org member", "error", createErr,
+				"orgID", invite.OrganizationID, "userID", user.ID)
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to add user to organization",
+			})
+			return
+		}
+		slog.Info("AcceptInvite: org member created", "orgID", invite.OrganizationID, "userID", user.ID, "role", invite.Role)
+	}
+
+	// --- 5. Mark invite as accepted ---
+	if updateErr := h.db.Model(&invite).Update("status", "accepted").Error; updateErr != nil {
+		// Non-fatal: log the error but don't block the response
+		slog.Error("AcceptInvite: failed to update invite status", "error", updateErr, "inviteID", invite.ID)
+	}
+
+	// --- 6. Generate JWT token pair ---
+	tokens, err := h.authService.GenerateTokens(&user)
+	if err != nil {
+		slog.Error("AcceptInvite: failed to generate tokens", "error", err, "userID", user.ID)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to generate authentication tokens",
+		})
+		return
+	}
+
+	slog.Info("AcceptInvite: invite accepted", "inviteID", invite.ID, "userID", user.ID, "orgID", invite.OrganizationID)
+
+	c.JSON(http.StatusOK, AuthResponse{
+		User:   user.ToResponse(),
+		Tokens: tokens,
+	})
+}
+
+// Ensure models import is used (models.User is already used elsewhere in this file).
+var _ = models.User{}

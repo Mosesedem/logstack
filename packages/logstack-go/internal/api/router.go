@@ -63,12 +63,12 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		auth := v1.Group("/auth")
 		authLimiter := middleware.NewRateLimiter(cfg.Redis, 10, time.Minute)
 		auth.Use(authLimiter.Limit())
+		var authEmailNotifier *notification.EmailNotifier
+		if cfg.NotificationService != nil {
+			authEmailNotifier = cfg.NotificationService.GetEmailNotifier()
+		}
+		authHandler := handlers.NewAuthHandler(cfg.DB, cfg.AuthService, authEmailNotifier, cfg.Redis)
 		{
-			var emailNotifier *notification.EmailNotifier
-			if cfg.NotificationService != nil {
-				emailNotifier = cfg.NotificationService.GetEmailNotifier()
-			}
-			authHandler := handlers.NewAuthHandler(cfg.DB, cfg.AuthService, emailNotifier, cfg.Redis)
 			auth.POST("/signup", authHandler.Signup)
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshToken)
@@ -78,12 +78,19 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 			auth.POST("/resend-verification", authHandler.ResendVerification)
 			auth.POST("/oauth", authHandler.OAuthSignIn)
 			auth.POST("/logout", middleware.JWTAuth(cfg.AuthService), authHandler.Logout)
+			auth.GET("/qr/:token/status", authHandler.GetQRStatus)
+			auth.POST("/qr/:token/confirm", authHandler.ConfirmQR)
+			auth.GET("/accept-invite", authHandler.AcceptInvite)
 		}
 
 		// Log ingestion (API key auth with higher rate limit)
 		logs := v1.Group("/logs")
 		ingestLimiter := middleware.NewRateLimiter(cfg.Redis, 1000, time.Minute)
-		usageLimiter := middleware.NewUsageLimitMiddleware(cfg.DB, cfg.Redis)
+		var ingestEmailNotifier *notification.EmailNotifier
+		if cfg.NotificationService != nil {
+			ingestEmailNotifier = cfg.NotificationService.GetEmailNotifier()
+		}
+		usageLimiter := middleware.NewUsageLimitMiddleware(cfg.DB, cfg.Redis, ingestEmailNotifier)
 		logs.Use(middleware.APIKeyAuth(cfg.DB))
 		logs.Use(ingestLimiter.LimitByAPIKey())
 		logs.Use(usageLimiter.Enforce()) // Enforce usage limits based on tier
@@ -103,13 +110,16 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		)
 
 		// Public pricing (landing page + marketing)
-		billingHandler := handlers.NewBillingHandler(cfg.BillingService, cfg.UsageSyncWorker)
+		billingHandler := handlers.NewBillingHandler(cfg.BillingService, cfg.UsageSyncWorker, cfg.DB)
 		v1.GET("/billing/pricing", billingHandler.GetPricing)
 
 		// Dashboard routes (JWT auth)
 		protected := v1.Group("")
 		protected.Use(middleware.JWTAuth(cfg.AuthService))
 		{
+			// QR code login generation (JWT-protected — web user generates QR)
+			protected.POST("/auth/qr/generate", authHandler.GenerateQR)
+
 			// Projects
 			projects := protected.Group("/projects")
 			{
@@ -127,7 +137,10 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 					projectRoutes.POST("/rotate-key", projectsHandler.RotateAPIKey)
 					
 					// Project logs (for dashboard viewing)
-					projectRoutes.GET("/logs", handlers.NewProjectLogsHandler(cfg.QueryBuilder).Query)
+					projectLogsHandler := handlers.NewProjectLogsHandler(cfg.QueryBuilder)
+					projectRoutes.GET("/logs", projectLogsHandler.Query)
+					projectRoutes.GET("/logs/analytics", projectLogsHandler.Analytics)
+					projectRoutes.PATCH("/archive", projectsHandler.Archive)
 				}
 			}
 
@@ -137,6 +150,7 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 				alertsHandler := handlers.NewAlertsHandler(cfg.AlertEngine, cfg.DB)
 				alerts.GET("", alertsHandler.List)
 				alerts.POST("", alertsHandler.Create)
+				alerts.GET("/options", alertsHandler.GetOptions)
 				alerts.GET("/:id", alertsHandler.Get)
 				alerts.PUT("/:id", alertsHandler.Update)
 				alerts.DELETE("/:id", alertsHandler.Delete)
@@ -161,18 +175,23 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 				billing.POST("/initialize", billingHandler.InitializePayment)
 				billing.GET("/transactions", billingHandler.GetTransactions)
 				billing.POST("/cancel", billingHandler.CancelSubscription)
+				billing.GET("/invoices", billingHandler.GetInvoices)
+				billing.GET("/invoices/:id", billingHandler.GetInvoice)
 			}
 
 			// Organizations
 			organizations := protected.Group("/organizations")
 			{
-				orgHandler := handlers.NewOrganizationHandler(cfg.OrganizationService)
+				orgHandler := handlers.NewOrganizationHandler(cfg.OrganizationService, cfg.DB, cfg.NotificationService.GetEmailNotifier())
 				organizations.GET("/me", orgHandler.GetMyOrganization)
 				organizations.GET("/:id/members", orgHandler.GetMembers)
 				organizations.POST("/:id/members", orgHandler.InviteMember)
-				organizations.PATCH("/:id/members/:memberId", orgHandler.UpdateMemberRole)
+				organizations.PATCH("/:id/members/:memberId", middleware.RBACMiddleware(cfg.DB, "admin"), middleware.PriceGateMiddleware(cfg.DB, "team_management"), orgHandler.UpdateMemberRole)
 				organizations.DELETE("/:id/members/:memberId", orgHandler.RemoveMember)
 				organizations.PATCH("/:id", orgHandler.UpdateOrganization)
+				organizations.POST("/:id/invites", middleware.RBACMiddleware(cfg.DB, "admin"), middleware.PriceGateMiddleware(cfg.DB, "team_management"), orgHandler.CreateInvite)
+				organizations.GET("/:id/invites", middleware.RBACMiddleware(cfg.DB, "admin"), middleware.PriceGateMiddleware(cfg.DB, "team_management"), orgHandler.GetInvites)
+				organizations.DELETE("/:id/invites/:inviteId", middleware.RBACMiddleware(cfg.DB, "admin"), middleware.PriceGateMiddleware(cfg.DB, "team_management"), orgHandler.RevokeInvite)
 			}
 
 			// Audit Logs
@@ -201,7 +220,7 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		{
 			// Paystack webhook handler (created without BillingHandler dependency to avoid nil pointer)
 			if cfg.BillingService != nil {
-				billingHandler := handlers.NewBillingHandler(cfg.BillingService, cfg.UsageSyncWorker)
+				billingHandler := handlers.NewBillingHandler(cfg.BillingService, cfg.UsageSyncWorker, cfg.DB)
 				webhooks.POST("/paystack", billingHandler.HandleWebhook)
 			}
 		}

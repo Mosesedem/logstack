@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mosesedem/logstack/internal/models"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -164,6 +165,27 @@ type PaystackTransactionData struct {
 	Status    string `json:"status"`
 	PaidAt    string `json:"paid_at"`
 	Channel   string `json:"channel"`
+}
+
+// PaystackChargeData represents charge data from the charge.success webhook event
+type PaystackChargeData struct {
+	Reference  string `json:"reference"`
+	Amount     int    `json:"amount"`
+	Currency   string `json:"currency"`
+	Status     string `json:"status"`
+	PaidAt     string `json:"paid_at"`
+	Channel    string `json:"channel"`
+	Customer   struct {
+		Email string `json:"email"`
+	} `json:"customer"`
+	// Metadata may contain a "description" key from the initiating request
+	Metadata map[string]string `json:"metadata"`
+	// PlanObject is populated on subscription charges
+	PlanObject struct {
+		Name     string `json:"name"`
+		Amount   int    `json:"amount"`
+		Currency string `json:"currency"`
+	} `json:"plan_object"`
 }
 
 // PaystackTransactionListResponse represents a list of transactions
@@ -455,11 +477,84 @@ func (s *BillingService) handleInvoiceUpdate(ctx context.Context, data json.RawM
 	return nil
 }
 
-// handleChargeSuccess handles successful one-time charges
+// handleChargeSuccess handles successful one-time charges by upserting an Invoice record.
 func (s *BillingService) handleChargeSuccess(ctx context.Context, data json.RawMessage) error {
-	// This could be used for one-time payments or upgrades
-	// For now, we rely on subscription events
-	return nil
+	var chargeData PaystackChargeData
+	if err := json.Unmarshal(data, &chargeData); err != nil {
+		return fmt.Errorf("failed to parse charge data: %w", err)
+	}
+
+	if chargeData.Reference == "" {
+		return errors.New("charge.success event missing reference")
+	}
+
+	// Resolve user ID from the customer email; skip association if not found.
+	var userID uint
+	if chargeData.Customer.Email != "" {
+		var user models.User
+		if err := s.db.WithContext(ctx).
+			Where("email = ?", chargeData.Customer.Email).
+			First(&user).Error; err == nil {
+			userID = user.ID
+		}
+		// If not found we leave userID = 0 (association skipped)
+	}
+
+	// Determine line-item description: prefer plan name, then metadata description.
+	description := chargeData.PlanObject.Name
+	if description == "" {
+		if d, ok := chargeData.Metadata["description"]; ok && d != "" {
+			description = d
+		}
+	}
+	if description == "" {
+		description = "Logstack subscription"
+	}
+
+	// Marshal line items into datatypes.JSON.
+	lineItems := []models.InvoiceLineItem{
+		{
+			Description: description,
+			Amount:      chargeData.Amount,
+			Quantity:    1,
+		},
+	}
+	lineItemsJSON, err := json.Marshal(lineItems)
+	if err != nil {
+		return fmt.Errorf("failed to marshal line items: %w", err)
+	}
+
+	now := time.Now().UTC()
+
+	// Upsert: find or create by reference with status="pending".
+	invoice := models.Invoice{
+		Reference: chargeData.Reference,
+		Status:    "pending",
+		UserID:    userID,
+	}
+	result := s.db.WithContext(ctx).
+		Where(models.Invoice{Reference: chargeData.Reference}).
+		FirstOrCreate(&invoice)
+	if result.Error != nil {
+		return fmt.Errorf("failed to upsert invoice: %w", result.Error)
+	}
+
+	// Now update to paid status with full details.
+	updates := map[string]interface{}{
+		"status":       "paid",
+		"paid_at":      &now,
+		"amount_cents": chargeData.Amount,
+		"currency":     chargeData.Currency,
+		"line_items":   datatypes.JSON(lineItemsJSON),
+		"updated_at":   now,
+	}
+	if userID != 0 {
+		updates["user_id"] = userID
+	}
+
+	return s.db.WithContext(ctx).
+		Model(&invoice).
+		Updates(updates).Error
 }
 
 // getTierFromPlanCode extracts the tier from a plan code

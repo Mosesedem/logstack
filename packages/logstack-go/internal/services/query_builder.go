@@ -83,6 +83,79 @@ func (q *QueryBuilder) Query(opts QueryOptions) (*models.LogQueryResponse, error
 	}, nil
 }
 
+// Analytics returns aggregated log analytics for the given project over the last N hours.
+func (q *QueryBuilder) Analytics(projectID uuid.UUID, hours int) (*models.LogAnalyticsResponse, error) {
+	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
+
+	// COUNT(*) grouped by level
+	type levelCount struct {
+		Level string
+		Count int64
+	}
+	var levelCounts []levelCount
+	if err := q.db.Raw(
+		`SELECT level, COUNT(*) as count FROM logs WHERE project_id = ? AND created_at >= ? GROUP BY level`,
+		projectID, since,
+	).Scan(&levelCounts).Error; err != nil {
+		return nil, err
+	}
+
+	countByLevel := make(map[string]int64)
+	var totalCount int64
+	for _, lc := range levelCounts {
+		countByLevel[lc.Level] = lc.Count
+		totalCount += lc.Count
+	}
+
+	// Compute error rate from error, critical, fatal counts
+	var errorCount int64
+	for _, lvl := range []string{"error", "critical", "fatal"} {
+		errorCount += countByLevel[lvl]
+	}
+	var errorRate float64
+	if totalCount > 0 {
+		errorRate = float64(errorCount) / float64(totalCount) * 100
+	}
+
+	// COUNT(*) grouped by hour for time series
+	type hourCount struct {
+		Ts    time.Time
+		Count int64
+	}
+	var hourCounts []hourCount
+	if err := q.db.Raw(
+		`SELECT date_trunc('hour', created_at) as ts, COUNT(*) as count FROM logs WHERE project_id = ? AND created_at >= ? GROUP BY ts ORDER BY ts`,
+		projectID, since,
+	).Scan(&hourCounts).Error; err != nil {
+		return nil, err
+	}
+
+	// Build a map from truncated-hour → count for zero-filling
+	hourMap := make(map[string]int64, hours)
+	for _, hc := range hourCounts {
+		key := hc.Ts.UTC().Truncate(time.Hour).Format(time.RFC3339)
+		hourMap[key] = hc.Count
+	}
+
+	// Zero-fill all hourly buckets from oldest to newest
+	timeSeries := make([]models.TimeSeriesBucket, hours)
+	for i := 0; i < hours; i++ {
+		bucketTime := time.Now().UTC().Truncate(time.Hour).Add(-time.Duration(hours-1-i) * time.Hour)
+		key := bucketTime.Format(time.RFC3339)
+		timeSeries[i] = models.TimeSeriesBucket{
+			Timestamp: key,
+			Count:     hourMap[key],
+		}
+	}
+
+	return &models.LogAnalyticsResponse{
+		TotalCount:   totalCount,
+		CountByLevel: countByLevel,
+		ErrorRate:    errorRate,
+		TimeSeries:   timeSeries,
+	}, nil
+}
+
 func (q *QueryBuilder) GetByID(id int64, projectID uuid.UUID) (*models.Log, error) {
 	var log models.Log
 	if err := q.db.Where("id = ? AND project_id = ?", id, projectID).First(&log).Error; err != nil {

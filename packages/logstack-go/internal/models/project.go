@@ -15,6 +15,7 @@ type Project struct {
 	OrganizationID *uuid.UUID `gorm:"type:uuid;index" json:"organizationId"`
 	APIKey    string    `gorm:"uniqueIndex;size:100;not null" json:"-"`
 	Environment string   `gorm:"size:20;not null;default:'production'" json:"environment"`
+	ArchivedAt *time.Time `gorm:"index" json:"archivedAt,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 
 	// Relations
@@ -33,11 +34,12 @@ func GenerateAPIKey() (string, error) {
 }
 
 type ProjectResponse struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	OwnerID   uint      `json:"ownerId"`
-	Environment string  `json:"environment"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID          uuid.UUID  `json:"id"`
+	Name        string     `json:"name"`
+	OwnerID     uint       `json:"ownerId"`
+	Environment string     `json:"environment"`
+	ArchivedAt  *time.Time `json:"archivedAt,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
 }
 
 type ProjectWithAPIKeyResponse struct {
@@ -47,11 +49,12 @@ type ProjectWithAPIKeyResponse struct {
 
 func (p *Project) ToResponse() ProjectResponse {
 	return ProjectResponse{
-		ID:        p.ID,
-		Name:      p.Name,
-		OwnerID:   p.OwnerID,
+		ID:          p.ID,
+		Name:        p.Name,
+		OwnerID:     p.OwnerID,
 		Environment: p.Environment,
-		CreatedAt: p.CreatedAt,
+		ArchivedAt:  p.ArchivedAt,
+		CreatedAt:   p.CreatedAt,
 	}
 }
 

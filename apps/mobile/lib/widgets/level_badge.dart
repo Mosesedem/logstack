@@ -28,13 +28,13 @@ class LevelBadge extends StatelessWidget {
   Color _getBackgroundColor() {
     switch (level) {
       case LogLevel.info:
-        return Colors.blue.withOpacity(0.2);
+        return Colors.blue.withValues(alpha: 0.2);
       case LogLevel.warn:
-        return Colors.orange.withOpacity(0.2);
+        return Colors.orange.withValues(alpha: 0.2);
       case LogLevel.error:
-        return Colors.red.withOpacity(0.2);
+        return Colors.red.withValues(alpha: 0.2);
       case LogLevel.critical:
-        return Colors.red.shade900.withOpacity(0.2);
+        return Colors.red.shade900.withValues(alpha: 0.2);
     }
   }
 

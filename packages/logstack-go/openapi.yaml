@@ -42,6 +42,10 @@ tags:
     description: Project and API key management
   - name: Alerts
     description: Alert rule configuration
+  - name: Organizations
+    description: Organization and member management
+  - name: Billing
+    description: Billing, invoices, and subscription management
 
 security:
   - BearerAuth: []
@@ -474,6 +478,375 @@ paths:
         "204":
           description: Alert deleted
 
+  /alerts/options:
+    get:
+      tags: [Alerts]
+      summary: Get alert configuration options
+      description: Returns available channels, trigger patterns, trigger levels, and cooldown options for building alert rule forms.
+      responses:
+        "200":
+          description: Alert options retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertOptions"
+        "401":
+          description: Unauthorized
+
+  /projects/{id}/logs/analytics:
+    get:
+      tags: [Logs]
+      summary: Get log analytics for a project
+      description: Returns aggregated log statistics (total count, count by level, error rate) and a 24-hour time series for a given project.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Project ID
+      responses:
+        "200":
+          description: Analytics data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogAnalytics"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden — not the project owner
+        "404":
+          description: Project not found
+
+  /projects/{id}/archive:
+    patch:
+      tags: [Projects]
+      summary: Archive a project
+      description: Sets `archived_at` to the current timestamp. Archived projects are excluded from the default `GET /projects` response.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Project ID
+      responses:
+        "200":
+          description: Project archived successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden — not the project owner
+        "404":
+          description: Project not found
+
+  /auth/qr/generate:
+    post:
+      tags: [Authentication]
+      summary: Generate a QR code for login
+      description: Generates a QR code image and session token. The web user must be authenticated. The mobile user scans the QR and confirms via `POST /auth/qr/{token}/confirm`.
+      responses:
+        "200":
+          description: QR session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QRGenerateResponse"
+        "401":
+          description: Unauthorized
+
+  /auth/qr/{token}/status:
+    get:
+      tags: [Authentication]
+      summary: Poll QR session status
+      description: Returns the current status of a QR login session (`pending` or `confirmed`). Returns 410 if the session has expired.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: QR session token
+      responses:
+        "200":
+          description: Session status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [pending, confirmed]
+        "410":
+          description: QR session expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: QR_EXPIRED
+                message: QR session has expired
+
+  /auth/qr/{token}/confirm:
+    post:
+      tags: [Authentication]
+      summary: Confirm a QR login session
+      description: Called by the mobile app after scanning the QR code. Validates credentials and marks the QR session as confirmed, returning a JWT token pair to the mobile caller.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: QR session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: QR session confirmed — JWT tokens returned to mobile caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "401":
+          description: Invalid credentials
+        "409":
+          description: QR session already used
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: QR_ALREADY_USED
+                message: This QR code has already been used
+        "410":
+          description: QR session expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: QR_EXPIRED
+                message: QR session has expired
+
+  /auth/accept-invite:
+    get:
+      tags: [Authentication]
+      summary: Accept an organization invite
+      description: Looks up the invite by token, validates expiry, creates an OrganizationMember record, and returns JWT tokens. Creates the user account if they don't exist yet.
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Invite token from the invitation email
+      responses:
+        "200":
+          description: Invite accepted — JWT tokens returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "410":
+          description: Invite expired or not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: INVITE_EXPIRED
+                message: This invite has expired
+
+  /organizations/{id}/invites:
+    post:
+      tags: [Organizations]
+      summary: Create an organization invite
+      description: Sends an invite email to the specified address. Caller must be org owner or admin. Requires `team_management` feature (pro+ tier).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Organization ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [member, admin]
+      responses:
+        "201":
+          description: Invite created and email sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invite"
+        "402":
+          description: Subscription upgrade required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: UPGRADE_REQUIRED
+                message: This feature requires a higher subscription tier.
+                upgradeUrl: /checkout
+        "403":
+          description: Insufficient role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      tags: [Organizations]
+      summary: List pending invites for an organization
+      description: Returns all invites (pending, accepted, revoked) for the org. Caller must be owner or admin.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Organization ID
+      responses:
+        "200":
+          description: Invites retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invites:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Invite"
+        "402":
+          description: Subscription upgrade required
+        "403":
+          description: Insufficient role
+
+  /organizations/{id}/invites/{inviteId}:
+    delete:
+      tags: [Organizations]
+      summary: Revoke an organization invite
+      description: Deletes a pending invite. Caller must be owner or admin. Returns 404 if the invite doesn't exist.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Organization ID
+        - name: inviteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Invite ID
+      responses:
+        "204":
+          description: Invite revoked
+        "403":
+          description: Insufficient role
+        "404":
+          description: Invite not found
+
+  /billing/invoices:
+    get:
+      tags: [Billing]
+      summary: List invoices for the authenticated user
+      description: Returns a paginated list of invoices ordered by `created_at DESC`.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number (20 invoices per page)
+      responses:
+        "200":
+          description: Invoices retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invoices:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Invoice"
+                  total:
+                    type: integer
+                    description: Total number of invoices
+                  page:
+                    type: integer
+        "401":
+          description: Unauthorized
+
+  /billing/invoices/{id}:
+    get:
+      tags: [Billing]
+      summary: Get a single invoice
+      description: Returns a single invoice by ID. Returns 403 if the invoice belongs to a different user.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Invoice ID
+      responses:
+        "200":
+          description: Invoice retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Invoice belongs to a different user
+
   /health:
     get:
       tags: [System]
@@ -580,6 +953,12 @@ components:
           type: string
         logCount:
           type: integer
+        archivedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when the project is archived. Null for active projects.
+          example: null
         createdAt:
           type: string
           format: date-time
@@ -661,6 +1040,201 @@ components:
           type: string
         enabled:
           type: boolean
+
+    AlertOptions:
+      type: object
+      description: Available configuration options for building alert rule forms
+      properties:
+        channels:
+          type: array
+          items:
+            type: string
+          example: [email, push, webhook]
+        triggerPatterns:
+          type: array
+          items:
+            type: string
+          example: [".*error.*", ".*exception.*", ".*fatal.*", ".*critical.*", ".*timeout.*", ".*panic.*"]
+        triggerLevels:
+          type: array
+          items:
+            type: string
+          example: [debug, info, warn, error, critical, fatal]
+        cooldownOptions:
+          type: array
+          items:
+            type: integer
+          example: [5, 10, 15, 30, 60]
+
+    TimeSeriesBucket:
+      type: object
+      description: A single hourly bucket in the log time series
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Start of the hour (RFC3339)
+          example: "2024-01-15T14:00:00Z"
+        count:
+          type: integer
+          format: int64
+          example: 42
+
+    LogAnalytics:
+      type: object
+      description: Aggregated log analytics for a project over the last 24 hours
+      properties:
+        totalCount:
+          type: integer
+          format: int64
+          description: Total number of log entries in the period
+          example: 1234
+        countByLevel:
+          type: object
+          description: Log count broken down by level
+          additionalProperties:
+            type: integer
+            format: int64
+          example:
+            info: 800
+            warn: 200
+            error: 150
+            critical: 84
+        errorRate:
+          type: number
+          format: double
+          description: Percentage of logs at error/critical/fatal level (0–100)
+          example: 19.2
+        timeSeries:
+          type: array
+          description: 24 hourly buckets (zero-filled for hours with no logs)
+          items:
+            $ref: "#/components/schemas/TimeSeriesBucket"
+
+    QRGenerateResponse:
+      type: object
+      description: Response from generating a QR login session
+      properties:
+        token:
+          type: string
+          format: uuid
+          description: The QR session token (also encoded in the QR image)
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        qrImageUrl:
+          type: string
+          description: Base64-encoded PNG data URL of the QR code image
+          example: "data:image/png;base64,iVBORw0KGgo..."
+
+    ErrorResponse:
+      type: object
+      description: Structured error response returned by new endpoints
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code
+          example: QR_EXPIRED
+        message:
+          type: string
+          description: Human-readable error description
+          example: QR session has expired
+        upgradeUrl:
+          type: string
+          description: Present only for UPGRADE_REQUIRED errors
+          example: /checkout
+
+    InvoiceLineItem:
+      type: object
+      description: A single line item within an invoice
+      properties:
+        description:
+          type: string
+          example: Pro Plan — January 2024
+        amount:
+          type: integer
+          description: Amount in the smallest currency unit (e.g. cents)
+          example: 2900
+        quantity:
+          type: integer
+          example: 1
+
+    Invoice:
+      type: object
+      description: A billing invoice
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        userId:
+          type: integer
+          example: 42
+        reference:
+          type: string
+          description: Unique payment reference (e.g. from Paystack)
+          example: "PS_20240115_001"
+        amountCents:
+          type: integer
+          description: Total invoice amount in the smallest currency unit
+          example: 2900
+        currency:
+          type: string
+          maxLength: 3
+          example: USD
+        status:
+          type: string
+          enum: [pending, paid, failed]
+          example: paid
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceLineItem"
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-01-15T10:30:00Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2024-01-15T09:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    Invite:
+      type: object
+      description: An organization membership invite
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        organizationId:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440003"
+        email:
+          type: string
+          format: email
+          example: newmember@example.com
+        role:
+          type: string
+          enum: [member, admin]
+          example: member
+        status:
+          type: string
+          enum: [pending, accepted, revoked]
+          example: pending
+        expiresAt:
+          type: string
+          format: date-time
+          description: Invite expires 48 hours after creation
+          example: "2024-01-17T09:00:00Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2024-01-15T09:00:00Z"
 
     Pagination:
       type: object

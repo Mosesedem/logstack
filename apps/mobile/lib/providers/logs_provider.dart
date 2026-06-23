@@ -65,7 +65,7 @@ class LogsNotifier extends StateNotifier<LogsState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final response = await _logService.getLogs(
-        projectId: _projectId,
+        projectId: _projectId!,
         level: state.levelFilter,
         search: state.searchQuery,
         offset: 0,
@@ -88,7 +88,7 @@ class LogsNotifier extends StateNotifier<LogsState> {
     state = state.copyWith(isLoading: true);
     try {
       final response = await _logService.getLogs(
-        projectId: _projectId,
+        projectId: _projectId!,
         level: state.levelFilter,
         search: state.searchQuery,
         offset: state.offset + 50,

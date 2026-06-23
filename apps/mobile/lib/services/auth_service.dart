@@ -55,6 +55,23 @@ class AuthService {
     return authResponse;
   }
 
+  /// Confirms a QR login session.
+  ///
+  /// Calls `POST /auth/qr/:token/confirm` with [email] and [password] credentials.
+  /// Returns a [TokenPair] containing the access and refresh tokens issued to
+  /// the mobile caller.
+  Future<TokenPair> confirmQR(
+    String token,
+    String email,
+    String password,
+  ) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/auth/qr/$token/confirm',
+      data: {'email': email, 'password': password},
+    );
+    return TokenPair.fromJson(response);
+  }
+
   Future<void> logout() async {
     // Unregister push token before logout
     await _unregisterPushToken();

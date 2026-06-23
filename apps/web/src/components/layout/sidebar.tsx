@@ -15,6 +15,7 @@ import {
   Loader2,
   Users,
   LayoutDashboard,
+  FlaskConical,
 } from "lucide-react";
 import type { UsageSummary } from "@/types";
 
@@ -22,6 +23,7 @@ export const navItems = [
   { href: "/overview", label: "Overview", icon: LayoutDashboard },
   { href: "/projects", label: "Projects", icon: FolderOpen },
   { href: "/logs", label: "Logs", icon: FileText },
+  { href: "/demo", label: "SDK Demo", icon: FlaskConical },
   { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/billing", label: "Billing", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },

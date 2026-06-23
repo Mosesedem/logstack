@@ -184,6 +184,23 @@ func NewProjectLogsHandler(queryBuilder *services.QueryBuilder) *ProjectLogsHand
 	}
 }
 
+// Analytics handles GET /v1/projects/:id/logs/analytics
+func (h *ProjectLogsHandler) Analytics(c *gin.Context) {
+	projectID := c.MustGet("projectID").(uuid.UUID)
+
+	result, err := h.queryBuilder.Analytics(projectID, 24)
+	if err != nil {
+		slog.Error("Failed to get log analytics", "error", err, "projectId", projectID)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "ANALYTICS_ERROR",
+			Message: "Failed to compute log analytics",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
 // Query handles GET /v1/projects/:id/logs
 func (h *ProjectLogsHandler) Query(c *gin.Context) {
 	projectID := c.MustGet("projectID").(uuid.UUID)
@@ -192,8 +209,8 @@ func (h *ProjectLogsHandler) Query(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	
 	// Enforce limits
-	if limit > 1000 {
-		limit = 1000
+	if limit > 200 {
+		limit = 200
 	}
 	if limit < 1 {
 		limit = 1

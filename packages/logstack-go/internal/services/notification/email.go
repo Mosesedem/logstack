@@ -223,6 +223,60 @@ func (e *EmailNotifier) SendUsageAlert(ctx context.Context, email, name string, 
 	return e.sendEmail(email, name, subject, htmlBody)
 }
 
+// SendUsageWarningEmail sends a simple usage warning email at a given percentage threshold
+func (e *EmailNotifier) SendUsageWarningEmail(ctx context.Context, email, name string, usagePct float64) error {
+	dashboardURL := fmt.Sprintf("%s/billing", e.baseURL)
+
+	var alertLevel, alertColor, actionText string
+	if usagePct >= 100 {
+		alertLevel = "Critical"
+		alertColor = "#DC2626"
+		actionText = "Your log ingestion has been limited. Please upgrade your plan to continue logging."
+	} else {
+		alertLevel = "Warning"
+		alertColor = "#F59E0B"
+		actionText = "You're approaching your monthly limit. Consider upgrading your plan to avoid disruption."
+	}
+
+	subject := fmt.Sprintf("Logstack Usage Alert: %.0f%% of Monthly Limit Reached", usagePct)
+	htmlBody := fmt.Sprintf(`
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<meta charset="utf-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		</head>
+		<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+			<div style="text-align: center; margin-bottom: 30px;">
+				<h1 style="color: #4F46E5; margin: 0;">Logstack</h1>
+			</div>
+
+			<div style="background-color: %s; color: white; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+				<h2 style="margin: 0; font-size: 18px;">%s: Usage Alert</h2>
+			</div>
+
+			<p>Hi %s,</p>
+
+			<p>Your Logstack account has reached <strong>%.0f%%</strong> of your monthly log quota.</p>
+
+			<p style="background-color: #FEF3C7; border-left: 4px solid %s; padding: 12px; margin: 20px 0;">
+				<strong>Action Required:</strong> %s
+			</p>
+
+			<div style="text-align: center; margin: 30px 0;">
+				<a href="%s" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">View Dashboard</a>
+			</div>
+
+			<hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+			<p style="color: #999; font-size: 12px;">You're receiving this email because your Logstack usage has crossed an important threshold.</p>
+		</body>
+		</html>
+	`, alertColor, alertLevel, name, usagePct, alertColor, actionText, dashboardURL)
+
+	return e.sendEmail(email, name, subject, htmlBody)
+}
+
 // formatNumber formats a number with thousand separators
 func formatNumber(n int64) string {
 	if n < 1000 {
@@ -276,4 +330,44 @@ func (e *EmailNotifier) SendPasswordResetEmail(ctx context.Context, email, name,
 	`, name, resetURL, resetURL)
 
 	return e.sendEmail(email, name, subject, htmlBody)
+}
+
+// SendInviteEmail sends an organization invite email to the specified address
+func (e *EmailNotifier) SendInviteEmail(ctx context.Context, email, orgName, role, inviteURL string) error {
+	subject := fmt.Sprintf("You've been invited to join %s on Logstack", orgName)
+	htmlBody := fmt.Sprintf(`
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<meta charset="utf-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		</head>
+		<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+			<div style="text-align: center; margin-bottom: 30px;">
+				<h1 style="color: #4F46E5; margin: 0;">Logstack</h1>
+			</div>
+
+			<h2>You've been invited!</h2>
+
+			<p>You've been invited to join <strong>%s</strong> on Logstack as a <strong>%s</strong>.</p>
+
+			<p>Click the button below to accept the invitation and get started:</p>
+
+			<div style="text-align: center; margin: 30px 0;">
+				<a href="%s" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">Accept Invitation</a>
+			</div>
+
+			<p style="color: #666; font-size: 14px;">Or copy and paste this link into your browser:</p>
+			<p style="color: #4F46E5; word-break: break-all; font-size: 14px;">%s</p>
+
+			<p style="color: #666; font-size: 14px;">This invitation will expire in 48 hours.</p>
+
+			<hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+			<p style="color: #999; font-size: 12px;">If you weren't expecting this invitation, you can safely ignore this email.</p>
+		</body>
+		</html>
+	`, orgName, role, inviteURL, inviteURL)
+
+	return e.sendEmail(email, "", subject, htmlBody)
 }

@@ -307,6 +307,29 @@ func (s *OrganizationService) RemoveMember(ctx context.Context, orgID uuid.UUID,
 	return nil
 }
 
+// GetOrgInvites returns all invites (pending and accepted) for an organization.
+// The caller must be an owner or admin of the org.
+func (s *OrganizationService) GetOrgInvites(ctx context.Context, orgID uuid.UUID, callerID uint) ([]models.Invite, error) {
+	canManage, err := s.CanManageMembers(ctx, orgID, callerID)
+	if err != nil {
+		return nil, err
+	}
+	if !canManage {
+		return nil, ErrInsufficientPermissions
+	}
+
+	var invites []models.Invite
+	err = s.db.WithContext(ctx).
+		Where("organization_id = ?", orgID).
+		Order("created_at DESC").
+		Find(&invites).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get invites: %w", err)
+	}
+
+	return invites, nil
+}
+
 // UpdateOrganization updates organization details
 func (s *OrganizationService) UpdateOrganization(ctx context.Context, orgID uuid.UUID, userID uint, name string) error {
 	// Verify user is owner or admin

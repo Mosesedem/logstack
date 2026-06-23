@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/screens/auth/login_screen.dart';
 import 'package:logstack_mobile/screens/auth/signup_screen.dart';
+import 'package:logstack_mobile/screens/auth/qr_scanner_screen.dart';
 import 'package:logstack_mobile/screens/home/home_screen.dart';
 import 'package:logstack_mobile/screens/logs/log_detail_screen.dart';
 import 'package:logstack_mobile/screens/logs/logs_screen.dart';
@@ -18,7 +19,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isAuthenticated = authState.isAuthenticated;
       final isAuthRoute = state.matchedLocation == '/login' ||
-          state.matchedLocation == '/signup';
+          state.matchedLocation == '/signup' ||
+          state.matchedLocation == '/qr-scanner';
 
       if (!isAuthenticated && !isAuthRoute) {
         return '/login';
@@ -36,6 +38,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/signup',
         builder: (context, state) => const SignupScreen(),
+      ),
+      GoRoute(
+        path: '/qr-scanner',
+        builder: (context, state) => const QRScannerScreen(),
       ),
       ShellRoute(
         builder: (context, state, child) => HomeScreen(child: child),

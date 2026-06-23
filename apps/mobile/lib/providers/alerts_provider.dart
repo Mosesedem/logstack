@@ -53,8 +53,8 @@ class AlertsNotifier extends StateNotifier<AlertsState> {
 
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final rules = await _alertService.getAlerts(_projectId);
-      final history = await _alertService.getAlertHistory(_projectId);
+      final rules = await _alertService.getAlerts(_projectId!);
+      final history = await _alertService.getAlertHistory(_projectId!);
       state = AlertsState(rules: rules, history: history);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -64,7 +64,7 @@ class AlertsNotifier extends StateNotifier<AlertsState> {
   Future<void> createAlert(Map<String, dynamic> data) async {
     if (_projectId == null) return;
 
-    final alert = await _alertService.createAlert(_projectId, data);
+    final alert = await _alertService.createAlert(_projectId!, data);
     state = state.copyWith(rules: [...state.rules, alert]);
   }
 

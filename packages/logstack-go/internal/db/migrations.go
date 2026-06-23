@@ -2,10 +2,79 @@ package db
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/mosesedem/logstack/internal/models"
 	"gorm.io/gorm"
 )
+
+// sqlMigration represents a single numbered SQL migration.
+type sqlMigration struct {
+	Version string
+	Up      string
+}
+
+// sqlMigrations holds every numbered migration in order.
+// Add new migrations here; they will be applied once and tracked in schema_migrations.
+var sqlMigrations = []sqlMigration{
+	{
+		Version: "015_alter_alert_rules_trigger_patterns",
+		Up: `
+ALTER TABLE alert_rules
+  ADD COLUMN IF NOT EXISTS trigger_patterns jsonb NOT NULL DEFAULT '[]';
+
+UPDATE alert_rules
+  SET trigger_patterns = jsonb_build_array(trigger_pattern)
+  WHERE trigger_patterns = '[]' AND trigger_pattern IS NOT NULL AND trigger_pattern != '';
+`,
+	},
+	{
+		Version: "016_alter_projects_add_archived_at",
+		Up: `
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived_at timestamptz;
+
+CREATE INDEX IF NOT EXISTS idx_projects_archived_at ON projects(archived_at);
+`,
+	},
+	{
+		Version: "017_create_invites",
+		Up: `
+CREATE TABLE IF NOT EXISTS invites (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    email           varchar(255) NOT NULL,
+    role            varchar(50)  NOT NULL,
+    token           varchar(255) UNIQUE NOT NULL,
+    status          varchar(20)  NOT NULL DEFAULT 'pending',
+    expires_at      timestamptz  NOT NULL,
+    created_at      timestamptz  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token);
+CREATE INDEX IF NOT EXISTS idx_invites_org_id ON invites(organization_id);
+`,
+	},
+	{
+		Version: "018_create_invoices",
+		Up: `
+CREATE TABLE IF NOT EXISTS invoices (
+    id           uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id      integer      NOT NULL REFERENCES users(id),
+    reference    varchar(255) UNIQUE NOT NULL,
+    amount_cents integer      NOT NULL,
+    currency     varchar(3)   NOT NULL,
+    status       varchar(20)  NOT NULL DEFAULT 'pending',
+    line_items   jsonb        NOT NULL DEFAULT '[]',
+    paid_at      timestamptz,
+    created_at   timestamptz  NOT NULL DEFAULT NOW(),
+    updated_at   timestamptz  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_reference ON invoices(reference);
+`,
+	},
+}
 
 func ensureEnumType(db *gorm.DB, name, values string) error {
 	var exists bool
@@ -25,6 +94,60 @@ func ensureEnumType(db *gorm.DB, name, values string) error {
 	return nil
 }
 
+// ensureMigrationsTable creates the schema_migrations tracking table if it does not exist.
+func ensureMigrationsTable(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version     varchar(255) PRIMARY KEY,
+			applied_at  timestamptz  NOT NULL DEFAULT NOW()
+		)
+	`).Error
+}
+
+// appliedVersions returns the set of migration versions already recorded in schema_migrations.
+func appliedVersions(db *gorm.DB) (map[string]bool, error) {
+	var versions []string
+	if err := db.Raw("SELECT version FROM schema_migrations").Scan(&versions).Error; err != nil {
+		return nil, fmt.Errorf("query applied migrations: %w", err)
+	}
+	set := make(map[string]bool, len(versions))
+	for _, v := range versions {
+		set[v] = true
+	}
+	return set, nil
+}
+
+// runSQLMigrations applies any pending numbered migrations in order.
+func runSQLMigrations(db *gorm.DB) error {
+	if err := ensureMigrationsTable(db); err != nil {
+		return fmt.Errorf("ensure migrations table: %w", err)
+	}
+
+	applied, err := appliedVersions(db)
+	if err != nil {
+		return err
+	}
+
+	for _, m := range sqlMigrations {
+		if applied[m.Version] {
+			continue
+		}
+
+		slog.Info("Applying SQL migration", "version", m.Version)
+		if err := db.Exec(m.Up).Error; err != nil {
+			return fmt.Errorf("apply migration %s: %w", m.Version, err)
+		}
+
+		if err := db.Exec(
+			"INSERT INTO schema_migrations (version) VALUES (?)", m.Version,
+		).Error; err != nil {
+			return fmt.Errorf("record migration %s: %w", m.Version, err)
+		}
+	}
+
+	return nil
+}
+
 func RunMigrations(db *gorm.DB) error {
 	if err := ensureEnumType(db, "subscription_tier", "'free', 'starter', 'pro', 'enterprise'"); err != nil {
 		return err
@@ -33,8 +156,8 @@ func RunMigrations(db *gorm.DB) error {
 		return err
 	}
 
-	// Run AutoMigrate for all tables
-	return db.AutoMigrate(
+	// Run AutoMigrate for base model tables.
+	if err := db.AutoMigrate(
 		&models.User{},
 		&models.Organization{},
 		&models.OrganizationMember{},
@@ -46,5 +169,10 @@ func RunMigrations(db *gorm.DB) error {
 		&models.AlertHistory{},
 		&models.Subscription{},
 		&models.UsageLog{},
-	)
+	); err != nil {
+		return err
+	}
+
+	// Run numbered SQL migrations (015–018) in order.
+	return runSQLMigrations(db)
 }

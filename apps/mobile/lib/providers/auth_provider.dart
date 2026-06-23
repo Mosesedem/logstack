@@ -91,4 +91,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _authService.logout();
     state = AuthState();
   }
+
+  /// Stores a [TokenPair] received from QR login and updates auth state.
+  ///
+  /// Persists the access token via [StorageService] and reloads the current
+  /// user from local storage so the UI reflects the authenticated state.
+  Future<void> setTokensFromPair(TokenPair pair) async {
+    await _storage.setToken(pair.accessToken);
+    // Attempt to load user profile from storage (populated if QR confirm
+    // response also returns user data). Fall back to a minimal reload.
+    final user = await _authService.getCurrentUser();
+    state = AuthState(user: user);
+  }
 }

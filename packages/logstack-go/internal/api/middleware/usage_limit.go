@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,21 +12,24 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/mosesedem/logstack/internal/models"
+	"github.com/mosesedem/logstack/internal/services/notification"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 // UsageLimitMiddleware enforces tier-based usage limits on log ingestion
 type UsageLimitMiddleware struct {
-	db    *gorm.DB
-	redis *redis.Client
+	db            *gorm.DB
+	redis         *redis.Client
+	emailNotifier *notification.EmailNotifier
 }
 
 // NewUsageLimitMiddleware creates a new usage limit middleware
-func NewUsageLimitMiddleware(db *gorm.DB, redis *redis.Client) *UsageLimitMiddleware {
+func NewUsageLimitMiddleware(db *gorm.DB, redis *redis.Client, emailNotifier *notification.EmailNotifier) *UsageLimitMiddleware {
 	return &UsageLimitMiddleware{
-		db:    db,
-		redis: redis,
+		db:            db,
+		redis:         redis,
+		emailNotifier: emailNotifier,
 	}
 }
 
@@ -66,7 +70,7 @@ func (m *UsageLimitMiddleware) Enforce() gin.HandlerFunc {
 
 		// Get tier limit
 		limit := tier.LogLimit()
-		
+
 		// Enterprise tier has unlimited logs
 		if limit < 0 {
 			c.Next()
@@ -86,21 +90,48 @@ func (m *UsageLimitMiddleware) Enforce() gin.HandlerFunc {
 			}
 		}
 
-		// Check if limit exceeded
+		// Compute usage percentage
+		usagePct := float64(currentUsage) / float64(limit) * 100
+
+		// --- 90% threshold: send a one-time warning email ---
+		if usagePct >= 90 && m.redis != nil {
+			month := models.GetCurrentMonth().Format("2006-01")
+			warnKey := fmt.Sprintf("usage:warned:90:%d:%s", ownerID, month)
+			endOfMonth := time.Date(time.Now().UTC().Year(), time.Now().UTC().Month()+1, 1, 0, 0, 0, 0, time.UTC)
+			ttl := time.Until(endOfMonth)
+
+			set, setnxErr := m.redis.SetNX(ctx, warnKey, "1", ttl).Result()
+			if setnxErr == nil && set && m.emailNotifier != nil {
+				// Key was newly set — first time crossing 90% this month
+				go func() {
+					bgCtx := context.Background()
+					var user models.User
+					if dbErr := m.db.WithContext(bgCtx).Select("email, name").Where("id = ?", ownerID).First(&user).Error; dbErr != nil {
+						log.Printf("UsageLimitMiddleware: failed to fetch user %d for 90%% warning: %v", ownerID, dbErr)
+						return
+					}
+					if emailErr := m.emailNotifier.SendUsageWarningEmail(bgCtx, user.Email, user.Name, usagePct); emailErr != nil {
+						log.Printf("UsageLimitMiddleware: failed to send 90%% usage warning to user %d: %v", ownerID, emailErr)
+					}
+				}()
+			}
+		}
+
+		// --- 100% threshold: abort with HTTP 429 ---
 		if currentUsage >= limit {
+			retryAfter := getSecondsUntilMonthEnd()
 			c.Header("X-RateLimit-Limit", strconv.FormatInt(limit, 10))
 			c.Header("X-RateLimit-Remaining", "0")
-			c.Header("X-RateLimit-Reset", getMonthEndTimestamp())
-			c.Header("Retry-After", strconv.Itoa(getSecondsUntilMonthEnd()))
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
 
 			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error":       "monthly log limit exceeded",
-				"code":        "USAGE_LIMIT_EXCEEDED",
+				"error":        "monthly log limit exceeded",
+				"code":         "USAGE_LIMIT_EXCEEDED",
 				"currentUsage": currentUsage,
-				"limit":       limit,
-				"tier":        tier,
-				"upgradeUrl":  "/dashboard/billing",
-				"message":     fmt.Sprintf("You have used %d of %d logs this month. Please upgrade your plan to continue.", currentUsage, limit),
+				"limit":        limit,
+				"tier":         tier,
+				"upgradeUrl":   "/dashboard/billing",
+				"message":      fmt.Sprintf("You have used %d of %d logs this month. Please upgrade your plan to continue.", currentUsage, limit),
 			})
 			c.Abort()
 			return
