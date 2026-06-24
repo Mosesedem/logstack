@@ -31,6 +31,12 @@ type Config struct {
 	FCMServiceAccountPath string
 	FCMProjectID          string
 	BaseURL               string
+	MailcowAPIKey         string
+	MailcowAPIURL         string
+	ResendAPIKey          string
+	ZohoClientID          string
+	ZohoClientSecret      string
+	ZohoRefreshToken      string
 
 	// Server
 	Port           string
@@ -83,6 +89,12 @@ func Load() (*Config, error) {
 		FCMServiceAccountPath: getEnv("FCM_SERVICE_ACCOUNT_PATH", ""),
 		FCMProjectID:          getEnv("FCM_PROJECT_ID", ""),
 		BaseURL:               getEnv("BASE_URL", ""),
+		MailcowAPIKey:         getEnv("MAILCOW_API_KEY", ""),
+		MailcowAPIURL:         getEnv("MAILCOW_API_URL", ""),
+		ResendAPIKey:          getEnv("RESEND_API_KEY", ""),
+		ZohoClientID:          getEnv("ZOHO_CLIENT_ID", ""),
+		ZohoClientSecret:      getEnv("ZOHO_CLIENT_SECRET", ""),
+		ZohoRefreshToken:      getEnv("ZOHO_REFRESH_TOKEN", ""),
 
 		// Server
 		Port:         getEnv("PORT", ""),

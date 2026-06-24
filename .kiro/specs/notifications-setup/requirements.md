@@ -63,7 +63,7 @@ The system builds on the existing `notification` package in `packages/logstack-g
 1. WHEN a user is authenticated and a new FCM token is available, THE `NotificationService` SHALL call `POST /v1/mobile/push-token` with the token and platform (`ios` or `android`) in the request body.
 2. WHEN `POST /v1/mobile/push-token` is called, THE Go backend SHALL upsert a `push_tokens` record associating the token with the authenticated user's ID, platform, and a `created_at` / `updated_at` timestamp.
 3. WHEN a user logs out, THE Flutter app SHALL call `DELETE /v1/mobile/push-token` with the current token to remove it from the backend.
-4. IF the `POST /v1/mobile/push-token` request fails with a network error, THEN THE `NotificationService` SHALL retry the registration up to 3 times with exponential back-off before logging the failure.
+4. IF the `POST /v1/mobile/push-token` request fails for any reason (network error, timeout, or non-2xx response), THEN THE `NotificationService` SHALL retry the registration up to 3 times with exponential back-off before logging the failure.
 5. WHEN the FCM token is refreshed (via `onTokenRefresh`), THE `NotificationService` SHALL automatically call `POST /v1/mobile/push-token` with the new token without requiring user interaction.
 6. THE Go backend SHALL enforce a maximum of 10 active `push_tokens` records per user, removing the oldest record when the limit is exceeded.
 
@@ -75,7 +75,7 @@ The system builds on the existing `notification` package in `packages/logstack-g
 
 #### Acceptance Criteria
 
-1. THE `Push_Notifier` SHALL authenticate with FCM using a Firebase service account JSON file whose path is read from the `FCM_SERVICE_ACCOUNT_PATH` environment variable.
+1. WHEN the `FCM_SERVICE_ACCOUNT_PATH` environment variable points to a valid, readable service account JSON file, THE `Push_Notifier` SHALL authenticate with FCM using that file, confirm successful authentication, and log the Firebase project ID.
 2. WHEN the `FCM_SERVICE_ACCOUNT_PATH` environment variable is empty or the file is missing, THE `Push_Notifier` SHALL log a warning and disable push dispatch without causing the backend to fail startup.
 3. WHEN an alert is triggered for the `push` channel, THE `Push_Notifier` SHALL send an FCM message via the `Firebase_Admin_SDK` to every `Push_Token` associated with the alert recipient.
 4. WHEN sending an FCM message to iOS, THE `Push_Notifier` SHALL set `apns-priority: 10` in the APNS headers and `sound: default` in the APNS payload to ensure foreground and background delivery.
@@ -93,9 +93,10 @@ The system builds on the existing `notification` package in `packages/logstack-g
 #### Acceptance Criteria
 
 1. THE `Email_Notifier` SHALL attempt to deliver every email via the `Provider_Chain` in the fixed order: Mailcow → Brevo → Resend → Zoho.
-2. WHEN a provider returns a 4xx or 5xx HTTP status code or a connection/timeout error, THE `Email_Notifier` SHALL log the failure with provider name and status, then attempt the next provider in the chain.
-3. WHEN a provider successfully delivers an email (2xx response), THE `Email_Notifier` SHALL log the successful provider name and return without attempting subsequent providers.
-4. IF all four providers in the `Provider_Chain` fail to deliver an email, THEN THE `Email_Notifier` SHALL return a combined error listing all provider failures so the caller can handle or retry.
+2. WHEN a provider returns a 4xx, 5xx, or 3xx HTTP status code, or a connection/timeout error, THE `Email_Notifier` SHALL log the failure with provider name and status, then attempt the next provider in the chain.
+3. WHEN a provider returns a 2xx HTTP status code, THE `Email_Notifier` SHALL parse the response body to confirm the delivery was accepted; IF the body indicates an error, THEN THE `Email_Notifier` SHALL treat it as a failure and attempt the next provider.
+4. WHEN the response body confirms successful delivery, THE `Email_Notifier` SHALL log the successful provider name and return without attempting subsequent providers.
+4. IF all four providers in the `Provider_Chain` fail to deliver an email (including 2xx responses with error bodies), THEN THE `Email_Notifier` SHALL return a combined error listing all provider failures so the caller can handle or retry.
 5. THE `Email_Notifier` SHALL read provider credentials from the following environment variables:
    - `MAILCOW_API_KEY` and `MAILCOW_API_URL` for Mailcow
    - `BREVO_API_KEY` for Brevo (existing)
@@ -103,7 +104,7 @@ The system builds on the existing `notification` package in `packages/logstack-g
    - `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, and `ZOHO_REFRESH_TOKEN` for Zoho
 6. WHERE a provider's environment variables are absent or empty, THE `Email_Notifier` SHALL skip that provider silently and move to the next one in the chain, so the system degrades gracefully when not all providers are configured.
 7. THE `Email_Notifier` SHALL set a per-provider HTTP timeout of 10 seconds so a slow provider does not stall delivery to subsequent providers.
-8. WHEN the `Email_Notifier` is initialised, THE `Email_Notifier` SHALL validate that at least one provider in the `Provider_Chain` has valid credentials; IF no provider is configured, THEN THE `Email_Notifier` SHALL log a warning and all send calls SHALL return a descriptive error.
+8. WHEN the `Email_Notifier` is initialised, THE `Email_Notifier` SHALL validate that at least one provider in the `Provider_Chain` has valid credentials; IF no provider is configured, THEN THE `Email_Notifier` SHALL log a warning at startup AND all subsequent send calls SHALL return a descriptive error without attempting network requests.
 
 ---
 
@@ -127,8 +128,8 @@ The system builds on the existing `notification` package in `packages/logstack-g
 #### Acceptance Criteria
 
 1. WHEN Mailcow fails and `BREVO_API_KEY` is set, THE `Email_Notifier` SHALL call `POST https://api.brevo.com/v3/smtp/email` with the `api-key` header.
-2. WHEN the Brevo API returns a 2xx response, THE `Email_Notifier` SHALL treat the send as successful and stop the `Provider_Chain`.
-3. IF the Brevo API returns a non-2xx status, THEN THE `Email_Notifier` SHALL fall through to Resend.
+2. WHEN the Brevo API returns a 2xx response and the response body confirms acceptance, THE `Email_Notifier` SHALL treat the send as successful and stop the `Provider_Chain`.
+3. IF the Brevo API returns a non-2xx or 3xx status, or returns 2xx with an error body, THEN THE `Email_Notifier` SHALL fall through to Resend.
 
 ---
 
@@ -139,8 +140,8 @@ The system builds on the existing `notification` package in `packages/logstack-g
 #### Acceptance Criteria
 
 1. WHEN Brevo fails and `RESEND_API_KEY` is set, THE `Email_Notifier` SHALL call `POST https://api.resend.com/emails` with the `Authorization: Bearer {RESEND_API_KEY}` header.
-2. WHEN the Resend API returns a 2xx response, THE `Email_Notifier` SHALL treat the send as successful and stop the `Provider_Chain`.
-3. IF the Resend API returns a non-2xx status, THEN THE `Email_Notifier` SHALL fall through to Zoho.
+2. WHEN the Resend API returns a 2xx response and the response body confirms acceptance, THE `Email_Notifier` SHALL treat the send as successful and stop the `Provider_Chain`.
+3. IF the Resend API returns a non-2xx status or returns 2xx with an error body, THEN THE `Email_Notifier` SHALL fall through to Zoho.
 
 ---
 
@@ -152,8 +153,8 @@ The system builds on the existing `notification` package in `packages/logstack-g
 
 1. WHEN Resend fails and `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, and `ZOHO_REFRESH_TOKEN` are set, THE `Email_Notifier` SHALL obtain a fresh OAuth2 access token from `https://accounts.zoho.com/oauth/v2/token` using the refresh-token grant.
 2. WHEN the Zoho access token is obtained, THE `Email_Notifier` SHALL call `POST https://mail.zoho.com/api/accounts/{accountId}/messages` with the `Authorization: Zoho-oauthtoken {token}` header.
-3. WHEN the Zoho API returns a 2xx response, THE `Email_Notifier` SHALL treat the send as successful.
-4. IF the Zoho API returns a non-2xx status or the token request fails, THEN THE `Email_Notifier` SHALL return the combined error from all four providers.
+3. WHEN the Zoho API returns a 2xx response and the response body confirms acceptance, THE `Email_Notifier` SHALL treat the send as successful.
+4. IF the Zoho API returns a non-2xx status, returns 2xx with an error body, or the token request fails, THEN THE `Email_Notifier` SHALL return the combined error from all four providers.
 
 ---
 
@@ -166,7 +167,7 @@ The system builds on the existing `notification` package in `packages/logstack-g
 1. THE `Notification_Service` SHALL be initialised in the application bootstrap (i.e., `main.go`) using all available provider credentials read from the environment.
 2. WHEN the Go backend starts, THE `Notification_Service` SHALL log which email providers are active (configured with valid credentials) and whether the `Push_Notifier` is enabled.
 3. THE `Notification_Service` SHALL expose a `GetEmailNotifier()` method that returns the configured `Email_Notifier` for use by auth handlers, usage-limit middleware, and organisation handlers.
-4. WHEN `FCM_SERVICE_ACCOUNT_PATH` points to a valid service account file, THE `Notification_Service` SHALL initialise the `Push_Notifier` with the `Firebase_Admin_SDK` and log the Firebase project ID.
+4. WHEN `FCM_SERVICE_ACCOUNT_PATH` points to a valid, readable service account file and authentication succeeds, THE `Notification_Service` SHALL initialise the `Push_Notifier` with the `Firebase_Admin_SDK` and log the Firebase project ID.
 5. THE `config.Config` struct SHALL include fields for `MailcowAPIKey`, `MailcowAPIURL`, `ResendAPIKey`, `ZohoClientID`, `ZohoClientSecret`, and `ZohoRefreshToken` read from the corresponding environment variables.
 6. THE `.env.example` file SHALL document all new environment variables (`MAILCOW_API_KEY`, `MAILCOW_API_URL`, `RESEND_API_KEY`, `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_REFRESH_TOKEN`, `FCM_SERVICE_ACCOUNT_PATH`, `FCM_PROJECT_ID`) with clear descriptions and placeholder values.
 

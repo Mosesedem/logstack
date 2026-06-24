@@ -12,9 +12,17 @@ import (
 	"gorm.io/gorm"
 )
 
+// fcmClient is an interface for the Firebase messaging client, allowing test injection.
+type fcmClient interface {
+	Send(ctx context.Context, msg *messaging.Message) (string, error)
+}
+
 type PushNotifier struct {
-	client *messaging.Client
-	db     *gorm.DB
+	client           fcmClient
+	db               *gorm.DB
+	// isInvalidTokenErr overrides the Firebase error check in tests.
+	// When nil, the production check (messaging.IsRegistrationTokenNotRegistered || messaging.IsInvalidArgument) is used.
+	isInvalidTokenErr func(error) bool
 }
 
 // NewPushNotifier creates a new push notifier using Firebase Admin SDK with HTTP v1 API.
@@ -51,6 +59,36 @@ func NewPushNotifier(serviceAccountPath string, projectID string, db *gorm.DB) (
 	}, nil
 }
 
+// buildFCMMessage constructs a Firebase messaging.Message with the correct
+// iOS (APNS) and Android priority settings for reliable delivery.
+func buildFCMMessage(token string, title, body string, data map[string]string) *messaging.Message {
+	return &messaging.Message{
+		Token: token,
+		Notification: &messaging.Notification{
+			Title: title,
+			Body:  body,
+		},
+		Data: data,
+		Android: &messaging.AndroidConfig{
+			Priority: "high",
+			Notification: &messaging.AndroidNotification{
+				Sound:    "default",
+				Priority: messaging.PriorityHigh,
+			},
+		},
+		APNS: &messaging.APNSConfig{
+			Headers: map[string]string{
+				"apns-priority": "10",
+			},
+			Payload: &messaging.APNSPayload{
+				Aps: &messaging.Aps{
+					Sound: "default",
+				},
+			},
+		},
+	}
+}
+
 func (p *PushNotifier) Send(ctx context.Context, rule *models.AlertRule, log *models.Log) error {
 	if p.client == nil {
 		return fmt.Errorf("FCM client not initialized")
@@ -69,50 +107,45 @@ func (p *PushNotifier) Send(ctx context.Context, rule *models.AlertRule, log *mo
 	title := fmt.Sprintf("Logstack Alert: %s", rule.Name)
 	body := fmt.Sprintf("[%s] %s", log.Level, truncate(log.Message, 100))
 
+	// Resolve invalid-token checker: use injected one in tests, real SDK functions in production.
+	checker := p.isInvalidTokenErr
+	if checker == nil {
+		checker = func(err error) bool {
+			return messaging.IsRegistrationTokenNotRegistered(err) || messaging.IsInvalidArgument(err)
+		}
+	}
+
 	// Send to all tokens
 	successCount := 0
 	for _, token := range tokens {
-		message := &messaging.Message{
-			Token: token.Token,
-			Notification: &messaging.Notification{
-				Title: title,
-				Body:  body,
-			},
-			Data: map[string]string{
-				"logId":     fmt.Sprintf("%d", log.ID),
-				"projectId": log.ProjectID.String(),
-				"ruleId":    fmt.Sprintf("%d", rule.ID),
-				"level":     string(log.Level),
-			},
-			Android: &messaging.AndroidConfig{
-				Priority: "high",
-				Notification: &messaging.AndroidNotification{
-					Sound: "default",
-					Priority: messaging.PriorityHigh,
-				},
-			},
-			APNS: &messaging.APNSConfig{
-				Headers: map[string]string{
-					"apns-priority": "10",
-				},
-				Payload: &messaging.APNSPayload{
-					Aps: &messaging.Aps{
-						Sound: "default",
-					},
-				},
-			},
+		data := map[string]string{
+			"logId":     fmt.Sprintf("%d", log.ID),
+			"projectId": log.ProjectID.String(),
+			"ruleId":    fmt.Sprintf("%d", rule.ID),
+			"level":     string(log.Level),
 		}
+		message := buildFCMMessage(token.Token, title, body, data)
 
 		// Send message using FCM HTTP v1 API
 		response, err := p.client.Send(ctx, message)
 		if err != nil {
-			slog.Error("Failed to send push notification",
-				"token", maskToken(token.Token),
-				"error", err,
-			)
+			if checker(err) {
+				p.db.Where("token = ?", token.Token).Delete(&models.PushToken{})
+				slog.Warn("deleted stale push token",
+					"token", maskToken(token.Token),
+					"error", err,
+					"token_removed", true,
+				)
+			} else {
+				slog.Error("push send failed",
+					"token", maskToken(token.Token),
+					"error", err,
+					"token_removed", false,
+				)
+			}
 			continue
 		}
-		
+
 		slog.Info("Push notification sent successfully",
 			"token", maskToken(token.Token),
 			"messageId", response,

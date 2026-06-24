@@ -3,7 +3,9 @@ package notification
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
+	"github.com/mosesedem/logstack/internal/config"
 	"github.com/mosesedem/logstack/internal/models"
 	"gorm.io/gorm"
 )
@@ -14,29 +16,40 @@ type Service struct {
 	webhook *WebhookNotifier
 }
 
-func NewNotificationService(brevoAPIKey, fcmServiceAccountPath, fcmProjectID, baseURL string) *Service {
+// NewNotificationService creates a Service without a database (no push support).
+// Deprecated: prefer NewNotificationServiceWithDB.
+func NewNotificationService(cfg *config.Config) *Service {
 	return &Service{
-		email:   NewEmailNotifier(brevoAPIKey, baseURL),
+		email:   NewEmailNotifier(cfg, cfg.BaseURL),
 		webhook: NewWebhookNotifier(),
 	}
 }
 
-func NewNotificationServiceWithDB(brevoAPIKey, fcmServiceAccountPath, fcmProjectID, baseURL string, db *gorm.DB) *Service {
-	push, err := NewPushNotifier(fcmServiceAccountPath, fcmProjectID, db)
+// NewNotificationServiceWithDB creates a fully-wired Service with email, push, and webhook support.
+func NewNotificationServiceWithDB(cfg *config.Config, db *gorm.DB) *Service {
+	email := NewEmailNotifier(cfg, cfg.BaseURL)
+
+	push, err := NewPushNotifier(cfg.FCMServiceAccountPath, cfg.FCMProjectID, db)
 	if err != nil {
-		// Log error but don't fail - push notifications will just be disabled
-		fmt.Printf("Warning: Failed to initialize push notifier: %v\n", err)
+		slog.Warn("push notifier disabled", "error", err)
 		push = nil
 	}
-	
+
+	if push != nil && push.client != nil {
+		slog.Info("push notifier enabled", "firebase_project_id", cfg.FCMProjectID)
+	} else {
+		slog.Warn("push notifier disabled: FCM_SERVICE_ACCOUNT_PATH not set or invalid")
+	}
+
 	return &Service{
-		email:   NewEmailNotifier(brevoAPIKey, baseURL),
+		email:   email,
 		push:    push,
 		webhook: NewWebhookNotifier(),
 	}
 }
 
-// GetEmailNotifier returns the email notifier for direct use
+// GetEmailNotifier returns the email notifier for direct use by auth handlers,
+// usage-limit middleware, and organisation handlers.
 func (s *Service) GetEmailNotifier() *EmailNotifier {
 	return s.email
 }

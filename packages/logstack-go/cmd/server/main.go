@@ -53,13 +53,7 @@ func main() {
 	}
 
 	// Initialize notification service
-	notifier := notification.NewNotificationServiceWithDB(
-		cfg.BrevoAPIKey,
-		cfg.FCMServiceAccountPath,
-		cfg.FCMProjectID,
-		cfg.BaseURL,
-		db,
-	)
+	notifier := notification.NewNotificationServiceWithDB(cfg, db)
 
 	// Initialize services with gorm.DB
 	ingestor := services.NewIngestor(db, rdb)

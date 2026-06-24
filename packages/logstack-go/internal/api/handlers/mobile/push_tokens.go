@@ -62,6 +62,16 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		DeviceType: req.DeviceType,
 	}
 
+	// Enforce 10-token cap: evict oldest token before inserting a new one
+	var tokenCount int64
+	h.db.Model(&models.PushToken{}).Where("user_id = ?", userID).Count(&tokenCount)
+	if tokenCount >= 10 {
+		var oldest models.PushToken
+		if err := h.db.Where("user_id = ?", userID).Order("created_at ASC").First(&oldest).Error; err == nil {
+			h.db.Delete(&oldest)
+		}
+	}
+
 	if err := h.db.Create(&token).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
