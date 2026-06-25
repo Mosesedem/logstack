@@ -187,84 +187,196 @@ interface LogAnalyticsProps {
 
 ---
 
-## 3. Mobile QR Code Login
+## 3. Mobile App Linking via QR Code and PIN
 
-### 3.1 Redis QR Session State Machine
+### 3.1 Concept Correction
+
+The QR/PIN flow is **not a login screen feature**. It is a **"Link Mobile App"** action available to an already-authenticated web user from the dashboard user menu (e.g. top-right avatar dropdown → "Link Mobile App"). The mobile app presents QR and PIN as first-time linking options alongside email/password. Once linked, the mobile session is **permanent** — the refresh token never expires unless the user explicitly logs out or the account is blocked.
+
+### 3.2 Redis QR Session State Machine
 
 ```
-States: pending → scanned → confirmed | expired
+States: pending → confirmed | expired
 Key pattern: qr:session:<token>
-Value: JSON { status, userID (after confirm), createdAt }
-TTL: 5 minutes
+Value: JSON { status, pin, userID (after confirm), createdAt }
+TTL: 10 minutes
 ```
 
-### 3.2 New Go Endpoints
+A secondary lookup index is stored so PIN confirmation can resolve the token:
+```
+Key pattern: qr:pin:<pin>
+Value: <token>
+TTL: 10 minutes (same as session)
+```
+
+### 3.3 Non-Expiring Mobile Refresh Token
+
+Mobile refresh tokens are stored in a dedicated table (`mobile_refresh_tokens`) with no `expires_at` constraint. They are invalidated only by:
+- `POST /v1/auth/logout` (explicit user logout)
+- Admin account block action
+
+```sql
+-- Migration: 019_create_mobile_refresh_tokens.up.sql
+CREATE TABLE mobile_refresh_tokens (
+    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token      varchar(512) UNIQUE NOT NULL,
+    device_info text,
+    revoked    boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_mrt_user_id ON mobile_refresh_tokens(user_id);
+CREATE INDEX idx_mrt_token   ON mobile_refresh_tokens(token);
+```
+
+Go model:
+```go
+// internal/models/mobile_refresh_token.go
+type MobileRefreshToken struct {
+    ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+    UserID     uint      `gorm:"not null;index"`
+    Token      string    `gorm:"size:512;uniqueIndex;not null"`
+    DeviceInfo string    `gorm:"type:text"`
+    Revoked    bool      `gorm:"default:false"`
+    CreatedAt  time.Time
+}
+```
+
+### 3.4 New Go Endpoints
 
 All under `v1/auth` group:
 
 ```
-POST /v1/auth/qr/generate   (JWT-protected — web user generates QR)
-GET  /v1/auth/qr/:token/status  (public — web polls for mobile confirmation)
-POST /v1/auth/qr/:token/confirm (public — mobile confirms with credentials)
+POST /v1/auth/qr/generate        (JWT-protected — authenticated web user triggers)
+GET  /v1/auth/qr/:token/status   (JWT-protected — web polls from the open dialog)
+POST /v1/auth/qr/:token/confirm  (public — mobile QR scan path)
+POST /v1/auth/qr/pin-confirm     (public — mobile PIN entry path)
+POST /v1/auth/refresh            (public — silent mobile token refresh)
+POST /v1/auth/logout             (JWT-protected — revokes mobile refresh token)
 ```
 
 ```go
-// internal/api/handlers/auth.go — new QR methods on AuthHandler
+// internal/api/handlers/auth.go — new QR/PIN methods on AuthHandler
 
 type QRSession struct {
-    Status    string `json:"status"` // "pending" | "confirmed" | "expired"
+    Status    string `json:"status"` // "pending" | "confirmed"
+    PIN       string `json:"pin"`    // 6-digit string, omitted from status response
     UserID    uint   `json:"userId,omitempty"`
     CreatedAt int64  `json:"createdAt"`
 }
 
+type QRGenerateResponse struct {
+    Token      string `json:"token"`
+    PIN        string `json:"pin"`        // 6-digit string shown on web UI
+    QRImageUrl string `json:"qrImageUrl"` // base64 PNG data URL
+}
+
 // GenerateQR: POST /v1/auth/qr/generate (JWT-protected)
 // 1. Generate UUID token
-// 2. Store QRSession{status:"pending"} in Redis with 5-min TTL: key = "qr:session:" + token
-// 3. Generate QR image encoding URL: <FRONTEND_URL>/auth/qr-login?token=<token>
-// 4. Return { token, qrImageUrl: "<base64 PNG data URL>" }
-// Uses: github.com/skip2/go-qrcode to generate PNG
+// 2. Generate cryptographically random 6-digit PIN (crypto/rand, zero-padded)
+// 3. Store QRSession{status:"pending", pin:pin} in Redis:
+//    - key "qr:session:<token>" with 10-min TTL
+//    - key "qr:pin:<pin>" = token with 10-min TTL (for PIN lookup)
+// 4. Encode URL: <FRONTEND_URL>/link-mobile?token=<token>
+// 5. Generate QR PNG from that URL using go-qrcode
+// 6. Return QRGenerateResponse
 
-// GetQRStatus: GET /v1/auth/qr/:token/status (public)
-// 1. Read QRSession from Redis
-// 2. If not found: 410 QR_EXPIRED
-// 3. Return { status }
+// GetQRStatus: GET /v1/auth/qr/:token/status (JWT-protected — same web user)
+// 1. Read QRSession from Redis; if missing: 410 QR_EXPIRED
+// 2. Return { status } only (never return pin or userID here)
 
-// ConfirmQR: POST /v1/auth/qr/:token/confirm (public, mobile calls this)
-// Body: { email, password } — standard credential auth
-// 1. Read QRSession, check status=="pending"
-// 2. If confirmed: 409 QR_ALREADY_USED
-// 3. Validate credentials (same as Login)
-// 4. Update session: status="confirmed", userID=user.ID
-// 5. Re-write to Redis with same remaining TTL
-// 6. Return JWT token pair to mobile caller
+// ConfirmQR: POST /v1/auth/qr/:token/confirm (public — mobile QR path)
+// Body: { email, password }
+// 1. Read QRSession; if missing: 410 QR_EXPIRED
+// 2. If status=="confirmed": 409 QR_ALREADY_USED
+// 3. Validate credentials (reuse Login logic)
+// 4. Update session: status="confirmed", userID=user.ID; re-write to Redis with remaining TTL
+// 5. Delete qr:pin:<pin> key (PIN no longer valid after QR confirm)
+// 6. Issue short-lived JWT access token + store non-expiring MobileRefreshToken in DB
+// 7. Return { accessToken, refreshToken }
+
+// ConfirmQRByPIN: POST /v1/auth/qr/pin-confirm (public — mobile PIN path)
+// Body: { pin, email, password }
+// 1. Look up token from "qr:pin:<pin>"; if missing: 410 QR_EXPIRED
+// 2. Delegate to same confirm logic as ConfirmQR using resolved token
+// 3. Delete both qr:pin:<pin> and update qr:session:<token>
+
+// RefreshMobileToken: POST /v1/auth/refresh (public)
+// Body: { refreshToken }
+// 1. Look up MobileRefreshToken by token value
+// 2. If not found or revoked=true: 401 TOKEN_REVOKED
+// 3. Load user; if account blocked: 401 ACCOUNT_BLOCKED, set revoked=true
+// 4. Issue new short-lived JWT access token
+// 5. Return { accessToken }
+
+// Logout: POST /v1/auth/logout (JWT-protected)
+// Body: { refreshToken }
+// 1. Find MobileRefreshToken record; set revoked=true
+// 2. Return 200
 ```
 
-**go.mod addition**: `github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e`
-
-### 3.3 Router Changes
+### 3.5 Router Changes
 
 ```go
-// In router.go auth group (public):
-auth.GET("/qr/:token/status", authHandler.GetQRStatus)
+// Public routes:
 auth.POST("/qr/:token/confirm", authHandler.ConfirmQR)
+auth.POST("/qr/pin-confirm",    authHandler.ConfirmQRByPIN)
+auth.POST("/refresh",           authHandler.RefreshMobileToken)
 
-// JWT-protected:
-protected.POST("/auth/qr/generate", authHandler.GenerateQR)
+// JWT-protected routes:
+protected.POST("/auth/qr/generate",      authHandler.GenerateQR)
+protected.GET( "/auth/qr/:token/status", authHandler.GetQRStatus)
+protected.POST("/auth/logout",           authHandler.Logout)
 ```
 
-### 3.4 Flutter Changes
+### 3.6 Web Dashboard Changes
+
+**User menu** (`/apps/web/src/components/layout/user-menu.tsx`):
+- Add "Link Mobile App" menu item in the avatar dropdown
+- On click: open a `LinkMobileDialog` modal component
+
+**New component**: `/apps/web/src/components/auth/link-mobile-dialog.tsx`
+```typescript
+// On mount: POST /v1/auth/qr/generate → receive { token, pin, qrImageUrl }
+// Renders:
+//   - QR code image (left)
+//   - 6-digit PIN displayed large (right), labelled "Or enter this PIN on mobile"
+//   - Countdown timer (10 minutes)
+//   - Status: "Waiting for mobile app…" → "Mobile app linked!" on confirmed
+// Polls GET /v1/auth/qr/:token/status every 3 seconds
+// On confirmed: show success toast, close dialog
+// On expiry (410): show "Code expired" message with a "Regenerate" button
+```
+
+### 3.7 Flutter Changes
+
+**`LoginScreen` additions**:
+- "Scan QR Code" `OutlinedButton` below sign-in
+- "Enter PIN" `OutlinedButton` below that
+- Both route to their respective screens
 
 **New screen**: `/apps/mobile/lib/screens/auth/qr_scanner_screen.dart`
-- Uses `mobile_scanner` package (add to `pubspec.yaml`)
-- On successful scan of URL, extract `token` query param
-- Call `POST /v1/auth/qr/:token/confirm` with stored credentials (if already logged in) or prompt
-- On success: store tokens via `authProvider`, navigate to `'/'`
+- Uses `mobile_scanner` package
+- On successful scan: extract `token` from URL query param
+- Call `POST /v1/auth/qr/:token/confirm` with entered email/password
+- On success: delegate to `authProvider.setTokensFromPair()`, navigate to `'/'`
+- On error: show inline message + "Try Again" button
 
-**`LoginScreen` changes**:
-- Add "Scan QR Code" `OutlinedButton` below the sign-in button
-- On tap: `context.push('/qr-scanner')`
+**New screen**: `/apps/mobile/lib/screens/auth/pin_login_screen.dart`
+- Numeric PIN input (6 digits)
+- On submit: call `POST /v1/auth/qr/pin-confirm` with `{ pin, email, password }`
+- Same success/error handling as QR scanner
 
-**Router addition**: route `/qr-scanner` → `QRScannerScreen`
+**`AuthProvider` changes** (`/apps/mobile/lib/providers/auth_provider.dart`):
+- On app launch: check secure storage for `refreshToken`
+- If present: call `POST /v1/auth/refresh` silently; on 401 clear tokens and go to LoginScreen
+- `logout()`: call `POST /v1/auth/logout` with the stored `refreshToken`, then clear storage
+
+**Router additions**:
+```dart
+GoRoute(path: '/qr-scanner', builder: (_,__) => const QRScannerScreen()),
+GoRoute(path: '/pin-login',  builder: (_,__) => const PINLoginScreen()),
+```
 
 ---
 
@@ -613,6 +725,7 @@ organizations.PATCH("/:id/members/:memberId",
 | 016 | 016_alter_projects_archived.up.sql | Add archived_at to projects |
 | 017 | 017_create_invites.up.sql | invites table |
 | 018 | 018_create_invoices.up.sql | invoices table |
+| 019 | 019_create_mobile_refresh_tokens.up.sql | Non-expiring mobile refresh tokens table |
 
 The existing requirements doc referenced 015/016 for invites/invoices — migration numbers are shifted by 2 to accommodate the two ALTER TABLE migrations first.
 
@@ -625,7 +738,7 @@ The existing requirements doc referenced 015/016 for invites/invoices — migrat
 | Go | `github.com/skip2/go-qrcode` | QR code image generation |
 | Go | `gorm.io/datatypes` | `datatypes.JSON` type for jsonb fields |
 | Flutter | `mobile_scanner: ^5.0.0` | Camera QR scanning |
-| Flutter | (no new JS deps needed) | recharts already present |
+| Flutter | `flutter_secure_storage: ^9.0.0` | Secure storage for non-expiring refresh token |
 
 ---
 
@@ -648,7 +761,7 @@ The existing requirements doc referenced 015/016 for invites/invoices — migrat
 |---------|------------|
 | `AlertsHandler` | `GetOptions(c)` |
 | `ProjectLogsHandler` | `Analytics(c)` |
-| `AuthHandler` | `GenerateQR(c)`, `GetQRStatus(c)`, `ConfirmQR(c)`, `AcceptInvite(c)` |
+| `AuthHandler` | `GenerateQR(c)`, `GetQRStatus(c)`, `ConfirmQR(c)`, `ConfirmQRByPIN(c)`, `RefreshMobileToken(c)`, `Logout(c)`, `AcceptInvite(c)` |
 | `OrganizationHandler` | `CreateInvite(c)`, `GetInvites(c)`, `RevokeInvite(c)` |
 | `BillingHandler` | `GetInvoices(c)`, `GetInvoice(c)` |
 | `ProjectsHandler` | `Archive(c)`, updated `List(c)` |
@@ -696,12 +809,17 @@ function useOrgRole(): "owner" | "admin" | "member" | "viewer" | null
 ```dart
 // AuthService additions
 Future<TokenPair> confirmQR(String token, String email, String password);
+Future<TokenPair> confirmQRByPIN(String pin, String email, String password);
+Future<String> refreshAccessToken(String refreshToken); // returns new accessToken
 
 // AuthProvider additions
 void setTokensFromPair(TokenPair pair);
+Future<void> silentRefresh();  // called on app launch if refreshToken exists
+Future<void> logout();         // revokes refreshToken server-side, clears storage
 
-// New screen
+// New screens
 class QRScannerScreen extends ConsumerStatefulWidget
+class PINLoginScreen extends ConsumerStatefulWidget
 ```
 
 ---
@@ -775,7 +893,8 @@ interface InvoiceLineItem { description: string; amount: number; quantity: numbe
 
 | Key Pattern | TTL | Value | Purpose |
 |-------------|-----|-------|---------|
-| `qr:session:<token>` | 5 min | `{"status":"pending\|confirmed","userId":N}` | QR login session |
+| `qr:session:<token>` | 10 min | `{"status":"pending\|confirmed","pin":"123456","userId":N}` | QR/PIN linking session |
+| `qr:pin:<pin>` | 10 min | `<token>` | PIN → token reverse lookup |
 | `usage:warned:90:<userID>:<month>` | seconds to month end | `"1"` | 90% usage warning dedup |
 | `usage:<month>:<projectID>` | (existing) | int64 | Log count counter |
 
@@ -788,15 +907,20 @@ POST an `AlertRule` with arbitrary `triggerPatterns` and `channels` arrays → G
 
 **Validates: Requirements 1.1, 1.2, 1.3, 1.6, 1.9**
 
-### Property 2: QR session expiry
-`ConfirmQR` called after the Redis TTL has elapsed → must return HTTP 410 with `Code: "QR_EXPIRED"`. No JWT tokens are returned.
+### Property 2: QR/PIN session expiry
+`ConfirmQR` or `ConfirmQRByPIN` called after the Redis TTL has elapsed → must return HTTP 410 with `Code: "QR_EXPIRED"`. No tokens are returned.
 
-**Validates: Requirements 3.7**
+**Validates: Requirements 3.11**
 
-### Property 3: QR reuse prevention
-`ConfirmQR` called on a token already in `status="confirmed"` → must return HTTP 409 with `Code: "QR_ALREADY_USED"`.
+### Property 3: QR/PIN reuse prevention
+Any confirm call on a token already in `status="confirmed"` → must return HTTP 409 with `Code: "QR_ALREADY_USED"`.
 
-**Validates: Requirements 3.8**
+**Validates: Requirements 3.12**
+
+### Property 3b: Non-expiring mobile refresh token persistence
+`POST /v1/auth/refresh` with a valid, non-revoked `MobileRefreshToken` must succeed regardless of elapsed time. The same call after `revoked=true` must return HTTP 401.
+
+**Validates: Requirements 3.14, 3.15, 3.16**
 
 ### Property 4: RBAC role hierarchy enforcement
 For roles ranked `viewer < member < admin < owner`, any request by a role with rank strictly below the required rank must receive HTTP 403 before the handler executes.

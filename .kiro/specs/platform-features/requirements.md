@@ -15,7 +15,9 @@ This document specifies requirements for seven platform features across the Logs
 - **TriggerLevel**: A log severity level (`debug`, `info`, `warn`, `error`, `critical`, `fatal`) used as an alert condition.
 - **CooldownMinutes**: The minimum number of minutes that must pass before the same alert rule fires again.
 - **LogAnalytics**: Aggregated statistics derived from log events (counts, error rates, time-series data).
-- **QRSession**: A short-lived Redis entry keyed by a UUID token, used to coordinate QR-code login between web and mobile.
+- **QRSession**: A short-lived Redis entry keyed by a UUID token, used to coordinate mobile app linking between web and mobile. Contains a status, a 6-digit PIN, and optionally the confirmed user ID.
+- **PINLogin**: An alternative to scanning the QR code where the user types the 6-digit PIN displayed on the web dashboard into the mobile app's PIN login screen.
+- **NonExpiringRefreshToken**: A refresh token issued to mobile clients that does not have a time-based expiry; it remains valid until explicitly revoked via logout or account block.
 - **JWT**: JSON Web Token pair (access + refresh) issued upon successful authentication.
 - **OrganizationMember**: A join record linking a User to an Organization with a role of `owner`, `admin`, `member`, or `viewer`.
 - **RBAC**: Role-Based Access Control — the system that restricts API routes and UI controls based on `OrganizationMember.Role`.
@@ -78,22 +80,31 @@ This document specifies requirements for seven platform features across the Logs
 
 ---
 
-### Requirement 3: Mobile QR Code Login Flow
+### Requirement 3: Mobile QR Code and PIN Login Flow
 
-**User Story:** As a mobile user, I want to log in by scanning a QR code displayed on the web dashboard, so that I can authenticate my mobile session without re-entering credentials.
+**User Story:** As a first-time mobile user, I want to link my mobile app to my existing web account by either scanning a QR code or entering a PIN displayed on the dashboard, so that I can authenticate without typing credentials on mobile. Once linked, my session persists indefinitely unless I log out or my account is blocked.
 
 #### Acceptance Criteria
 
-1. WHEN the Login screen loads on the mobile app, THE LoginScreen SHALL display both an email/password form and a "Scan QR Code" button.
-2. WHEN a user taps "Scan QR Code", THE LoginScreen SHALL navigate to a QR scanner screen that activates the device camera.
-3. WHEN `POST /v1/auth/qr/generate` is called by an authenticated web user, THE AuthHandler SHALL create a `QRSession` record in Redis keyed by a UUID token with a 5-minute TTL and return `{ "token": "<uuid>", "qrImageUrl": "<base64-data-url>" }`.
-4. WHEN a user views the web dashboard login page, THE WebDashboard SHALL display the QR code image and begin polling `GET /v1/auth/qr/:token/status` every 3 seconds.
-5. WHEN the mobile app scans a valid QR code and calls `POST /v1/auth/qr/:token/confirm` with valid mobile credentials, THE AuthHandler SHALL mark the `QRSession` as confirmed in Redis and return a JWT token pair to the mobile caller.
-6. WHEN `GET /v1/auth/qr/:token/status` returns `{ "status": "confirmed" }`, THE WebDashboard SHALL stop polling and display an authenticated session.
-7. IF a `QRSession` token has expired (TTL elapsed), THEN THE AuthHandler SHALL return HTTP 410 with `ErrorResponse{ Code: "QR_EXPIRED", Message: "QR code has expired. Please generate a new one." }` for both status and confirm endpoints.
-8. IF a `POST /v1/auth/qr/:token/confirm` request is made with an already-confirmed token, THEN THE AuthHandler SHALL return HTTP 409 with `ErrorResponse{ Code: "QR_ALREADY_USED", Message: "QR code has already been used." }`.
-9. WHEN the mobile app receives a JWT token pair after QR confirmation, THE MobileAuthProvider SHALL store the tokens securely and navigate the user to the home screen.
-10. WHEN the QR scanner on mobile encounters a scan error, THE QRScannerScreen SHALL display an inline error message and a "Try Again" button without leaving the scanner screen.
+1. WHEN the Login screen loads on the mobile app, THE LoginScreen SHALL display an email/password form, a "Scan QR Code" button, and an "Enter PIN" button as alternative login methods.
+2. WHEN a user taps "Scan QR Code", THE LoginScreen SHALL navigate to a `QRScannerScreen` that activates the device camera.
+3. WHEN a user taps "Enter PIN", THE LoginScreen SHALL navigate to a `PINLoginScreen` that displays a numeric PIN input field.
+4. WHEN an authenticated web user opens the "Link Mobile App" option from the dashboard user menu, THE WebDashboard SHALL call `POST /v1/auth/qr/generate` and display both the QR code image and a 6-digit PIN side by side with a countdown timer showing remaining validity.
+5. WHEN `POST /v1/auth/qr/generate` is called by an authenticated web user, THE AuthHandler SHALL create a `QRSession` record in Redis keyed by a UUID token with a 10-minute TTL and return `{ "token": "<uuid>", "pin": "<6-digit-string>", "qrImageUrl": "<base64-data-url>" }`.
+6. WHEN the "Link Mobile App" dialog is open, THE WebDashboard SHALL poll `GET /v1/auth/qr/:token/status` every 3 seconds and display the current status (`waiting`, `confirmed`).
+7. WHEN the mobile app scans a valid QR code, THE QRScannerScreen SHALL extract the token from the URL and call `POST /v1/auth/qr/:token/confirm` with the device's stored credentials or the user's entered email/password.
+8. WHEN a user submits a 6-digit PIN on the `PINLoginScreen`, THE PINLoginScreen SHALL call `POST /v1/auth/qr/pin-confirm` with `{ "pin": "<6-digit-string>" }` to confirm the session.
+9. WHEN `POST /v1/auth/qr/:token/confirm` or `POST /v1/auth/qr/pin-confirm` succeeds, THE AuthHandler SHALL mark the `QRSession` as confirmed and return a JWT access token and a **non-expiring refresh token** to the mobile caller.
+10. WHEN `GET /v1/auth/qr/:token/status` returns `{ "status": "confirmed" }`, THE WebDashboard SHALL stop polling, close the dialog, and display a "Mobile app linked successfully" toast.
+11. IF a `QRSession` token has expired (TTL elapsed), THEN THE AuthHandler SHALL return HTTP 410 with `ErrorResponse{ Code: "QR_EXPIRED", Message: "QR code has expired. Please generate a new one." }` for all confirm and status endpoints.
+12. IF a confirm request is made with an already-confirmed token, THEN THE AuthHandler SHALL return HTTP 409 with `ErrorResponse{ Code: "QR_ALREADY_USED", Message: "This code has already been used." }`.
+13. WHEN the mobile app receives tokens after QR or PIN confirmation, THE MobileAuthProvider SHALL store the access token and non-expiring refresh token in secure storage and navigate to the home screen.
+14. WHEN the mobile app launches and finds a stored refresh token, THE MobileAuthProvider SHALL silently exchange it for a new access token via `POST /v1/auth/refresh` without prompting the user to log in again.
+15. WHEN `POST /v1/auth/refresh` is called with a non-expiring refresh token and the user's account is active, THE AuthHandler SHALL return a new access token with HTTP 200.
+16. IF `POST /v1/auth/refresh` is called and the user's account is blocked or the refresh token has been explicitly revoked, THEN THE AuthHandler SHALL return HTTP 401, and THE MobileAuthProvider SHALL clear stored tokens and redirect to the LoginScreen.
+17. WHEN a user taps "Logout" on the mobile app, THE MobileAuthProvider SHALL call `POST /v1/auth/logout` to revoke the refresh token server-side, clear local storage, and navigate to the LoginScreen.
+18. WHEN the QR scanner encounters a scan error, THE QRScannerScreen SHALL display an inline error message and a "Try Again" button without leaving the scanner screen.
+19. THE PIN stored in the `QRSession` SHALL be a cryptographically random 6-digit string and SHALL be valid only for the duration of the session TTL.
 
 ---
 

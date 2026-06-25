@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -552,13 +553,14 @@ func (h *AuthHandler) recordVerificationSent(ctx context.Context, email string) 
 
 // QRSession represents the Redis-persisted state for a QR login session.
 type QRSession struct {
-	Status    string `json:"status"`           // "pending" | "confirmed" | "expired"
+	Status    string `json:"status"`           // "pending" | "confirmed"
+	PIN       string `json:"pin,omitempty"`    // 6-digit PIN, omitted from status responses
 	UserID    uint   `json:"userId,omitempty"` // populated after confirmation
 	CreatedAt int64  `json:"createdAt"`
 }
 
-// GetQRStatus handles GET /v1/auth/qr/:token/status (public)
-// Reads the QR session from Redis. Returns 410 if expired/missing, otherwise returns the session status.
+// GetQRStatus handles GET /v1/auth/qr/:token/status (JWT-protected).
+// Reads the QR session from Redis. Returns 410 if expired/missing, otherwise returns only status.
 func (h *AuthHandler) GetQRStatus(c *gin.Context) {
 	token := c.Param("token")
 	if token == "" {
@@ -592,6 +594,7 @@ func (h *AuthHandler) GetQRStatus(c *gin.Context) {
 		return
 	}
 
+	// Never expose pin or userId — return status only
 	c.JSON(http.StatusOK, gin.H{"status": session.Status})
 }
 
@@ -601,14 +604,80 @@ type ConfirmQRRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-// ConfirmQR handles POST /v1/auth/qr/:token/confirm (public — called by mobile client).
+// confirmQRSession is a shared helper that finalises a QR session for a given user.
+// It uses the remaining TTL of the session key, deletes qr:pin:<pin>, updates the
+// session to "confirmed" in Redis, creates a MobileRefreshToken in the DB, and
+// returns (accessToken, refreshToken, error).
+func (h *AuthHandler) confirmQRSession(ctx context.Context, sessionKey string, user *models.User) (string, string, error) {
+	// Read raw session bytes
+	raw, err := h.redis.Get(ctx, sessionKey).Bytes()
+	if err != nil {
+		return "", "", err
+	}
+
+	var session QRSession
+	if err := json.Unmarshal(raw, &session); err != nil {
+		return "", "", err
+	}
+
+	// Get remaining TTL so we preserve it on the confirmed session
+	ttl, err := h.redis.TTL(ctx, sessionKey).Result()
+	if err != nil || ttl <= 0 {
+		ttl = 10 * time.Minute
+	}
+
+	// Delete the PIN reverse-lookup key if present
+	if session.PIN != "" {
+		h.redis.Del(ctx, "qr:pin:"+session.PIN)
+	}
+
+	// Write confirmed session back with remaining TTL
+	confirmedSession := QRSession{
+		Status:    "confirmed",
+		UserID:    user.ID,
+		CreatedAt: session.CreatedAt,
+	}
+	confirmedBytes, err := json.Marshal(confirmedSession)
+	if err != nil {
+		return "", "", err
+	}
+	if err := h.redis.Set(ctx, sessionKey, confirmedBytes, ttl).Err(); err != nil {
+		return "", "", err
+	}
+
+	// Generate a secure random mobile refresh token
+	tokenBytes := make([]byte, 64)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", "", err
+	}
+	mrt := hex.EncodeToString(tokenBytes)
+
+	// Persist MobileRefreshToken in DB
+	mobileToken := models.MobileRefreshToken{
+		UserID: user.ID,
+		Token:  mrt,
+	}
+	if err := h.db.Create(&mobileToken).Error; err != nil {
+		return "", "", err
+	}
+
+	// Generate short-lived JWT access token
+	tokens, err := h.authService.GenerateTokens(user)
+	if err != nil {
+		return "", "", err
+	}
+
+	return tokens.AccessToken, mrt, nil
+}
+
+// ConfirmQR handles POST /v1/auth/qr/:token/confirm (public — mobile QR scan path).
 //
 // Flow:
 //  1. Read QR session from Redis; missing key → 410 QR_EXPIRED.
 //  2. Session already confirmed → 409 QR_ALREADY_USED.
-//  3. Validate email + password credentials (same logic as Login).
-//  4. Update session to {status:"confirmed", userId:<id>} with 1-minute TTL.
-//  5. Return JWT token pair to mobile caller.
+//  3. Validate email + password credentials.
+//  4. Delegate to confirmQRSession helper.
+//  5. Return { accessToken, refreshToken }.
 func (h *AuthHandler) ConfirmQR(c *gin.Context) {
 	token := c.Param("token")
 	if token == "" {
@@ -619,117 +688,65 @@ func (h *AuthHandler) ConfirmQR(c *gin.Context) {
 		return
 	}
 
-	// --- 1. Read session from Redis ---
-	redisKey := "qr:session:" + token
 	ctx := c.Request.Context()
+	redisKey := "qr:session:" + token
 
+	// --- 1. Check session exists and is not already confirmed ---
 	raw, err := h.redis.Get(ctx, redisKey).Bytes()
 	if err == redis.Nil {
-		// Key missing or expired
-		c.JSON(http.StatusGone, ErrorResponse{
-			Code:    "QR_EXPIRED",
-			Message: "QR code has expired",
-		})
+		c.JSON(http.StatusGone, ErrorResponse{Code: "QR_EXPIRED", Message: "QR code has expired"})
 		return
 	}
 	if err != nil {
-		slog.Error("Failed to read QR session from Redis", "error", err, "token", token)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to read QR session",
-		})
+		slog.Error("ConfirmQR: failed to read session", "error", err, "token", token)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to read QR session"})
 		return
 	}
 
 	var session QRSession
 	if err := json.Unmarshal(raw, &session); err != nil {
-		slog.Error("Failed to parse QR session JSON", "error", err, "token", token)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to parse QR session",
-		})
+		slog.Error("ConfirmQR: failed to parse session", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to parse QR session"})
 		return
 	}
-
-	// --- 2. Check if already confirmed ---
 	if session.Status == "confirmed" {
-		c.JSON(http.StatusConflict, ErrorResponse{
-			Code:    "QR_ALREADY_USED",
-			Message: "This QR code has already been used",
-		})
+		c.JSON(http.StatusConflict, ErrorResponse{Code: "QR_ALREADY_USED", Message: "This QR code has already been used"})
 		return
 	}
 
-	// --- 3. Validate credentials ---
+	// --- 2. Validate credentials ---
 	var req ConfirmQRRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Code:    "VALIDATION_ERROR",
-			Message: err.Error(),
-		})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: err.Error()})
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	var user models.User
 	if err := h.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{
-			Code:    "INVALID_CREDENTIALS",
-			Message: "Invalid email or password",
-		})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "INVALID_CREDENTIALS", Message: "Invalid email or password"})
 		return
 	}
 	if !user.CheckPassword(req.Password) {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{
-			Code:    "INVALID_CREDENTIALS",
-			Message: "Invalid email or password",
-		})
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "INVALID_CREDENTIALS", Message: "Invalid email or password"})
 		return
 	}
 
-	// --- 4. Update session to confirmed with 1-minute TTL ---
-	confirmedSession := QRSession{
-		Status:    "confirmed",
-		UserID:    user.ID,
-		CreatedAt: session.CreatedAt,
-	}
-	confirmedBytes, err := json.Marshal(confirmedSession)
+	// --- 3. Confirm session and issue tokens ---
+	accessToken, refreshToken, err := h.confirmQRSession(ctx, redisKey, &user)
 	if err != nil {
-		slog.Error("Failed to marshal confirmed QR session", "error", err)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to update QR session",
-		})
-		return
-	}
-	if err := h.redis.Set(ctx, redisKey, confirmedBytes, 1*time.Minute).Err(); err != nil {
-		slog.Error("Failed to update QR session in Redis", "error", err, "token", token)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to update QR session",
-		})
-		return
-	}
-
-	// --- 5. Return JWT token pair ---
-	tokens, err := h.authService.GenerateTokens(&user)
-	if err != nil {
-		slog.Error("Failed to generate tokens for QR login", "error", err, "userID", user.ID)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to generate authentication tokens",
-		})
+		slog.Error("ConfirmQR: failed to confirm session", "error", err, "token", token)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to confirm QR session"})
 		return
 	}
 
 	slog.Info("QR login confirmed", "userID", user.ID, "token", token)
-
-	c.JSON(http.StatusOK, tokens)
+	c.JSON(http.StatusOK, gin.H{"accessToken": accessToken, "refreshToken": refreshToken})
 }
 
 // GenerateQR handles POST /v1/auth/qr/generate (JWT-protected).
-// It generates a UUID token, stores a pending QR session in Redis with a 5-minute TTL,
-// generates a QR code PNG encoding the QR-login URL, and returns the token + base64 image.
+// Generates a UUID token + cryptographically random 6-digit PIN, stores the pending
+// session in Redis with a 10-minute TTL, and returns the token, PIN, and QR image URL.
 func (h *AuthHandler) GenerateQR(c *gin.Context) {
 	if h.redis == nil {
 		slog.Error("GenerateQR: Redis client is nil")
@@ -743,53 +760,65 @@ func (h *AuthHandler) GenerateQR(c *gin.Context) {
 	// 1. Generate a UUID token
 	token := uuid.New().String()
 
-	// 2. Store the pending session in Redis with a 5-minute TTL
+	// 2. Generate cryptographically random 6-digit PIN (zero-padded)
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		slog.Error("GenerateQR: failed to generate PIN", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to generate PIN"})
+		return
+	}
+	pinNum := binary.BigEndian.Uint32(b) % 1000000
+	pin := fmt.Sprintf("%06d", pinNum)
+
+	// 3. Store pending session in Redis with 10-minute TTL
 	session := QRSession{
 		Status:    "pending",
+		PIN:       pin,
 		CreatedAt: time.Now().Unix(),
 	}
 	sessionJSON, err := json.Marshal(session)
 	if err != nil {
 		slog.Error("GenerateQR: failed to marshal session", "error", err)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to create QR session",
-		})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to create QR session"})
 		return
 	}
 
-	redisKey := "qr:session:" + token
 	ctx := c.Request.Context()
-	if err := h.redis.Set(ctx, redisKey, string(sessionJSON), 5*time.Minute).Err(); err != nil {
+	redisKey := "qr:session:" + token
+	pinKey := "qr:pin:" + pin
+
+	if err := h.redis.Set(ctx, redisKey, string(sessionJSON), 10*time.Minute).Err(); err != nil {
 		slog.Error("GenerateQR: failed to store session in Redis", "error", err)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to create QR session",
-		})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to create QR session"})
 		return
 	}
 
-	// 3. Build the QR login URL using the FRONTEND_URL env var
+	// Store PIN → token reverse-lookup with same TTL
+	if err := h.redis.Set(ctx, pinKey, token, 10*time.Minute).Err(); err != nil {
+		slog.Error("GenerateQR: failed to store PIN lookup in Redis", "error", err)
+		h.redis.Del(ctx, redisKey)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to create QR session"})
+		return
+	}
+
+	// 4. Build the link-mobile URL
 	frontendURL := os.Getenv("FRONTEND_URL")
 	if frontendURL == "" {
 		frontendURL = "http://localhost:3000"
 	}
-	qrLoginURL := fmt.Sprintf("%s/auth/qr-login?token=%s", frontendURL, token)
+	qrLoginURL := fmt.Sprintf("%s/link-mobile?token=%s", frontendURL, token)
 
-	// 4. Generate the QR code PNG (256×256)
+	// 5. Generate QR code PNG (256×256)
 	pngBytes, err := qrcode.Encode(qrLoginURL, qrcode.Medium, 256)
 	if err != nil {
 		slog.Error("GenerateQR: failed to generate QR code", "error", err)
-		// Clean up the Redis key we just set
 		h.redis.Del(ctx, redisKey)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to generate QR code",
-		})
+		h.redis.Del(ctx, pinKey)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to generate QR code"})
 		return
 	}
 
-	// 5. Base64-encode the PNG and build the data URL
+	// 6. Base64-encode PNG and build data URL
 	encoded := base64.StdEncoding.EncodeToString(pngBytes)
 	qrImageURL := "data:image/png;base64," + encoded
 
@@ -797,6 +826,7 @@ func (h *AuthHandler) GenerateQR(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":      token,
+		"pin":        pin,
 		"qrImageUrl": qrImageURL,
 	})
 }
@@ -915,6 +945,156 @@ func (h *AuthHandler) AcceptInvite(c *gin.Context) {
 		User:   user.ToResponse(),
 		Tokens: tokens,
 	})
+}
+
+// ConfirmQRByPIN handles POST /v1/auth/qr/pin-confirm (public — mobile PIN path).
+// Body: { pin, email, password }
+// Looks up the token via qr:pin:<pin>, then delegates to the shared confirmQRSession helper.
+func (h *AuthHandler) ConfirmQRByPIN(c *gin.Context) {
+	var req struct {
+		PIN      string `json:"pin"      binding:"required"`
+		Email    string `json:"email"    binding:"required,email"`
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: err.Error()})
+		return
+	}
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	ctx := c.Request.Context()
+	pinKey := "qr:pin:" + req.PIN
+
+	// Resolve PIN → token
+	token, err := h.redis.Get(ctx, pinKey).Result()
+	if err == redis.Nil {
+		c.JSON(http.StatusGone, ErrorResponse{Code: "QR_EXPIRED", Message: "PIN has expired or does not exist"})
+		return
+	}
+	if err != nil {
+		slog.Error("ConfirmQRByPIN: failed to look up PIN", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to look up PIN"})
+		return
+	}
+
+	redisKey := "qr:session:" + token
+
+	// Check session is still pending
+	raw, err := h.redis.Get(ctx, redisKey).Bytes()
+	if err == redis.Nil {
+		c.JSON(http.StatusGone, ErrorResponse{Code: "QR_EXPIRED", Message: "QR session has expired"})
+		return
+	}
+	if err != nil {
+		slog.Error("ConfirmQRByPIN: failed to read session", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to read QR session"})
+		return
+	}
+
+	var session QRSession
+	if err := json.Unmarshal(raw, &session); err != nil {
+		slog.Error("ConfirmQRByPIN: failed to parse session", "error", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to parse QR session"})
+		return
+	}
+	if session.Status == "confirmed" {
+		c.JSON(http.StatusConflict, ErrorResponse{Code: "QR_ALREADY_USED", Message: "This QR session has already been used"})
+		return
+	}
+
+	// Validate credentials
+	var user models.User
+	if err := h.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "INVALID_CREDENTIALS", Message: "Invalid email or password"})
+		return
+	}
+	if !user.CheckPassword(req.Password) {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "INVALID_CREDENTIALS", Message: "Invalid email or password"})
+		return
+	}
+
+	// Confirm session and issue tokens
+	accessToken, refreshToken, err := h.confirmQRSession(ctx, redisKey, &user)
+	if err != nil {
+		slog.Error("ConfirmQRByPIN: failed to confirm session", "error", err, "token", token)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to confirm QR session"})
+		return
+	}
+
+	slog.Info("QR PIN login confirmed", "userID", user.ID, "token", token)
+	c.JSON(http.StatusOK, gin.H{"accessToken": accessToken, "refreshToken": refreshToken})
+}
+
+// RefreshMobileToken handles POST /v1/auth/refresh (public).
+// Body: { refreshToken }
+// Looks up the MobileRefreshToken record; if not found or revoked → 401 TOKEN_REVOKED.
+// Issues a new short-lived JWT access token.
+func (h *AuthHandler) RefreshMobileToken(c *gin.Context) {
+	var req struct {
+		RefreshToken string `json:"refreshToken" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: err.Error()})
+		return
+	}
+
+	var mrt models.MobileRefreshToken
+	if err := h.db.Where("token = ?", req.RefreshToken).First(&mrt).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "TOKEN_REVOKED", Message: "Refresh token is invalid or revoked"})
+		return
+	}
+
+	if mrt.Revoked {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "TOKEN_REVOKED", Message: "Refresh token has been revoked"})
+		return
+	}
+
+	// Load user
+	var user models.User
+	if err := h.db.First(&user, mrt.UserID).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "TOKEN_REVOKED", Message: "User not found"})
+		return
+	}
+
+	// Generate new short-lived access token
+	tokens, err := h.authService.GenerateTokens(&user)
+	if err != nil {
+		slog.Error("RefreshMobileToken: failed to generate tokens", "error", err, "userID", user.ID)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to generate access token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"accessToken": tokens.AccessToken})
+}
+
+// MobileLogout handles POST /v1/auth/mobile-logout (JWT-protected).
+// Body: { refreshToken }
+// Finds the MobileRefreshToken record and sets revoked=true.
+func (h *AuthHandler) MobileLogout(c *gin.Context) {
+	var req struct {
+		RefreshToken string `json:"refreshToken" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: err.Error()})
+		return
+	}
+
+	var mrt models.MobileRefreshToken
+	if err := h.db.Where("token = ?", req.RefreshToken).First(&mrt).Error; err != nil {
+		// Not found — treat as already logged out
+		c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+		return
+	}
+
+	if err := h.db.Model(&mrt).Update("revoked", true).Error; err != nil {
+		slog.Error("MobileLogout: failed to revoke token", "error", err, "tokenID", mrt.ID)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to revoke token"})
+		return
+	}
+
+	userID, _ := c.Get("userID")
+	slog.Info("Mobile token revoked", "userID", userID, "tokenID", mrt.ID)
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 
 // Ensure models import is used (models.User is already used elsewhere in this file).

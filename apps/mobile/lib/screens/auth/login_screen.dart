@@ -155,6 +155,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   icon: const Icon(Icons.qr_code_scanner),
                   label: const Text('Scan QR Code'),
                 ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => context.push('/pin-login'),
+                  icon: const Icon(Icons.pin_outlined),
+                  label: const Text('Enter PIN'),
+                ),
                 const SizedBox(height: 16),
                 TextButton(
                   onPressed: () => context.go('/signup'),

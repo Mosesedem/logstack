@@ -15,9 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { QRPanel } from "./qr-panel";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -108,16 +106,9 @@ export default function LoginPage() {
           <CardDescription>Sign in to your LogStack account</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="password" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="password">Email &amp; Password</TabsTrigger>
-              <TabsTrigger value="qr">QR Code</TabsTrigger>
-            </TabsList>
-
-            {/* ── Email / Password tab ── */}
-            <TabsContent value="password" className="space-y-6 mt-0">
-              {/* OAuth Buttons */}
-              <div className="grid gap-3">
+          <div className="space-y-6">
+            {/* OAuth Buttons */}
+            <div className="grid gap-3">
                 <Button
                   variant="outline"
                   className="w-full h-11 font-medium"
@@ -276,28 +267,7 @@ export default function LoginPage() {
                   Sign up
                 </Link>
               </p>
-            </TabsContent>
-
-            {/* ── QR Code tab ── */}
-            <TabsContent value="qr" className="mt-0">
-              <div className="space-y-2 text-center mb-2">
-                <p className="text-sm text-muted-foreground">
-                  Already logged in on mobile? Generate a QR code to sign in
-                  instantly on another device.
-                </p>
-              </div>
-              <QRPanel />
-              <p className="mt-4 text-center text-sm text-muted-foreground">
-                Don't have an account?{" "}
-                <Link
-                  href="/signup"
-                  className="font-medium text-primary hover:underline"
-                >
-                  Sign up
-                </Link>
-              </p>
-            </TabsContent>
-          </Tabs>
+          </div>
         </CardContent>
       </Card>
     </div>

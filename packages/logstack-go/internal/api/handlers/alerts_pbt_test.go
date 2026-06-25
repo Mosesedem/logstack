@@ -29,8 +29,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"github.com/mosesedem/logstack/internal/models"
+	"gorm.io/datatypes"
 )
 
 // alertRuleRoundtripCase describes a property test case for the alert rule roundtrip.
@@ -143,10 +143,10 @@ func TestAlertRuleArrayRoundtrip(t *testing.T) {
 				Enabled:   true,
 			}
 			if len(req.TriggerPatterns) > 0 {
-				rule.TriggerPatterns = pq.StringArray(req.TriggerPatterns)
+				rule.TriggerPatterns = datatypes.JSONSlice[string](req.TriggerPatterns)
 			}
 			if len(req.Channels) > 0 {
-				rule.Channels = pq.StringArray(req.Channels)
+				rule.Channels = datatypes.JSONSlice[string](req.Channels)
 			}
 
 			// Property 1: TriggerPatterns must match what was submitted

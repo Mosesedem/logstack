@@ -72,6 +72,47 @@ class AuthService {
     return TokenPair.fromJson(response);
   }
 
+  /// Confirms a QR link session using a 6-digit PIN instead of scanning.
+  ///
+  /// Calls `POST /auth/qr/pin-confirm` with [pin], [email] and [password].
+  /// Returns a [TokenPair] containing the access and refresh tokens.
+  Future<TokenPair> confirmQRByPIN(
+    String pin,
+    String email,
+    String password,
+  ) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/auth/qr/pin-confirm',
+      data: {'pin': pin, 'email': email, 'password': password},
+    );
+    return TokenPair.fromJson(response);
+  }
+
+  /// Silently refreshes the access token using the stored [refreshToken].
+  ///
+  /// Calls `POST /auth/mobile-refresh` and returns the new access token string.
+  Future<String> refreshAccessToken(String refreshToken) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/auth/mobile-refresh',
+      data: {'refreshToken': refreshToken},
+    );
+    return response['accessToken'] as String;
+  }
+
+  /// Revokes the given [refreshToken] on the server (fire-and-forget).
+  ///
+  /// Calls `POST /auth/mobile-logout`. Errors are silently swallowed.
+  Future<void> revokeRefreshToken(String refreshToken) async {
+    try {
+      await _api.post<void>(
+        '/auth/mobile-logout',
+        data: {'refreshToken': refreshToken},
+      );
+    } catch (_) {
+      // Fire-and-forget — swallow errors
+    }
+  }
+
   Future<void> logout() async {
     // Unregister push token before logout
     await _unregisterPushToken();

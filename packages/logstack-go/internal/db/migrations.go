@@ -91,6 +91,21 @@ ALTER TABLE alert_rules
   ALTER COLUMN channels SET NOT NULL;
 `,
 	},
+	{
+		Version: "020_create_mobile_refresh_tokens",
+		Up: `
+CREATE TABLE IF NOT EXISTS mobile_refresh_tokens (
+    id          uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     integer      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token       varchar(512) UNIQUE NOT NULL,
+    device_info text,
+    revoked     boolean      NOT NULL DEFAULT false,
+    created_at  timestamptz  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_mrt_user_id ON mobile_refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_mrt_token   ON mobile_refresh_tokens(token);
+`,
+	},
 }
 
 func ensureEnumType(db *gorm.DB, name, values string) error {
@@ -173,7 +188,7 @@ func RunMigrations(db *gorm.DB) error {
 	// AutoMigrate creates missing tables/columns for all models.
 	// We guard this with a version key so it only runs when the schema version changes,
 	// not on every startup (which would hammer a remote DB with 100+ inspection queries).
-	const autoMigrateVersion = "automigrate_v2"
+	const autoMigrateVersion = "automigrate_v3"
 	applied, err := appliedVersions(db)
 	if err != nil {
 		return err
@@ -192,6 +207,9 @@ func RunMigrations(db *gorm.DB) error {
 			&models.AlertHistory{},
 			&models.Subscription{},
 			&models.UsageLog{},
+			&models.Invite{},
+			&models.Invoice{},
+			&models.MobileRefreshToken{},
 		); err != nil {
 			return err
 		}

@@ -74,14 +74,15 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 			auth.POST("/signup", authHandler.Signup)
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshToken)
+			auth.POST("/mobile-refresh", authHandler.RefreshMobileToken)
 			auth.POST("/forgot-password", authHandler.ForgotPassword)
 			auth.POST("/reset-password", authHandler.ResetPassword)
 			auth.GET("/verify-email", authHandler.VerifyEmail)
 			auth.POST("/resend-verification", authHandler.ResendVerification)
 			auth.POST("/oauth", authHandler.OAuthSignIn)
 			auth.POST("/logout", middleware.JWTAuth(cfg.AuthService), authHandler.Logout)
-			auth.GET("/qr/:token/status", authHandler.GetQRStatus)
 			auth.POST("/qr/:token/confirm", authHandler.ConfirmQR)
+			auth.POST("/qr/pin-confirm", authHandler.ConfirmQRByPIN)
 			auth.GET("/accept-invite", authHandler.AcceptInvite)
 		}
 
@@ -121,6 +122,8 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		{
 			// QR code login generation (JWT-protected — web user generates QR)
 			protected.POST("/auth/qr/generate", authHandler.GenerateQR)
+			protected.GET("/auth/qr/:token/status", authHandler.GetQRStatus)
+			protected.POST("/auth/mobile-logout", authHandler.MobileLogout)
 
 			// Projects
 			projects := protected.Group("/projects")

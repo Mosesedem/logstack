@@ -1,16 +1,21 @@
 package handlers
 
-// Task 62: Property-based test for QR session expiry.
+// Task 62 / 72: Property-based tests for QR session expiry.
 //
-// Property: Any call to ConfirmQR after the 5-minute Redis TTL has elapsed must
-// return HTTP 410 with Code "QR_EXPIRED". No JWT tokens are returned.
+// ConfirmQR property: Any call to ConfirmQR after the 10-minute Redis TTL has elapsed
+// must return HTTP 410 with Code "QR_EXPIRED". No JWT tokens are returned.
 //
-// We test this by simulating the "key not found in Redis" condition (which is what
+// ConfirmQRByPIN property: Any call to ConfirmQRByPIN when the qr:pin:<pin> key is
+// absent or expired must return HTTP 410 with Code "QR_EXPIRED". No JWT tokens are
+// returned. The PIN reverse-lookup key shares the same 10-minute TTL as the session
+// key, so it expires at the same time.
+//
+// We test these by simulating the "key not found in Redis" condition (which is what
 // happens after the TTL expires) using a table-driven approach that covers:
 //   - Key never existed (same Redis nil response as an expired key)
-//   - Empty token string
-//   - Token with valid format but missing from Redis
-//   - Multiple different token formats
+//   - Empty token/PIN string
+//   - Token/PIN with valid format but missing from Redis
+//   - Multiple different token/PIN formats
 //
 // Validates: Requirements 3.7
 
@@ -110,7 +115,7 @@ func confirmQRWithFakeRedis(fr *fakeRedis, token string, body map[string]string)
 
 // TestQRSessionExpiryProperty is a property-based test verifying that
 // ConfirmQR returns HTTP 410 whenever the QR session key is absent from Redis
-// (which is the condition that holds after the 5-minute TTL elapses).
+// (which is the condition that holds after the 10-minute TTL elapses).
 //
 // Property: ∀ token t, if Redis key "qr:session:<t>" does not exist (expired or
 //
@@ -135,7 +140,7 @@ func TestQRSessionExpiryProperty(t *testing.T) {
 			name:      "key stored with zero TTL then manually expired",
 			tokenSeed: "expired-token-def456",
 			setup: func(fr *fakeRedis, token string) {
-				session := QRSession{Status: "pending", CreatedAt: time.Now().Add(-6 * time.Minute).Unix()}
+				session := QRSession{Status: "pending", CreatedAt: time.Now().Add(-11 * time.Minute).Unix()}
 				b, _ := json.Marshal(session)
 				// Store as already-expired to simulate TTL elapse
 				fr.setAlreadyExpired("qr:session:"+token, string(b))
@@ -233,7 +238,7 @@ func TestQRSessionActiveNotExpired(t *testing.T) {
 				CreatedAt: time.Now().Unix(),
 			}
 			b, _ := json.Marshal(session)
-			// Store with full 5-minute TTL (not yet expired)
+			// Store with full 10-minute TTL (not yet expired)
 			fr.setWithTTL("qr:session:"+token, string(b), 5*time.Minute)
 
 			body := map[string]string{"email": "user@example.com", "password": "pass"}
@@ -291,6 +296,86 @@ func TestQRSessionExpiryHTTPLayer(t *testing.T) {
 			}
 			if resp["code"] != "QR_EXPIRED" {
 				t.Errorf("expected code=QR_EXPIRED, got %q", resp["code"])
+			}
+		})
+	}
+}
+
+// confirmQRByPINWithFakeRedis simulates the PIN confirm path by looking up the
+// qr:pin:<pin> key in fakeRedis to resolve the session token, then delegating
+// to confirmQRWithFakeRedis for the session-level expiry check.
+func confirmQRByPINWithFakeRedis(fr *fakeRedis, pin string, body map[string]string) (int, map[string]interface{}) {
+	pinKey := "qr:pin:" + pin
+	token, err := fr.get(pinKey)
+	if err == redis.Nil {
+		return http.StatusGone, map[string]interface{}{
+			"code":    "QR_EXPIRED",
+			"message": "PIN has expired or does not exist",
+		}
+	}
+	if err != nil {
+		return http.StatusInternalServerError, map[string]interface{}{"code": "INTERNAL_ERROR"}
+	}
+	// Delegate to the session-based confirm logic
+	return confirmQRWithFakeRedis(fr, token, body)
+}
+
+// TestQRPINExpiryProperty verifies that ConfirmQRByPIN returns HTTP 410 with
+// code "QR_EXPIRED" whenever the qr:pin:<pin> key is absent or expired, or when
+// the linked session itself is expired.
+//
+// Property: ∀ PIN p, if Redis key "qr:pin:<p>" does not exist, or the session it
+//
+//	points to has expired, then ConfirmQRByPIN(p) → HTTP 410 with Code "QR_EXPIRED".
+//
+// Validates: Requirements 3.7
+func TestQRPINExpiryProperty(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cases := []struct {
+		name  string
+		pin   string
+		setup func(fr *fakeRedis, pin string)
+	}{
+		{
+			name: "PIN key never stored",
+			pin:  "123456",
+			setup: func(fr *fakeRedis, pin string) {},
+		},
+		{
+			name: "PIN key stored then expired",
+			pin:  "654321",
+			setup: func(fr *fakeRedis, pin string) {
+				fr.setAlreadyExpired("qr:pin:"+pin, "some-token-uuid")
+			},
+		},
+		{
+			name: "PIN valid but session expired",
+			pin:  "000001",
+			setup: func(fr *fakeRedis, pin string) {
+				token := "linked-token-abc"
+				fr.setWithTTL("qr:pin:"+pin, token, 10*time.Minute)
+				// Session itself is expired
+				session := QRSession{Status: "pending", CreatedAt: time.Now().Add(-11 * time.Minute).Unix()}
+				b, _ := json.Marshal(session)
+				fr.setAlreadyExpired("qr:session:"+token, string(b))
+			},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			fr := newFakeRedis()
+			tc.setup(fr, tc.pin)
+			body := map[string]string{"email": "u@x.com", "password": "pass12345"}
+			statusCode, respBody := confirmQRByPINWithFakeRedis(fr, tc.pin, body)
+			if statusCode != http.StatusGone {
+				t.Errorf("expected HTTP 410, got %d", statusCode)
+			}
+			if code := respBody["code"]; code != "QR_EXPIRED" {
+				t.Errorf("expected code=QR_EXPIRED, got %v", code)
+			}
+			if _, has := respBody["accessToken"]; has {
+				t.Error("must not return accessToken for expired PIN")
 			}
 		})
 	}

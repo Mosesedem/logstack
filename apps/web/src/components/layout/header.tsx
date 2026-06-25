@@ -6,13 +6,22 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ProjectSwitcher } from "./project-switcher";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, Menu, X, Ship } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LinkMobileDialog } from "@/components/auth/link-mobile-dialog";
+import { LogOut, User, Menu, X, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { navItems } from "./sidebar";
 
 export function Header() {
   const { data: session } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [linkMobileOpen, setLinkMobileOpen] = useState(false);
   const pathname = usePathname();
 
   return (
@@ -68,21 +77,38 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
-          <User className="h-4 w-4" />
-          <span>{session?.user?.email}</span>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => {
-            localStorage.removeItem("currentProjectId");
-            signOut({ callbackUrl: "/login" });
-          }}
-          className="text-muted-foreground hover:text-foreground hover:bg-accent/10"
-        >
-          <LogOut className="h-4 w-4" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden md:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <User className="h-4 w-4" />
+              <span className="max-w-[160px] truncate">{session?.user?.email}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem
+              className="gap-2 cursor-pointer"
+              onSelect={() => setLinkMobileOpen(true)}
+            >
+              <Smartphone className="h-4 w-4" />
+              Link Mobile App
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+              onSelect={() => {
+                localStorage.removeItem("currentProjectId");
+                signOut({ callbackUrl: "/login" });
+              }}
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Mobile Menu Overlay */}
@@ -171,6 +197,8 @@ export function Header() {
           </div>
         </div>
       )}
+
+      <LinkMobileDialog open={linkMobileOpen} onOpenChange={setLinkMobileOpen} />
     </header>
   );
 }

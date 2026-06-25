@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logstack_mobile/models/user.dart';
 import 'package:logstack_mobile/services/api_client.dart';
@@ -56,6 +57,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _checkAuth() async {
     state = state.copyWith(isLoading: true);
     try {
+      // Attempt silent refresh if a refresh token is stored.
+      final refreshToken = await _storage.getRefreshToken();
+      if (refreshToken != null) {
+        try {
+          final newAccessToken =
+              await _authService.refreshAccessToken(refreshToken);
+          await _storage.setToken(newAccessToken);
+        } catch (_) {
+          // Refresh token is expired / revoked — clear everything and go to
+          // login by leaving state as unauthenticated.
+          await _storage.clearAll();
+          state = AuthState();
+          return;
+        }
+      }
+
       final user = await _authService.getCurrentUser();
       state = AuthState(user: user);
     } catch (e) {
@@ -100,6 +117,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    // Best-effort revocation of the refresh token before clearing local state.
+    final refreshToken = await _storage.getRefreshToken();
+    if (refreshToken != null) {
+      await _authService.revokeRefreshToken(refreshToken);
+    }
+
     // Best-effort deregistration of the current FCM token
     if (_currentFcmToken != null) {
       try {
@@ -153,10 +176,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Stores a [TokenPair] received from QR login and updates auth state.
   ///
-  /// Persists the access token via [StorageService] and reloads the current
-  /// user from local storage so the UI reflects the authenticated state.
+  /// Persists the access token and refresh token via [StorageService] and
+  /// reloads the current user from local storage so the UI reflects the
+  /// authenticated state.
   Future<void> setTokensFromPair(TokenPair pair) async {
     await _storage.setToken(pair.accessToken);
+    await _storage.setRefreshToken(pair.refreshToken);
     // Attempt to load user profile from storage (populated if QR confirm
     // response also returns user data). Fall back to a minimal reload.
     final user = await _authService.getCurrentUser();

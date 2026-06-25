@@ -4,16 +4,19 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/services/auth_service.dart';
+import 'package:logstack_mobile/services/storage_service.dart';
 
 /// QR scanner screen that allows a mobile user to confirm a QR login session
 /// initiated on the web.
 ///
 /// Flow:
 ///   1. User enters their email + password in the fields at the bottom.
-///   2. User points the camera at a Logstack QR code on the web login page.
-///   3. The screen extracts the `token` query parameter from the scanned URL.
+///   2. User points the camera at a Logstack QR code on the web dashboard.
+///   3. The screen extracts the `token` query parameter from the scanned URL
+///      (e.g. `https://app.logstack.io/link-mobile?token=<uuid>`).
 ///   4. Calls `POST /v1/auth/qr/:token/confirm` with the supplied credentials.
-///   5. On success: stores the returned [TokenPair] and navigates to `'/'`.
+///   5. On success: stores both the access token and refresh token, then
+///      navigates to `'/'`.
 ///   6. On error: shows an inline banner with a "Try Again" button.
 class QRScannerScreen extends ConsumerStatefulWidget {
   const QRScannerScreen({super.key});
@@ -41,7 +44,7 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
   }
 
   /// Extracts the `token` query parameter from a scanned Logstack QR URL such
-  /// as `https://app.logstack.io/auth/qr-login?token=<uuid>`.
+  /// as `https://app.logstack.io/link-mobile?token=<uuid>`.
   ///
   /// Returns `null` if the barcode value is not a valid URL or lacks the token.
   String? _extractToken(String? rawValue) {
@@ -89,6 +92,10 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
         _emailController.text.trim(),
         _passwordController.text,
       );
+
+      // Persist refresh token in secure storage before updating auth state.
+      final storage = ref.read(storageServiceProvider);
+      await storage.setRefreshToken(tokenPair.refreshToken);
 
       await ref.read(authProvider.notifier).setTokensFromPair(tokenPair);
 
