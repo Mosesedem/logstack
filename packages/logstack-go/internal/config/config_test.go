@@ -106,6 +106,54 @@ func TestNewNotificationFieldsMissingVarsAreEmpty(t *testing.T) {
 	}
 }
 
+func TestExpandAllowedOriginsPairsApexAndWWW(t *testing.T) {
+	got := expandAllowedOrigins([]string{"https://logstack.tech"})
+	want := []string{"https://logstack.tech", "https://www.logstack.tech"}
+
+	if len(got) != len(want) {
+		t.Fatalf("expandAllowedOrigins() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expandAllowedOrigins() = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestExpandAllowedOriginsLeavesSubdomainsUntouched(t *testing.T) {
+	origins := []string{"https://api.logstack.tech", "http://localhost:3000", "*"}
+	got := expandAllowedOrigins(origins)
+
+	if len(got) != len(origins) {
+		t.Fatalf("expandAllowedOrigins() = %v, want %v", got, origins)
+	}
+	for i := range origins {
+		if got[i] != origins[i] {
+			t.Fatalf("expandAllowedOrigins() = %v, want %v", got, origins)
+		}
+	}
+}
+
+func TestLoadExpandsAllowedOriginsFromEnv(t *testing.T) {
+	setRequiredEnvVars(t)
+	t.Setenv("ALLOWED_ORIGINS", "https://logstack.tech")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+
+	want := []string{"https://logstack.tech", "https://www.logstack.tech"}
+	if len(cfg.AllowedOrigins) != len(want) {
+		t.Fatalf("AllowedOrigins = %v, want %v", cfg.AllowedOrigins, want)
+	}
+	for i := range want {
+		if cfg.AllowedOrigins[i] != want[i] {
+			t.Fatalf("AllowedOrigins = %v, want %v", cfg.AllowedOrigins, want)
+		}
+	}
+}
+
 // TestLoadReturnsErrorWhenRequiredVarsMissing ensures Load() still fails validation
 // when truly required vars (DATABASE_URL, etc.) are absent — a sanity check that
 // our use of t.Setenv isolation is working correctly.

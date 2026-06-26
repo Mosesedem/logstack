@@ -48,59 +48,7 @@ done
 echo "Deploying to ${DEPLOY_HOST}:${DEPLOY_PATH} (ref: ${GIT_REF}, compose: ${COMPOSE_FILE})"
 
 ssh -o BatchMode=yes "${DEPLOY_HOST}" \
-  "DEPLOY_PATH='${DEPLOY_PATH}' GIT_REF='${GIT_REF}' COMPOSE_FILE='${COMPOSE_FILE}' BACKUP_DB='${BACKUP_DB}' API_DOMAIN='${API_DOMAIN}' bash -s" <<'REMOTE'
-set -euo pipefail
-
-cd "${DEPLOY_PATH}"
-
-if [[ ! -f .env ]]; then
-  echo "Missing .env. Copy .env.production.example to .env and fill secrets." >&2
-  exit 1
-fi
-
-if [[ "${BACKUP_DB}" == "true" ]]; then
-  if docker compose -f "${COMPOSE_FILE}" ps --status running postgres >/dev/null 2>&1; then
-    stamp="$(date +%Y%m%d-%H%M%S)"
-    backup_file="backup-${stamp}.sql"
-    echo "Backing up database to ${backup_file}"
-    docker compose -f "${COMPOSE_FILE}" exec -T postgres \
-      pg_dump -U logstack logstack > "${backup_file}"
-  else
-    echo "postgres not running; skipping backup" >&2
-  fi
-fi
-
-git fetch --all --prune
-git checkout "${GIT_REF}"
-git pull --ff-only origin "${GIT_REF}"
-
-docker compose -f "${COMPOSE_FILE}" up -d --build --remove-orphans
-docker compose -f "${COMPOSE_FILE}" ps
-
-if [[ "${COMPOSE_FILE}" == "docker-compose.host.yml" ]]; then
-  api_port="$(docker compose -f "${COMPOSE_FILE}" port api 8080 2>/dev/null | cut -d: -f2 || echo 8082)"
-  curl -fsS --max-time 10 "http://127.0.0.1:${api_port}/health" >/dev/null && echo "API health OK on 127.0.0.1:${api_port}"
-  if curl -fsS --max-time 10 "https://${API_DOMAIN}/health" >/dev/null 2>&1; then
-    echo "HTTPS health OK: https://${API_DOMAIN}/health"
-  else
-    echo "HTTPS not ready — set DNS and run: sudo ./scripts/setup-host-nginx.sh && sudo certbot --nginx -d ${API_DOMAIN}"
-  fi
-elif [[ "${COMPOSE_FILE}" == "docker-compose.prod.yml" ]]; then
-  if curl -fsS --max-time 10 "https://${API_DOMAIN}/health" >/dev/null 2>&1; then
-    echo "HTTPS health OK: https://${API_DOMAIN}/health"
-    curl -fsS --max-time 10 "https://${API_DOMAIN}/ready" >/dev/null && echo "HTTPS ready OK"
-  else
-    echo "HTTPS check failed — run ./scripts/setup-ssl.sh if this is first deploy" >&2
-    docker compose -f "${COMPOSE_FILE}" logs --tail 30 nginx api >&2 || true
-  fi
-else
-  api_port="$(docker compose -f "${COMPOSE_FILE}" port api 8080 2>/dev/null | cut -d: -f2 || true)"
-  if [[ -n "${api_port}" ]]; then
-    curl -fsS "http://127.0.0.1:${api_port}/health" >/dev/null && echo "API health OK on port ${api_port}"
-  fi
-fi
-
-echo "Deploy finished."
-REMOTE
+  "DEPLOY_PATH='${DEPLOY_PATH}' GIT_REF='${GIT_REF}' COMPOSE_FILE='${COMPOSE_FILE}' BACKUP_DB='${BACKUP_DB}' API_DOMAIN='${API_DOMAIN}' bash -s" \
+  < "$(dirname "$0")/remote-deploy.sh"
 
 echo "Done."

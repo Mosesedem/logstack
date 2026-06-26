@@ -206,7 +206,7 @@ curl -X POST https://api.logstack.tech/v1/logs \
 
 ### Auto-deploy from GitHub (push to `main`)
 
-See **[GITHUB_AUTO_DEPLOY.md](./GITHUB_AUTO_DEPLOY.md)** for the full guide.
+See **[CICD.md](./CICD.md)** for the complete CI/CD guide (or [GITHUB_AUTO_DEPLOY.md](./GITHUB_AUTO_DEPLOY.md) for a shorter API-only reference).
 
 Workflow: `.github/workflows/deploy.yml`
 

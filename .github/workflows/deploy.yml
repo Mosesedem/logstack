@@ -1,64 +1,118 @@
 name: Deploy API
 
 on:
-  push:
+  # Deploy only after CI passes on main (prevents shipping broken builds).
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
-    paths:
-      - "packages/logstack-go/**"
-      - "docker-compose.host.yml"
-      - "docker-compose.prod.yml"
-      - "docker-compose.api.yml"
-      - "infra/**"
-      - "scripts/deploy-ec2.sh"
-      - ".github/workflows/deploy.yml"
   workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Git ref to deploy
+        required: false
+        default: main
+      require_https:
+        description: Fail if public HTTPS health check fails
+        required: false
+        default: "true"
+
+concurrency:
+  group: deploy-api-production
+  cancel-in-progress: false
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository }}
   COMPOSE_FILE: docker-compose.host.yml
   API_DOMAIN: api.logstack.tech
 
 jobs:
-  build-api:
-    name: Verify API Docker build
+  gate:
+    name: Check deploy prerequisites
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    outputs:
+      should_deploy: ${{ steps.set.outputs.should_deploy }}
+      head_sha: ${{ steps.sha.outputs.head_sha }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Resolve commit SHA
+        id: sha
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "head_sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "head_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Build API image (CI gate)
-        uses: docker/build-push-action@v5
+      - uses: actions/checkout@v4
         with:
-          context: ./packages/logstack-go
-          file: ./packages/logstack-go/Dockerfile
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          ref: ${{ steps.sha.outputs.head_sha }}
+          fetch-depth: 2
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'workflow_run'
+        with:
+          base: ${{ steps.sha.outputs.head_sha }}~1
+          ref: ${{ steps.sha.outputs.head_sha }}
+          filters: |
+            api:
+              - 'packages/logstack-go/**'
+              - 'docker-compose.host.yml'
+              - 'docker-compose.prod.yml'
+              - 'docker-compose.api.yml'
+              - 'infra/**'
+              - 'scripts/deploy-ec2.sh'
+              - 'scripts/remote-deploy.sh'
+              - '.github/workflows/deploy.yml'
+
+      - id: set
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.filter.outputs.api }}" = "true" ]; then
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "No API-related files changed; skipping deploy."
+          fi
 
   deploy:
     name: Deploy API to EC2
-    needs: build-api
+    needs: gate
+    if: needs.gate.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
     environment: production
 
     steps:
+      - name: Validate secrets
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_KEY:-}" ] || [ -z "${DEPLOY_HOST:-}" ] || [ -z "${DEPLOY_USER:-}" ]; then
+            echo "::error::Missing DEPLOY_KEY, DEPLOY_HOST, or DEPLOY_USER repository secret." >&2
+            echo "Run scripts/setup-github-deploy.sh on the server — see docs/CICD.md" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.head_sha }}
+
       - name: Deploy via SSH
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          GIT_REF: ${{ github.event.inputs.git_ref || 'main' }}
+          REQUIRE_HTTPS: ${{ github.event.inputs.require_https || 'true' }}
         run: |
           set -euo pipefail
-
-          if [ -z "${DEPLOY_KEY:-}" ] || [ -z "${DEPLOY_HOST:-}" ] || [ -z "${DEPLOY_USER:-}" ]; then
-            echo "::error::Missing DEPLOY_KEY, DEPLOY_HOST, or DEPLOY_USER repository secret." >&2
-            echo "Run scripts/setup-github-deploy.sh on the server, then add secrets — see docs/GITHUB_AUTO_DEPLOY.md" >&2
-            exit 1
-          fi
 
           DEPLOY_PATH="${DEPLOY_PATH:-/home/ubuntu/logstack}"
 
@@ -68,38 +122,13 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
+          scp -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            scripts/remote-deploy.sh \
+            "$DEPLOY_USER@$DEPLOY_HOST:/tmp/logstack-remote-deploy.sh"
+
           ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "DEPLOY_PATH='$DEPLOY_PATH' COMPOSE_FILE='$COMPOSE_FILE' API_DOMAIN='$API_DOMAIN' bash -s" <<'EOF'
-          set -euo pipefail
-          cd "$DEPLOY_PATH"
-
-          if [ ! -f .env ]; then
-            echo "Missing .env on server" >&2
-            exit 1
-          fi
-
-          git fetch --all --prune
-          git checkout main
-          git pull --ff-only origin main
-
-          docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans
-          docker compose -f "$COMPOSE_FILE" ps
-
-          for i in $(seq 1 30); do
-            if curl -fsS --max-time 3 "http://127.0.0.1:8082/health" >/dev/null 2>&1; then
-              echo "Local health OK"
-              break
-            fi
-            sleep 2
-          done
-
-          curl -fsS --max-time 15 "https://${API_DOMAIN}/health"
-          echo ""
-          curl -fsS --max-time 15 "https://${API_DOMAIN}/ready"
-          echo ""
-          echo "Deploy finished at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          EOF
+            "DEPLOY_PATH='$DEPLOY_PATH' GIT_REF='$GIT_REF' COMPOSE_FILE='$COMPOSE_FILE' API_DOMAIN='$API_DOMAIN' REQUIRE_HTTPS='$REQUIRE_HTTPS' bash /tmp/logstack-remote-deploy.sh"
 
           rm -f ~/.ssh/deploy_key
           echo "API deployment complete!"

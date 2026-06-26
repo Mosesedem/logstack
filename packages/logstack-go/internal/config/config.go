@@ -120,8 +120,8 @@ func Load() (*Config, error) {
 		UsageSyncInterval: getEnvDuration("USAGE_SYNC_INTERVAL", 0),
 	}
 
-	// Parse allowed origins
-	cfg.AllowedOrigins = splitAndTrim(getEnv("ALLOWED_ORIGINS", ""), ",")
+	// Parse allowed origins; pair apex <-> www so dashboards on either host work.
+	cfg.AllowedOrigins = expandAllowedOrigins(splitAndTrim(getEnv("ALLOWED_ORIGINS", ""), ","))
 
 	// Validate required fields in production
 	if err := cfg.Validate(); err != nil {
@@ -255,6 +255,78 @@ func splitAndTrim(s, sep string) []string {
 		}
 	}
 	return parts
+}
+
+// expandAllowedOrigins adds the www/apex counterpart for each configured HTTPS origin
+// (e.g. https://logstack.tech also allows https://www.logstack.tech). Wildcard "*"
+// and non-apex hosts (api.example.com, localhost) are left unchanged.
+func expandAllowedOrigins(origins []string) []string {
+	if len(origins) == 0 {
+		return origins
+	}
+
+	seen := make(map[string]struct{}, len(origins)*2)
+	expanded := make([]string, 0, len(origins)*2)
+
+	add := func(origin string) {
+		if origin == "" {
+			return
+		}
+		if _, ok := seen[origin]; ok {
+			return
+		}
+		seen[origin] = struct{}{}
+		expanded = append(expanded, origin)
+	}
+
+	for _, origin := range origins {
+		add(origin)
+		if origin == "*" {
+			continue
+		}
+		if pair, ok := pairedWWWOrigin(origin); ok {
+			add(pair)
+		}
+	}
+
+	return expanded
+}
+
+func pairedWWWOrigin(origin string) (string, bool) {
+	const (
+		httpPrefix  = "http://"
+		httpsPrefix = "https://"
+	)
+
+	var scheme, host string
+	switch {
+	case strings.HasPrefix(origin, httpsPrefix):
+		scheme, host = "https", strings.TrimPrefix(origin, httpsPrefix)
+	case strings.HasPrefix(origin, httpPrefix):
+		scheme, host = "http", strings.TrimPrefix(origin, httpPrefix)
+	default:
+		return "", false
+	}
+
+	if host == "" || strings.Contains(host, "/") {
+		return "", false
+	}
+
+	host, _, _ = strings.Cut(host, ":")
+	if host == "localhost" || host == "127.0.0.1" {
+		return "", false
+	}
+
+	if strings.HasPrefix(host, "www.") {
+		return scheme + "://" + strings.TrimPrefix(host, "www."), true
+	}
+
+	// Only pair apex domains (example.com), not other subdomains (api.example.com).
+	if strings.Count(host, ".") != 1 {
+		return "", false
+	}
+
+	return scheme + "://www." + host, true
 }
 
 func (c *Config) IsDevelopment() bool {

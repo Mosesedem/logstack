@@ -5,13 +5,24 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    name: Lint, test, and build
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -22,32 +33,38 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
-
-      - name: Install pnpm
-        run: npm install -g pnpm@8.15.0
+          go-version: "1.25"
+          cache-dependency-path: packages/logstack-go/go.sum
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
-      - name: Lint Go
+      - name: Lint and test Go API
         run: |
           cd packages/logstack-go
           go mod tidy
           go vet ./...
-          go test ./... -v
+          go test ./... -count=1
 
-      - name: Lint TypeScript
-        run: |
-          cd apps/web
-          pnpm lint
-
-      - name: Build Go
+      - name: Build Go API binary
         run: |
           cd packages/logstack-go
           go build -o /tmp/server cmd/server/main.go
 
-      - name: Build Web
-        run: |
-          cd apps/web
-          pnpm build
+      - name: Build API Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./packages/logstack-go
+          file: ./packages/logstack-go/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build JS SDK
+        run: pnpm --filter logstack-js build
+
+      - name: Lint web dashboard
+        run: pnpm --filter @logstack/web lint
+
+      - name: Build web dashboard
+        run: pnpm --filter @logstack/web build

@@ -1,5 +1,7 @@
 # GitHub Auto-Deploy — Logstack API to EC2
 
+> **Full guide:** see **[CICD.md](./CICD.md)** for the complete CI/CD setup (CI gates, web deploy, SDK publish, troubleshooting).
+
 Automatically deploy the Logstack API to production when you push to `main`.
 
 This setup matches the **shared EC2 host** in production:
@@ -16,13 +18,12 @@ This setup matches the **shared EC2 host** in production:
 Developer pushes to main
         │
         ▼
-GitHub Actions (.github/workflows/deploy.yml)
+CI (.github/workflows/ci.yml) — test + build gate
         │
-        ├─ Job 1: build-api
-        │     Verify the Go API Docker image builds (CI gate)
+        ▼ (only after CI passes on main)
+Deploy API (.github/workflows/deploy.yml)
         │
-        └─ Job 2: deploy
-              SSH → EC2
+        └─ SSH → EC2
               git pull --ff-only origin main
               docker compose -f docker-compose.host.yml up -d --build
               curl https://api.logstack.tech/health

@@ -56,6 +56,15 @@ func TestCORS(t *testing.T) {
 			wantVary:       "Origin",
 			wantStatus:     http.StatusNoContent,
 		},
+		{
+			name:           "allows www when apex is configured",
+			allowedOrigins: []string{"https://logstack.tech", "https://www.logstack.tech"},
+			origin:         "https://www.logstack.tech",
+			method:         http.MethodOptions,
+			wantOrigin:     "https://www.logstack.tech",
+			wantVary:       "Origin",
+			wantStatus:     http.StatusNoContent,
+		},
 	}
 
 	for _, tt := range tests {

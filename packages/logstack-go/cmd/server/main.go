@@ -26,6 +26,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	if len(cfg.AllowedOrigins) == 0 {
+		slog.Warn("ALLOWED_ORIGINS is empty; browser clients will be blocked by CORS")
+	} else {
+		slog.Info("CORS allowed origins configured", "origins", cfg.AllowedOrigins)
+	}
+
 	// Connect to database
 	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
 	if err != nil {
