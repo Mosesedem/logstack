@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   test:
-    name: Lint, test, and build
+    name: API and SDK
     runs-on: ubuntu-latest
 
     steps:
@@ -66,8 +66,4 @@ jobs:
       - name: Build JS SDK
         run: pnpm --filter logstack-js build
 
-      - name: Lint web dashboard
-        run: pnpm --filter @logstack/web lint
-
-      - name: Build web dashboard
-        run: pnpm --filter @logstack/web build
+      # Web dashboard is built and deployed by Vercel, not CI.
