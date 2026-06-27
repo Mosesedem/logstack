@@ -128,20 +128,36 @@ CREATE INDEX IF NOT EXISTS idx_mrt_token   ON mobile_refresh_tokens(token);
 `,
 	},
 	{
-		// GORM uniqueIndex expects uni_<table>_<column>; inline UNIQUE creates <table>_<column>_key.
+		// GORM uniqueIndex expects a CONSTRAINT named uni_<table>_<column>.
+		// Inline UNIQUE in CREATE TABLE produces <table>_<column>_key instead.
 		Version: "023_align_gorm_unique_constraints",
 		Up: `
 ALTER TABLE invites DROP CONSTRAINT IF EXISTS invites_token_key;
+ALTER TABLE invites DROP CONSTRAINT IF EXISTS uni_invites_token;
 DROP INDEX IF EXISTS idx_invites_token;
-CREATE UNIQUE INDEX IF NOT EXISTS uni_invites_token ON invites (token);
+DROP INDEX IF EXISTS uni_invites_token;
+DO $$ BEGIN
+  ALTER TABLE invites ADD CONSTRAINT uni_invites_token UNIQUE (token);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_reference_key;
+ALTER TABLE invoices DROP CONSTRAINT IF EXISTS uni_invoices_reference;
 DROP INDEX IF EXISTS idx_invoices_reference;
-CREATE UNIQUE INDEX IF NOT EXISTS uni_invoices_reference ON invoices (reference);
+DROP INDEX IF EXISTS uni_invoices_reference;
+DO $$ BEGIN
+  ALTER TABLE invoices ADD CONSTRAINT uni_invoices_reference UNIQUE (reference);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE mobile_refresh_tokens DROP CONSTRAINT IF EXISTS mobile_refresh_tokens_token_key;
+ALTER TABLE mobile_refresh_tokens DROP CONSTRAINT IF EXISTS uni_mobile_refresh_tokens_token;
 DROP INDEX IF EXISTS idx_mrt_token;
-CREATE UNIQUE INDEX IF NOT EXISTS uni_mobile_refresh_tokens_token ON mobile_refresh_tokens (token);
+DROP INDEX IF EXISTS uni_mobile_refresh_tokens_token;
+DO $$ BEGIN
+  ALTER TABLE mobile_refresh_tokens ADD CONSTRAINT uni_mobile_refresh_tokens_token UNIQUE (token);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 `,
 	},
 }
@@ -245,9 +261,7 @@ func RunMigrations(db *gorm.DB) error {
 			&models.AlertHistory{},
 			&models.Subscription{},
 			&models.UsageLog{},
-			&models.Invite{},
-			&models.Invoice{},
-			&models.MobileRefreshToken{},
+			// Invite, Invoice, MobileRefreshToken are owned by numbered SQL migrations above.
 		); err != nil {
 			return err
 		}
