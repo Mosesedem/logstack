@@ -5,8 +5,10 @@ A Python SDK for the Logstack logging platform.
 ## Installation
 
 ```bash
-pip install logstack
+pip install logstack-py
 ```
+
+The import name is still `logstack` (e.g. `from logstack import LogStackClient`).
 
 ## v1.0.1
 

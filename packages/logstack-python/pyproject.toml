@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "logstack"
+name = "logstack-py"
 version = "1.0.1"
 description = "A Python SDK for the Logstack logging platform"
 readme = "README.md"

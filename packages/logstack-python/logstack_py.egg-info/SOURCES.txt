@@ -1,0 +1,13 @@
+LICENSE
+README.md
+pyproject.toml
+setup.py
+logstack/__init__.py
+logstack/client.py
+logstack/middleware.py
+logstack_py.egg-info/PKG-INFO
+logstack_py.egg-info/SOURCES.txt
+logstack_py.egg-info/dependency_links.txt
+logstack_py.egg-info/requires.txt
+logstack_py.egg-info/top_level.txt
+tests/test_client.py

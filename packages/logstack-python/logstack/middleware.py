@@ -65,7 +65,7 @@ def create_fastapi_middleware(client: LogStackClient):
     except ImportError as exc:
         raise ImportError(
             "FastAPI/Starlette is required for create_fastapi_middleware. "
-            "Install with: pip install logstack[fastapi]"
+            "Install with: pip install logstack-py[fastapi]"
         ) from exc
 
     class LogStackExceptionMiddleware(BaseHTTPMiddleware):

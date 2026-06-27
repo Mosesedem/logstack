@@ -7,7 +7,7 @@ Guidance for working in this repository. Read this first.
 dashboard with alerts & billing. Git remote: `github.com/Mosesedem/logstack`.
 
 > **Naming rule:** the canonical product/package name is **`logstack`** (git remote, npm
-> `logstack-js`, PyPI `logstack`, Go module `.../logstack-go-sdk`, API `api.logstack.tech`,
+> `logstack-js`, PyPI `logstack-py`, Go module `.../logstack-go-sdk`, API `api.logstack.tech`,
 > UI title). All directories, module paths and references now use `logstack-*` (rename completed).
 
 ## Layout (monorepo: pnpm + turbo)
@@ -17,7 +17,7 @@ dashboard with alerts & billing. Git remote: `github.com/Mosesedem/logstack`.
   `github.com/mosesedem/logstack`. Entry `cmd/server/main.go`.
 - `packages/logstack-js` — JS/TS SDK, npm name `logstack-js`. Source `src/index.ts` → `dist/`.
 - `packages/logstack-go-sdk` — Go SDK (`logstack.go`).
-- `packages/logstack-python` — Python SDK (`logstack`).
+- `packages/logstack-python` — Python SDK (PyPI `logstack-py`, import `logstack`).
 - `packages/shared-types` — shared TS types.
 - `docs/` — reference docs. `docs/progress.md` is the live progress tracker.
 
