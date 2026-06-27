@@ -98,9 +98,14 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           set -euo pipefail
-          if [ -z "${DEPLOY_KEY:-}" ] || [ -z "${DEPLOY_HOST:-}" ] || [ -z "${DEPLOY_USER:-}" ]; then
-            echo "::error::Missing DEPLOY_KEY, DEPLOY_HOST, or DEPLOY_USER repository secret." >&2
-            echo "Run scripts/setup-github-deploy.sh on the server — see docs/CICD.md" >&2
+          missing=()
+          [ -z "${DEPLOY_KEY:-}" ] && missing+=("DEPLOY_KEY")
+          [ -z "${DEPLOY_HOST:-}" ] && missing+=("DEPLOY_HOST")
+          [ -z "${DEPLOY_USER:-}" ] && missing+=("DEPLOY_USER")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing GitHub Actions secrets: ${missing[*]}" >&2
+            echo "Add them under Settings → Secrets and variables → Actions (or the production environment)." >&2
+            echo "Run scripts/setup-github-deploy.sh on the EC2 server — see docs/CICD.md" >&2
             exit 1
           fi
 
