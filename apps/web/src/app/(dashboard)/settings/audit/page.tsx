@@ -60,7 +60,7 @@ export default function AuditLogsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [actionFilter, setActionFilter] = useState<string>("");
+  const [actionFilter, setActionFilter] = useState<string>("all");
   const [availableActions, setAvailableActions] = useState<string[]>([]);
 
   useEffect(() => {
@@ -89,7 +89,7 @@ export default function AuditLogsPage() {
         page: page.toString(),
         per_page: "20",
       });
-      if (actionFilter) {
+      if (actionFilter !== "all") {
         params.append("action", actionFilter);
       }
 
@@ -194,12 +194,15 @@ export default function AuditLogsPage() {
                 {total} total {total === 1 ? "event" : "events"}
               </CardDescription>
             </div>
-            <Select value={actionFilter} onValueChange={setActionFilter}>
+            <Select
+              value={actionFilter}
+              onValueChange={(value) => setActionFilter(value)}
+            >
               <SelectTrigger className="w-[280px]">
                 <SelectValue placeholder="Filter by action" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Actions</SelectItem>
+                <SelectItem value="all">All Actions</SelectItem>
                 {availableActions.map((action) => (
                   <SelectItem key={action} value={action}>
                     {formatAction(action)}
