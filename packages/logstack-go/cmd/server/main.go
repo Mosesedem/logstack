@@ -71,7 +71,13 @@ func main() {
 		RefreshTokenExpiry: cfg.RefreshTokenExpiry,
 	})
 	alertEngine := services.NewAlertEngine(db, rdb, notifier)
-	billingService := services.NewBillingService(db, cfg.PaystackSecretKey, cfg.PaystackPublicKey, cfg.PaystackWebhookURL)
+	polarService := services.NewPolarService(db, services.PolarConfig{
+		AccessToken:    cfg.PolarAccessToken,
+		WebhookSecret:  cfg.PolarWebhookSecret,
+		ProductStarter: cfg.PolarProductStarter,
+		ProductPro:     cfg.PolarProductPro,
+	})
+	billingService := services.NewBillingService(db, cfg.PaystackSecretKey, cfg.PaystackPublicKey, cfg.PaystackWebhookURL, polarService)
 	auditService := services.NewAuditService(db)
 	organizationService := services.NewOrganizationService(db, auditService)
 

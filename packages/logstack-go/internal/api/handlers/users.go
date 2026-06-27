@@ -24,8 +24,9 @@ func NewUsersHandler(db *gorm.DB, authService *services.AuthService) *UsersHandl
 }
 
 type UpdateUserRequest struct {
-	Name  string `json:"name" binding:"omitempty,min=1,max=100"`
-	Email string `json:"email" binding:"omitempty,email"`
+	Name    string `json:"name" binding:"omitempty,min=1,max=100"`
+	Email   string `json:"email" binding:"omitempty,email"`
+	Country string `json:"country" binding:"omitempty,len=2"`
 }
 
 type UpdatePasswordRequest struct {
@@ -86,6 +87,10 @@ func (h *UsersHandler) UpdateCurrentUser(c *gin.Context) {
 			return
 		}
 		user.Email = email
+	}
+	if req.Country != "" {
+		country := strings.ToUpper(strings.TrimSpace(req.Country))
+		user.Country = &country
 	}
 
 	if err := h.db.Save(&user).Error; err != nil {

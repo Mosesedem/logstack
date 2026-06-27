@@ -16,6 +16,9 @@ import {
   Users,
   LayoutDashboard,
   FlaskConical,
+  Phone,
+  Hamburger,
+  ArrowUpRight,
 } from "lucide-react";
 import type { UsageSummary } from "@/types";
 
@@ -30,6 +33,17 @@ export const navItems = [
   { href: "/settings/team", label: "Team", icon: Users },
 ];
 
+export const navLinks = [
+  { href: "/docs", label: "Docs", icon: FileText },
+  { href: "/support", label: "Support", icon: Phone },
+  { href: "/changelog", label: "Changelog", icon: Ship },
+  { href: "/blog", label: "Blog", icon: FileText },
+  {
+    href: "https://github.com/mosedem/logstack",
+    label: "GitHub",
+    icon: FolderOpen,
+  },
+];
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname();
   const [usage, setUsage] = useState<UsageSummary | null>(null);
@@ -123,6 +137,29 @@ export function Sidebar({ className }: { className?: string }) {
             >
               <Icon className="h-4 w-4" />
               {item.label}
+            </Link>
+          );
+        })}
+        <br />
+        {navLinks.map((item) => {
+          const isActive = pathname.startsWith(item.href);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={`${item.href} target="_blank" rel="noopener noreferrer"`}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 hover:underline",
+                isActive
+                  ? "bg-primary/10 text-primary border border-primary/20"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/5",
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+              <span className="ml-auto text-[10px] text-muted-foreground">
+                <ArrowUpRight className="h-3 w-3" />
+              </span>
             </Link>
           );
         })}

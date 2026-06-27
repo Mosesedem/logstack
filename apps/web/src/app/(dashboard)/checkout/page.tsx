@@ -12,41 +12,14 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import type { BillingContextResponse, SubscriptionTier } from "@/types";
 
-interface PricingTier {
-  tier: string;
-  name: string;
-  description: string;
-  prices: {
-    USD: number;
-    NGN: number;
-    GHS: number;
-  };
-  features: string[];
-  limits: {
-    logs: string;
-    retention: string;
-    projects: string;
-  };
-}
-
-interface PricingResponse {
-  tiers: PricingTier[];
-  currencies: Array<{
-    code: string;
-    symbol: string;
-    name: string;
-  }>;
+function formatPrice(cents: number, currency: string): string {
+  const symbol = currency === "NGN" ? "₦" : "$";
+  return `${symbol}${(cents / 100).toLocaleString()}`;
 }
 
 function CheckoutPageContent() {
@@ -54,34 +27,37 @@ function CheckoutPageContent() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [pricing, setPricing] = useState<PricingResponse | null>(null);
+  const [billingData, setBillingData] = useState<BillingContextResponse | null>(
+    null,
+  );
   const [selectedTier, setSelectedTier] = useState<string>(
     searchParams.get("tier") || "starter",
-  );
-  const [selectedCurrency, setSelectedCurrency] = useState<string>(
-    searchParams.get("currency") || "USD",
   );
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    loadPricing();
+    loadBillingContext();
   }, []);
 
-  const loadPricing = async () => {
+  const loadBillingContext = async () => {
     try {
-      const data = await api.get<PricingResponse>("/billing/pricing");
-      setPricing(data);
+      const data = await api.get<BillingContextResponse>("/billing/context");
+      setBillingData(data);
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load pricing information",
+        description: "Failed to load billing information",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
   };
+
+  const billingContext = billingData?.context;
+  const currency = billingContext?.currency ?? "USD";
+  const providerLabel = billingContext?.paymentLabel ?? "Polar";
 
   const handleCheckout = async () => {
     if (selectedTier === "enterprise") {
@@ -98,34 +74,23 @@ function CheckoutPageContent() {
         "/billing/initialize",
         {
           tier: selectedTier,
-          currency: selectedCurrency,
-          callbackUrl: `${window.location.origin}/dashboard/billing?success=true`,
+          currency,
+          callbackUrl: `${window.location.origin}/billing?success=true`,
         },
       );
 
-      // Redirect to Paystack checkout
       window.location.href = response.authorizationUrl;
-    } catch (error: any) {
+    } catch (error) {
       console.error("Failed to initialize payment:", error);
-
-      // Check if it's a service unavailable error (503)
-      if (error?.response?.status === 503) {
-        toast({
-          title: "Payment Service Unavailable",
-          description:
-            "Payment processing is currently not available. Please contact support at support@logstack.io or try again later.",
-          variant: "destructive",
-          duration: 10000,
-        });
-      } else {
-        toast({
-          title: "Payment Initialization Failed",
-          description:
-            error?.response?.data?.error ||
-            "Failed to process checkout. Please try again or contact support.",
-          variant: "destructive",
-        });
-      }
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to process checkout. Please try again or contact support.";
+      toast({
+        title: "Payment Initialization Failed",
+        description: message,
+        variant: "destructive",
+      });
       setIsProcessing(false);
     }
   };
@@ -138,13 +103,10 @@ function CheckoutPageContent() {
     );
   }
 
-  const selectedTierData = pricing?.tiers.find((t) => t.tier === selectedTier);
-  const currencySymbol =
-    pricing?.currencies.find((c) => c.code === selectedCurrency)?.symbol || "$";
-  const price =
-    selectedTierData?.prices[
-      selectedCurrency as keyof typeof selectedTierData.prices
-    ] || 0;
+  const selectedTierData = billingData?.tiers.find(
+    (t) => t.tier === selectedTier,
+  );
+  const priceCents = selectedTierData?.prices[currency] ?? 0;
 
   return (
     <div className="container max-w-5xl py-8">
@@ -153,12 +115,11 @@ function CheckoutPageContent() {
           Complete Your Subscription
         </h1>
         <p className="text-muted-foreground text-lg">
-          Choose your plan and complete payment
+          {currency} billing via {providerLabel}
         </p>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-3">
-        {/* Plan Selection */}
         <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader>
@@ -168,7 +129,7 @@ function CheckoutPageContent() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {pricing?.tiers
+              {billingData?.tiers
                 .filter((tier) => tier.tier !== "free")
                 .map((tier) => (
                   <div
@@ -204,18 +165,12 @@ function CheckoutPageContent() {
                       </div>
                       <div className="text-right">
                         <div className="text-3xl font-bold">
-                          {tier.tier === "enterprise" ? (
-                            "Custom"
-                          ) : (
-                            <>
-                              {currencySymbol}
-                              {
-                                tier.prices[
-                                  selectedCurrency as keyof typeof tier.prices
-                                ]
-                              }
-                            </>
-                          )}
+                          {tier.tier === "enterprise"
+                            ? "Custom"
+                            : formatPrice(
+                                tier.prices[currency] ?? 0,
+                                currency,
+                              )}
                         </div>
                         {tier.tier !== "enterprise" && (
                           <div className="text-sm text-muted-foreground">
@@ -228,36 +183,8 @@ function CheckoutPageContent() {
                 ))}
             </CardContent>
           </Card>
-
-          {/* Currency Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Select Currency</CardTitle>
-              <CardDescription>
-                Choose your preferred payment currency
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Select
-                value={selectedCurrency}
-                onValueChange={setSelectedCurrency}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {pricing?.currencies.map((currency) => (
-                    <SelectItem key={currency.code} value={currency.code}>
-                      {currency.symbol} {currency.name} ({currency.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
         </div>
 
-        {/* Order Summary */}
         <div className="lg:col-span-1">
           <Card className="sticky top-8">
             <CardHeader>
@@ -274,8 +201,8 @@ function CheckoutPageContent() {
                   <span className="font-medium">Monthly</span>
                 </div>
                 <div className="flex justify-between text-sm mb-4">
-                  <span className="text-muted-foreground">Currency</span>
-                  <span className="font-medium">{selectedCurrency}</span>
+                  <span className="text-muted-foreground">Provider</span>
+                  <span className="font-medium">{providerLabel}</span>
                 </div>
                 <div className="border-t pt-4">
                   <div className="flex justify-between text-lg font-bold">
@@ -285,8 +212,7 @@ function CheckoutPageContent() {
                         "Contact Sales"
                       ) : (
                         <>
-                          {currencySymbol}
-                          {price}
+                          {formatPrice(priceCents, currency)}
                           <span className="text-sm font-normal text-muted-foreground">
                             /month
                           </span>
@@ -328,7 +254,7 @@ function CheckoutPageContent() {
               </Button>
 
               <p className="text-xs text-center text-muted-foreground">
-                Secure payment powered by Paystack. Cancel anytime.
+                Secure payment powered by {providerLabel}. Cancel anytime.
               </p>
 
               <Button

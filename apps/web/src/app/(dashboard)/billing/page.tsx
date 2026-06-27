@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { AlertTriangle, FileText, ChevronRight } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle, FileText, ChevronRight, CreditCard } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -31,22 +31,23 @@ import { api } from "@/lib/api-client";
 import type {
   Subscription,
   UsageSummary,
-  PricingResponse,
+  BillingContextResponse,
   SubscriptionTier,
   Invoice,
 } from "@/types";
 
-export default function BillingPage() {
+function BillingPageContent() {
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(true);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
-  const [pricing, setPricing] = useState<PricingResponse | null>(null);
+  const [billingContextData, setBillingContextData] =
+    useState<BillingContextResponse | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
-  // Invoice list via TanStack Query
   const {
     data: invoicesData,
     isLoading: invoicesLoading,
@@ -54,28 +55,36 @@ export default function BillingPage() {
     queryKey: ["invoices"],
     queryFn: () =>
       api.get<{ invoices: Invoice[]; total: number; page: number }>(
-        "/billing/invoices"
+        "/billing/invoices",
       ),
   });
 
   const invoices = invoicesData?.invoices ?? [];
+  const billingContext = billingContextData?.context;
+  const pricingTiers = billingContextData?.tiers ?? [];
+
+  useEffect(() => {
+    if (searchParams.get("success") === "true") {
+      toast({
+        title: "Payment successful",
+        description: "Your subscription is being activated. This may take a moment.",
+      });
+    }
+  }, [searchParams, toast]);
 
   const loadBillingData = useCallback(async () => {
     try {
       setIsLoading(true);
 
-      // Load critical data first
-      const [subResult, pricingResult] = await Promise.allSettled([
+      const [subResult, contextResult] = await Promise.allSettled([
         api.get<Subscription>("/billing/subscription"),
-        api.get<PricingResponse>("/billing/pricing"),
+        api.get<BillingContextResponse>("/billing/context"),
       ]);
 
-      // Load usage separately (non-critical)
       const usageResult = await Promise.allSettled([
         api.get<UsageSummary>("/billing/usage"),
       ]);
 
-      // Handle Subscription
       if (subResult.status === "fulfilled") {
         setSubscription(subResult.value);
       } else {
@@ -87,16 +96,12 @@ export default function BillingPage() {
         });
       }
 
-      // Handle Pricing
-      if (pricingResult.status === "fulfilled") {
-        setPricing(pricingResult.value);
+      if (contextResult.status === "fulfilled") {
+        setBillingContextData(contextResult.value);
       }
 
-      // Handle Usage (non-critical)
       if (usageResult[0].status === "fulfilled") {
         setUsage(usageResult[0].value);
-      } else {
-        console.warn("Failed to load usage data:", usageResult[0].reason);
       }
     } catch (error) {
       console.error("Unexpected error loading billing data:", error);
@@ -125,22 +130,24 @@ export default function BillingPage() {
 
     try {
       setIsInitializing(true);
-      const response = await api.post<{ authorizationUrl: string }>(
+      const response = await api.post<{ authorizationUrl: string; provider: string }>(
         "/billing/initialize",
         {
           tier,
           currency,
-          callbackUrl: `${window.location.origin}/dashboard/billing?success=true`,
+          callbackUrl: `${window.location.origin}/billing?success=true`,
         },
       );
 
-      // Redirect to Paystack
       window.location.href = response.authorizationUrl;
     } catch (error) {
       console.error("Failed to initialize payment:", error);
       toast({
         title: "Error",
-        description: "Failed to initialize payment. Please try again.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to initialize payment. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -203,12 +210,12 @@ export default function BillingPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="mx-auto max-w-5xl py-8">
         <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-muted rounded w-1/4"></div>
+          <div className="h-8 bg-muted rounded w-1/4" />
           <div className="grid gap-8">
-            <div className="h-48 bg-muted rounded"></div>
-            <div className="h-32 bg-muted rounded"></div>
+            <div className="h-48 bg-muted rounded" />
+            <div className="h-32 bg-muted rounded" />
           </div>
         </div>
       </div>
@@ -224,10 +231,23 @@ export default function BillingPage() {
         <p className="text-muted-foreground">
           Manage your subscription, billing details, and view invoices.
         </p>
+        {billingContext && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <CreditCard className="h-4 w-4" />
+            <span>
+              {billingContext.currency} · {billingContext.paymentLabel}
+              {billingContext.isNigeria
+                ? " (Nigeria)"
+                : " (International)"}
+            </span>
+            <Button variant="link" className="h-auto p-0 text-xs" asChild>
+              <a href="/settings">Change country</a>
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-8">
-        {/* Usage Section */}
         <div className="grid gap-4">
           <h2 className="text-xl font-medium">Usage</h2>
           <Card>
@@ -240,7 +260,7 @@ export default function BillingPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {usage && (
+              {usage ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">
@@ -266,17 +286,15 @@ export default function BillingPage() {
                     </p>
                   )}
                 </div>
-              )}
-              {!usage && (
+              ) : (
                 <div className="text-sm text-muted-foreground">
-                  Loading usage data...
+                  Usage data unavailable
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Plan Section */}
         <div className="grid gap-4">
           <h2 className="text-xl font-medium">Plan</h2>
           <Card className="flex flex-col md:flex-row md:items-center justify-between p-6 gap-6">
@@ -289,9 +307,7 @@ export default function BillingPage() {
               </div>
               <p className="text-sm text-muted-foreground mt-1">
                 {subscription?.periodEnd
-                  ? `Renews on ${new Date(
-                      subscription.periodEnd,
-                    ).toLocaleDateString()}`
+                  ? `Renews on ${new Date(subscription.periodEnd).toLocaleDateString()}`
                   : "Get started with our free tier."}
               </p>
             </div>
@@ -321,9 +337,8 @@ export default function BillingPage() {
             </div>
           </Card>
 
-          {/* Pricing Table */}
           <div id="pricing-grid">
-            {pricing && (
+            {billingContext && pricingTiers.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Available Plans</CardTitle>
@@ -333,8 +348,8 @@ export default function BillingPage() {
                 </CardHeader>
                 <CardContent>
                   <PricingTable
-                    tiers={pricing.tiers}
-                    currencies={pricing.currencies}
+                    tiers={pricingTiers}
+                    billingContext={billingContext}
                     currentTier={subscription?.tier}
                     onSelectTier={handleSelectTier}
                     isLoading={isInitializing}
@@ -345,7 +360,6 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* Invoices Section */}
         <div className="grid gap-4">
           <h2 className="text-xl font-medium">Invoices</h2>
           <Card>
@@ -401,7 +415,7 @@ export default function BillingPage() {
                               year: "numeric",
                               month: "short",
                               day: "numeric",
-                            }
+                            },
                           )}
                         </p>
                       </div>
@@ -409,7 +423,7 @@ export default function BillingPage() {
                         <span className="text-sm font-medium">
                           {formatInvoiceAmount(
                             invoice.amountCents,
-                            invoice.currency
+                            invoice.currency,
                           )}
                         </span>
                         {getInvoiceStatusBadge(invoice.status)}
@@ -424,7 +438,6 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Cancel Subscription Confirmation Dialog */}
       <AlertDialog
         open={isCancelDialogOpen}
         onOpenChange={setIsCancelDialogOpen}
@@ -449,5 +462,13 @@ export default function BillingPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-5xl py-8 animate-pulse h-64 bg-muted rounded" />}>
+      <BillingPageContent />
+    </Suspense>
   );
 }

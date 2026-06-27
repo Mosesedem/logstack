@@ -300,7 +300,7 @@ export default function TeamPage() {
   return (
     <div className="container max-w-4xl py-8 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Team</h1>
+        <h2 className="text-2xl font-semibold tracking-tight">Team</h2>
         <p className="text-muted-foreground mt-2">
           Manage your team members and their access levels
         </p>

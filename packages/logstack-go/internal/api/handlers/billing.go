@@ -29,18 +29,47 @@ func NewBillingHandler(billingService *services.BillingService, usageSyncWorker 
 	}
 }
 
-// GetPricing returns the pricing tiers
+// GetPricing returns the pricing tiers (public).
 // GET /v1/billing/pricing
 func (h *BillingHandler) GetPricing(c *gin.Context) {
-	// Return static pricing even if billing service is not configured
 	tiers := models.GetPricingTiers()
 	c.JSON(http.StatusOK, gin.H{
 		"tiers": tiers,
 		"currencies": []gin.H{
-			{"code": "USD", "symbol": "$", "name": "US Dollar"},
-			{"code": "NGN", "symbol": "₦", "name": "Nigerian Naira"},
-			{"code": "GHS", "symbol": "GH₵", "name": "Ghanaian Cedi"},
+			{"code": "USD", "symbol": "$", "name": "US Dollar", "provider": services.BillingProviderPolar},
+			{"code": "NGN", "symbol": "₦", "name": "Nigerian Naira", "provider": services.BillingProviderPaystack},
 		},
+		"regions": gin.H{
+			"nigeria": gin.H{
+				"country":  "NG",
+				"currency": "NGN",
+				"provider": services.BillingProviderPaystack,
+			},
+			"international": gin.H{
+				"currency": "USD",
+				"provider": services.BillingProviderPolar,
+			},
+		},
+	})
+}
+
+// GetBillingContext returns the authenticated user's billing region.
+// GET /v1/billing/context
+func (h *BillingHandler) GetBillingContext(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+
+	var user models.User
+	if err := h.db.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	ctx := h.billingService.GetBillingContext(&user)
+	tiers := services.FilterPricingTiersForCurrency(models.GetPricingTiers(), ctx.Currency)
+
+	c.JSON(http.StatusOK, gin.H{
+		"context": ctx,
+		"tiers":   tiers,
 	})
 }
 
@@ -52,15 +81,7 @@ func (h *BillingHandler) GetSubscription(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
 		return
 	}
-// Check if billing service is configured
-	if h.billingService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "Billing service is not configured",
-		})
-		return
-	}
 
-	
 	subscription, err := h.billingService.GetSubscription(c.Request.Context(), userID.(uint))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get subscription"})
@@ -98,14 +119,6 @@ type InitializePaymentRequest struct {
 // InitializePayment initializes a payment session
 // POST /v1/billing/initialize
 func (h *BillingHandler) InitializePayment(c *gin.Context) {
-	// Check if billing service is configured
-	if h.billingService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "Billing service is not configured. Please contact support or configure Paystack API keys.",
-		})
-		return
-	}
-
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
@@ -118,17 +131,15 @@ func (h *BillingHandler) InitializePayment(c *gin.Context) {
 		return
 	}
 
-	// Validate tier
 	tier := models.SubscriptionTier(req.Tier)
 	if !tier.IsValid() {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tier"})
 		return
 	}
 
-	// Validate currency
-	validCurrencies := map[string]bool{"USD": true, "NGN": true, "GHS": true}
+	validCurrencies := map[string]bool{"USD": true, "NGN": true}
 	if !validCurrencies[req.Currency] {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid currency"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid currency; only USD and NGN are supported"})
 		return
 	}
 
@@ -141,10 +152,8 @@ func (h *BillingHandler) InitializePayment(c *gin.Context) {
 	resp, err := h.billingService.InitializePayment(c.Request.Context(), userID.(uint), paymentReq)
 	if err != nil {
 		errMsg := err.Error()
-		// Paystack returns "Invalid key" when credentials are placeholder/invalid.
-		// Also catches "No API key supplied" for missing keys.
-		// Surface as 503 so the frontend shows a helpful "not configured" message.
-		if strings.Contains(errMsg, "Invalid key") ||
+		if strings.Contains(errMsg, "not configured") ||
+			strings.Contains(errMsg, "Invalid key") ||
 			strings.Contains(errMsg, "invalid key") ||
 			strings.Contains(errMsg, "No API key") ||
 			strings.Contains(errMsg, "Authorization") {
@@ -152,6 +161,10 @@ func (h *BillingHandler) InitializePayment(c *gin.Context) {
 				"error": "Payment processing is not configured. Please contact support to set up billing.",
 				"code":  "BILLING_NOT_CONFIGURED",
 			})
+			return
+		}
+		if strings.Contains(errMsg, "not available for your region") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
@@ -170,19 +183,6 @@ func (h *BillingHandler) GetTransactions(c *gin.Context) {
 		return
 	}
 
-	// Check if billing service is configured
-	if h.billingService == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"transactions": []interface{}{},
-			"meta": gin.H{
-				"total": 0,
-				"page":  1,
-			},
-		})
-		return
-	}
-
-	// Get subscription to get customer code
 	subscription, err := h.billingService.GetSubscription(c.Request.Context(), userID.(uint))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get subscription"})
@@ -190,7 +190,6 @@ func (h *BillingHandler) GetTransactions(c *gin.Context) {
 	}
 
 	if subscription.PaystackCustomerCode == nil {
-		// No transactions yet
 		c.JSON(http.StatusOK, gin.H{
 			"transactions": []interface{}{},
 			"meta": gin.H{
@@ -216,14 +215,6 @@ func (h *BillingHandler) GetTransactions(c *gin.Context) {
 // CancelSubscription cancels the user's subscription
 // POST /v1/billing/cancel
 func (h *BillingHandler) CancelSubscription(c *gin.Context) {
-	// Check if billing service is configured
-	if h.billingService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "Billing service is not configured",
-		})
-		return
-	}
-
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
@@ -295,25 +286,47 @@ func (h *BillingHandler) GetInvoice(c *gin.Context) {
 	c.JSON(http.StatusOK, invoice)
 }
 
-// HandleWebhook handles Paystack webhook events
+// HandlePaystackWebhook handles Paystack webhook events
 // POST /v1/webhooks/paystack
-func (h *BillingHandler) HandleWebhook(c *gin.Context) {
-	// Read body
+func (h *BillingHandler) HandlePaystackWebhook(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read body"})
 		return
 	}
 
-	// Get signature from header
 	signature := c.GetHeader("X-Paystack-Signature")
 	if signature == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing signature"})
 		return
 	}
 
-	// Process webhook
 	if err := h.billingService.HandleWebhook(c.Request.Context(), body, signature); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"received": true})
+}
+
+// HandlePolarWebhook handles Polar webhook events
+// POST /v1/webhooks/polar
+func (h *BillingHandler) HandlePolarWebhook(c *gin.Context) {
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read body"})
+		return
+	}
+
+	webhookID := c.GetHeader("webhook-id")
+	webhookTimestamp := c.GetHeader("webhook-timestamp")
+	webhookSignature := c.GetHeader("webhook-signature")
+	if webhookSignature == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing signature"})
+		return
+	}
+
+	if err := h.billingService.HandlePolarWebhook(c.Request.Context(), body, webhookID, webhookTimestamp, webhookSignature); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

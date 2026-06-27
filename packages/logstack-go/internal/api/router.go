@@ -175,6 +175,7 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 			// Billing
 			billing := protected.Group("/billing")
 			{
+				billing.GET("/context", billingHandler.GetBillingContext)
 				billing.GET("/subscription", billingHandler.GetSubscription)
 				billing.GET("/usage", billingHandler.GetUsage)
 				billing.POST("/initialize", billingHandler.InitializePayment)
@@ -223,11 +224,9 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		// Webhooks (no auth - use signature verification)
 		webhooks := v1.Group("/webhooks")
 		{
-			// Paystack webhook handler (created without BillingHandler dependency to avoid nil pointer)
-			if cfg.BillingService != nil {
-				billingHandler := handlers.NewBillingHandler(cfg.BillingService, cfg.UsageSyncWorker, cfg.DB)
-				webhooks.POST("/paystack", billingHandler.HandleWebhook)
-			}
+			whBillingHandler := handlers.NewBillingHandler(cfg.BillingService, cfg.UsageSyncWorker, cfg.DB)
+			webhooks.POST("/paystack", whBillingHandler.HandlePaystackWebhook)
+			webhooks.POST("/polar", whBillingHandler.HandlePolarWebhook)
 		}
 
 		// Mobile routes

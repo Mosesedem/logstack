@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -12,18 +11,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { PricingTier, SubscriptionTier } from "@/types";
+import type { BillingContext, PricingTier, SubscriptionTier } from "@/types";
 
 interface PricingTableProps {
   tiers: PricingTier[];
-  currencies: Array<{ code: string; symbol: string; name: string }>;
+  billingContext?: BillingContext;
   currentTier?: SubscriptionTier;
   onSelectTier: (tier: SubscriptionTier, currency: string) => void;
   isLoading?: boolean;
@@ -31,30 +23,23 @@ interface PricingTableProps {
 
 export function PricingTable({
   tiers,
-  currencies,
+  billingContext,
   currentTier = "free",
   onSelectTier,
   isLoading = false,
 }: PricingTableProps) {
-  const [selectedCurrency, setSelectedCurrency] = useState(() => {
-    // Default based on locale or first available
-    if (typeof navigator !== "undefined") {
-      const lang = navigator.language;
-      if (lang.includes("NG") || lang.includes("ng")) return "NGN";
-      if (lang.includes("GH") || lang.includes("gh")) return "GHS";
-    }
-    return "USD";
-  });
+  const currency = billingContext?.currency ?? "USD";
+  const providerLabel = billingContext?.paymentLabel ?? "Polar";
 
   const getCurrencySymbol = (code: string) => {
-    const currency = currencies.find((c) => c.code === code);
-    return currency?.symbol || "$";
+    if (code === "NGN") return "₦";
+    return "$";
   };
 
-  const formatPrice = (cents: number, currency: string) => {
+  const formatPrice = (cents: number, code: string) => {
     if (cents <= 0) return cents === 0 ? "Free" : "Contact Sales";
     const amount = cents / 100;
-    const symbol = getCurrencySymbol(currency);
+    const symbol = getCurrencySymbol(code);
     return `${symbol}${amount.toLocaleString()}/mo`;
   };
 
@@ -67,28 +52,21 @@ export function PricingTable({
 
   return (
     <div className="space-y-6">
-      {/* Currency Selector */}
-      <div className="flex justify-center">
-        <Select value={selectedCurrency} onValueChange={setSelectedCurrency}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Select currency" />
-          </SelectTrigger>
-          <SelectContent>
-            {currencies.map((currency) => (
-              <SelectItem key={currency.code} value={currency.code}>
-                {currency.symbol} {currency.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {billingContext && (
+        <p className="text-center text-sm text-muted-foreground">
+          Billing in{" "}
+          <span className="font-medium text-foreground">{currency}</span> via{" "}
+          <span className="font-medium text-foreground">{providerLabel}</span>
+          {billingContext.isNigeria
+            ? " — Nigerian customers"
+            : " — international customers"}
+        </p>
+      )}
 
-      {/* Pricing Cards */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         {tiers.map((tier) => {
           const isCurrentTier = tier.tier === currentTier;
-          const price =
-            tier.prices[selectedCurrency] || tier.prices["USD"] || 0;
+          const price = tier.prices[currency] ?? tier.prices["USD"] ?? 0;
           const isEnterprise = tier.tier === "enterprise";
           const isUpgrade =
             !isCurrentTier && tierOrder(tier.tier) > tierOrder(currentTier);
@@ -99,7 +77,7 @@ export function PricingTable({
               className={cn(
                 "relative flex flex-col",
                 tier.tier === "pro" && "border-primary shadow-lg",
-                isCurrentTier && "ring-2 ring-primary"
+                isCurrentTier && "ring-2 ring-primary",
               )}
             >
               {tier.tier === "pro" && (
@@ -127,7 +105,7 @@ export function PricingTable({
               <CardContent className="flex-1 space-y-4">
                 <div className="text-center">
                   <span className="text-3xl font-bold">
-                    {formatPrice(price, selectedCurrency)}
+                    {formatPrice(price, currency)}
                   </span>
                   <p className="text-sm text-muted-foreground mt-1">
                     {formatLogLimit(tier.logLimit)} logs/month
@@ -149,7 +127,7 @@ export function PricingTable({
                   className="w-full"
                   variant={tier.tier === "pro" ? "default" : "outline"}
                   disabled={isLoading || isCurrentTier || tier.tier === "free"}
-                  onClick={() => onSelectTier(tier.tier, selectedCurrency)}
+                  onClick={() => onSelectTier(tier.tier, currency)}
                 >
                   {isCurrentTier
                     ? "Current Plan"

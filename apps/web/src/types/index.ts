@@ -14,7 +14,23 @@ export interface User {
   id: number;
   email: string;
   name: string;
+  country?: string;
   createdAt: string;
+}
+
+export type BillingProvider = "paystack" | "polar" | "none";
+
+export interface BillingContext {
+  provider: BillingProvider;
+  currency: string;
+  country: string;
+  isNigeria: boolean;
+  paymentLabel: string;
+}
+
+export interface BillingContextResponse {
+  context: BillingContext;
+  tiers: PricingTier[];
 }
 
 export interface Project {
@@ -152,6 +168,7 @@ export interface PaymentInitResponse {
   authorizationUrl: string;
   reference: string;
   accessCode: string;
+  provider: BillingProvider;
 }
 
 export interface Transaction {

@@ -22,26 +22,40 @@ const (
 	paystackBaseURL = "https://api.paystack.co"
 )
 
-// BillingService handles Paystack payment integration
+// BillingService orchestrates Paystack (Nigeria/NGN) and Polar (international/USD) billing.
 type BillingService struct {
-	db         *gorm.DB
-	secretKey  string
-	publicKey  string
-	webhookURL string
-	httpClient *http.Client
+	db          *gorm.DB
+	secretKey   string
+	publicKey   string
+	webhookURL  string
+	polar       *PolarService
+	httpClient  *http.Client
 }
 
-// NewBillingService creates a new billing service
-func NewBillingService(db *gorm.DB, secretKey, publicKey, webhookURL string) *BillingService {
+// NewBillingService creates a new billing service.
+func NewBillingService(db *gorm.DB, secretKey, publicKey, webhookURL string, polar *PolarService) *BillingService {
 	return &BillingService{
 		db:         db,
 		secretKey:  secretKey,
 		publicKey:  publicKey,
 		webhookURL: webhookURL,
+		polar:      polar,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+func (s *BillingService) IsPaystackConfigured() bool {
+	return s != nil && s.secretKey != ""
+}
+
+func (s *BillingService) IsPolarConfigured() bool {
+	return s != nil && s.polar != nil && s.polar.IsConfigured()
+}
+
+func (s *BillingService) GetBillingContext(user *models.User) BillingContext {
+	return ResolveBillingContext(user.Country)
 }
 
 // PaystackInitializeRequest represents the request to initialize a transaction
@@ -213,17 +227,21 @@ type InitializePaymentResponse struct {
 	AuthorizationURL string `json:"authorizationUrl"`
 	Reference        string `json:"reference"`
 	AccessCode       string `json:"accessCode"`
+	Provider         string `json:"provider"`
 }
 
-// InitializePayment creates a payment link for subscription
+// InitializePayment creates a checkout session routed by user country.
 func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req InitializePaymentRequest) (*InitializePaymentResponse, error) {
-	// Get user
 	var user models.User
 	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
 
-	// Get pricing for the tier and currency
+	billingCtx := ResolveBillingContext(user.Country)
+	if req.Currency != billingCtx.Currency {
+		return nil, fmt.Errorf("currency %s is not available for your region; use %s", req.Currency, billingCtx.Currency)
+	}
+
 	tiers := models.GetPricingTiers()
 	var amount int
 	var found bool
@@ -236,34 +254,72 @@ func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req
 			}
 		}
 	}
-
 	if !found {
 		return nil, errors.New("invalid tier or currency")
 	}
-
 	if amount <= 0 {
 		return nil, errors.New("cannot initialize payment for free tier or enterprise (contact sales)")
 	}
 
-	// Get or create plan code
-	planCode, err := s.getOrCreatePlan(ctx, req.Tier, req.Currency, amount)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get plan: %w", err)
+	if billingCtx.Provider == BillingProviderPolar {
+		if !s.IsPolarConfigured() {
+			return nil, errors.New("international billing is not configured")
+		}
+		successURL := req.CallbackURL
+		if successURL == "" {
+			successURL = "/billing?success=true"
+		}
+		resp, err := s.polar.InitializeCheckout(ctx, &user, req.Tier, successURL, "/billing")
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	}
 
-	// Initialize subscription payment
+	return s.initializePaystackSubscription(ctx, &user, req, amount)
+}
+
+// initializePaystackSubscription sets up a Paystack plan + subscription authorization.
+// Amount is 0 on the initial transaction — Paystack charges via the attached plan.
+func (s *BillingService) initializePaystackSubscription(ctx context.Context, user *models.User, req InitializePaymentRequest, amount int) (*InitializePaymentResponse, error) {
+	if !s.IsPaystackConfigured() {
+		return nil, errors.New("paystack billing is not configured")
+	}
+
+	customerCode, err := s.getOrCreatePaystackCustomer(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("paystack customer: %w", err)
+	}
+
+	planCode, err := s.getOrCreatePlan(ctx, req.Tier, req.Currency, amount)
+	if err != nil {
+		return nil, fmt.Errorf("paystack plan: %w", err)
+	}
+
+	// Ensure subscription row has customer code before redirect
+	_ = s.db.WithContext(ctx).
+		Model(&models.Subscription{}).
+		Where("user_id = ?", user.ID).
+		Updates(map[string]interface{}{
+			"paystack_customer_code": customerCode,
+			"billing_provider":       BillingProviderPaystack,
+			"currency":               req.Currency,
+			"updated_at":             time.Now().UTC(),
+		})
+
 	paystackReq := PaystackInitializeRequest{
 		Email:    user.Email,
-		Amount:   amount,
+		Amount:   0,
 		Currency: req.Currency,
 		Plan:     planCode,
 		Metadata: map[string]string{
-			"user_id": fmt.Sprintf("%d", userID),
-			"tier":    string(req.Tier),
+			"user_id":         fmt.Sprintf("%d", user.ID),
+			"tier":            string(req.Tier),
+			"plan_code":       planCode,
+			"is_subscription": "true",
 		},
 		Channels: []string{"card", "bank", "ussd", "bank_transfer"},
 	}
-
 	if req.CallbackURL != "" {
 		paystackReq.CallbackURL = req.CallbackURL
 	}
@@ -275,6 +331,7 @@ func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req
 
 	var initResp PaystackInitializeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&initResp); err != nil {
+		resp.Body.Close()
 		return nil, err
 	}
 	resp.Body.Close()
@@ -287,7 +344,55 @@ func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req
 		AuthorizationURL: initResp.Data.AuthorizationURL,
 		Reference:        initResp.Data.Reference,
 		AccessCode:       initResp.Data.AccessCode,
+		Provider:         BillingProviderPaystack,
 	}, nil
+}
+
+// getOrCreatePaystackCustomer fetches an existing customer by email or creates one.
+func (s *BillingService) getOrCreatePaystackCustomer(ctx context.Context, user *models.User) (string, error) {
+	var subscription models.Subscription
+	if err := s.db.WithContext(ctx).Where("user_id = ?", user.ID).First(&subscription).Error; err == nil {
+		if subscription.PaystackCustomerCode != nil && *subscription.PaystackCustomerCode != "" {
+			return *subscription.PaystackCustomerCode, nil
+		}
+	}
+
+	// Try fetch by email
+	fetchResp, fetchErr := s.doRequest(ctx, "GET", "/customer/"+user.Email, nil)
+	if fetchErr == nil {
+		defer fetchResp.Body.Close()
+		var existing struct {
+			Status bool `json:"status"`
+			Data   struct {
+				CustomerCode string `json:"customer_code"`
+			} `json:"data"`
+		}
+		if json.NewDecoder(fetchResp.Body).Decode(&existing) == nil && existing.Status {
+			return existing.Data.CustomerCode, nil
+		}
+	}
+
+	customerReq := PaystackCustomerRequest{
+		Email:     user.Email,
+		FirstName: user.Name,
+		Metadata: map[string]string{
+			"user_id": fmt.Sprintf("%d", user.ID),
+		},
+	}
+	resp, err := s.doRequest(ctx, "POST", "/customer", customerReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var customerResp PaystackCustomerResponse
+	if err := json.NewDecoder(resp.Body).Decode(&customerResp); err != nil {
+		return "", err
+	}
+	if !customerResp.Status {
+		return "", fmt.Errorf("failed to create customer: %s", customerResp.Message)
+	}
+	return customerResp.Data.CustomerCode, nil
 }
 
 // getOrCreatePlan gets an existing plan or creates a new one
@@ -407,6 +512,7 @@ func (s *BillingService) handleSubscriptionCreate(ctx context.Context, data json
 	updates := map[string]interface{}{
 		"tier":                        tier,
 		"status":                      models.StatusActive,
+		"billing_provider":            BillingProviderPaystack,
 		"paystack_subscription_code":  subData.SubscriptionCode,
 		"paystack_plan_code":          subData.Plan.PlanCode,
 		"currency":                    subData.Plan.Currency,
@@ -656,11 +762,29 @@ func (s *BillingService) GetTransactionHistory(ctx context.Context, customerCode
 	return &txResp, nil
 }
 
-// CancelSubscription cancels a user's subscription
+// CancelSubscription cancels a user's subscription with the active provider.
 func (s *BillingService) CancelSubscription(ctx context.Context, userID uint) error {
 	var subscription models.Subscription
 	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&subscription).Error; err != nil {
 		return err
+	}
+
+	if subscription.BillingProvider == BillingProviderPolar {
+		if !s.IsPolarConfigured() {
+			return errors.New("polar billing is not configured")
+		}
+		if subscription.PolarSubscriptionID == nil || *subscription.PolarSubscriptionID == "" {
+			return errors.New("no active polar subscription to cancel")
+		}
+		if err := s.polar.CancelSubscription(ctx, *subscription.PolarSubscriptionID); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		return s.db.WithContext(ctx).Model(&subscription).Updates(map[string]interface{}{
+			"status":       models.StatusCancelled,
+			"cancelled_at": &now,
+			"updated_at":   now,
+		}).Error
 	}
 
 	if subscription.PaystackSubscriptionCode == nil {
@@ -773,6 +897,14 @@ func (s *BillingService) doRequest(ctx context.Context, method, endpoint string,
 	req.Header.Set("Content-Type", "application/json")
 
 	return s.httpClient.Do(req)
+}
+
+// HandlePolarWebhook delegates to the Polar service.
+func (s *BillingService) HandlePolarWebhook(ctx context.Context, body []byte, webhookID, webhookTimestamp, webhookSignature string) error {
+	if !s.IsPolarConfigured() {
+		return errors.New("polar billing is not configured")
+	}
+	return s.polar.HandleWebhook(ctx, body, webhookID, webhookTimestamp, webhookSignature)
 }
 
 // GetPricingTiers returns all available pricing tiers

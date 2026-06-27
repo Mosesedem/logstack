@@ -115,6 +115,9 @@ type Subscription struct {
 	PaystackCustomerCode     *string            `gorm:"size:100" json:"paystackCustomerCode,omitempty"`
 	PaystackSubscriptionCode *string            `gorm:"size:100" json:"paystackSubscriptionCode,omitempty"`
 	PaystackPlanCode         *string            `gorm:"size:100" json:"paystackPlanCode,omitempty"`
+	BillingProvider          string             `gorm:"size:20;default:'none'" json:"billingProvider"`
+	PolarSubscriptionID      *string            `gorm:"size:100" json:"polarSubscriptionId,omitempty"`
+	PolarCustomerID          *string            `gorm:"size:100" json:"polarCustomerId,omitempty"`
 	Currency                 string             `gorm:"size:3;default:'USD'" json:"currency"`
 	AmountCents              int                `gorm:"default:0" json:"amountCents"`
 	PeriodStart              *time.Time         `json:"periodStart,omitempty"`
@@ -192,7 +195,6 @@ func GetPricingTiers() []PricingTier {
 			Prices: map[string]int{
 				"USD": 0,
 				"NGN": 0,
-				"GHS": 0,
 			},
 			Limits: map[string]string{
 				"logs":      "10,000/month",
@@ -217,7 +219,6 @@ func GetPricingTiers() []PricingTier {
 			Prices: map[string]int{
 				"USD": 1500,  // $15.00
 				"NGN": 12000, // ₦12,000
-				"GHS": 120,   // GH₵120
 			},
 			Limits: map[string]string{
 				"logs":      "500,000/month",
@@ -243,7 +244,6 @@ func GetPricingTiers() []PricingTier {
 			Prices: map[string]int{
 				"USD": 4900,  // $49.00
 				"NGN": 38000, // ₦38,000
-				"GHS": 380,   // GH₵380
 			},
 			Limits: map[string]string{
 				"logs":      "5M/month",
@@ -268,7 +268,6 @@ func GetPricingTiers() []PricingTier {
 			Prices: map[string]int{
 				"USD": -1, // Contact sales
 				"NGN": -1,
-				"GHS": -1,
 			},
 			Limits: map[string]string{
 				"logs":      "Unlimited",

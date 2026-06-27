@@ -92,7 +92,20 @@ ALTER TABLE alert_rules
 `,
 	},
 	{
-		Version: "020_create_mobile_refresh_tokens",
+		Version: "020_billing_region",
+		Up: `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS country VARCHAR(2);
+
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS billing_provider VARCHAR(20) DEFAULT 'none';
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS polar_subscription_id VARCHAR(100);
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS polar_customer_id VARCHAR(100);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_billing_provider ON subscriptions(billing_provider);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_polar_subscription ON subscriptions(polar_subscription_id);
+`,
+	},
+	{
+		Version: "021_create_mobile_refresh_tokens",
 		Up: `
 CREATE TABLE IF NOT EXISTS mobile_refresh_tokens (
     id          uuid         PRIMARY KEY DEFAULT gen_random_uuid(),

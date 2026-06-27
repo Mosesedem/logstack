@@ -54,10 +54,16 @@ type Config struct {
 	LogLevel string
 	LogJSON  bool
 
-	// Paystack (Billing)
+	// Paystack (Billing — Nigeria / NGN)
 	PaystackSecretKey  string
 	PaystackPublicKey  string
 	PaystackWebhookURL string
+
+	// Polar (Billing — international / USD)
+	PolarAccessToken   string
+	PolarWebhookSecret string
+	PolarProductStarter string
+	PolarProductPro     string
 
 	// Usage tracking
 	UsageSyncInterval time.Duration
@@ -111,10 +117,16 @@ func Load() (*Config, error) {
 		LogLevel: getEnv("LOG_LEVEL", ""),
 		LogJSON:  getEnvBool("LOG_JSON", false),
 
-		// Paystack (Billing)
+		// Paystack (Billing — Nigeria / NGN)
 		PaystackSecretKey:  getEnv("PAYSTACK_SECRET_KEY", ""),
 		PaystackPublicKey:  getEnv("PAYSTACK_PUBLIC_KEY", ""),
 		PaystackWebhookURL: getEnv("PAYSTACK_WEBHOOK_URL", ""),
+
+		// Polar (Billing — international / USD)
+		PolarAccessToken:    getEnv("POLAR_ACCESS_TOKEN", ""),
+		PolarWebhookSecret:  getEnv("POLAR_WEBHOOK_SECRET", ""),
+		PolarProductStarter: getEnv("POLAR_PRODUCT_STARTER", ""),
+		PolarProductPro:     getEnv("POLAR_PRODUCT_PRO", ""),
 
 		// Usage tracking
 		UsageSyncInterval: getEnvDuration("USAGE_SYNC_INTERVAL", 0),
