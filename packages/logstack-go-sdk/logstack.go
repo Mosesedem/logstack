@@ -14,7 +14,7 @@ import (
 )
 
 // Version is the SDK release version (matches git tag packages/logstack-go-sdk/vX.Y.Z).
-const Version = "1.0.1"
+const Version = "1.0.2"
 
 const (
 	defaultAPIURL        = "https://api.logstack.tech"

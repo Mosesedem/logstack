@@ -5,10 +5,14 @@ A Go SDK for the Logstack logging platform.
 ## Installation
 
 ```bash
-go get github.com/Mosesedem/logstack/packages/logstack-go-sdk@v1.0.1
+go get github.com/mosesedem/logstack/packages/logstack-go-sdk@v1.0.2
 ```
 
 > Go modules in a monorepo subdir are tagged `packages/logstack-go-sdk/vX.Y.Z`.
+
+## v1.0.2
+
+- Lowercase module path (`github.com/mosesedem/...`) so pkg.go.dev can index the package
 
 ## v1.0.1
 
@@ -27,7 +31,7 @@ import (
     "context"
     "log"
 
-    logstack "github.com/Mosesedem/logstack/packages/logstack-go-sdk"
+    logstack "github.com/mosesedem/logstack/packages/logstack-go-sdk"
 )
 
 func main() {

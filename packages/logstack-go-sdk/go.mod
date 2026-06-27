@@ -1,3 +1,3 @@
-module github.com/Mosesedem/logstack/packages/logstack-go-sdk
+module github.com/mosesedem/logstack/packages/logstack-go-sdk
 
 go 1.21
