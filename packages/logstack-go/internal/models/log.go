@@ -10,15 +10,17 @@ import (
 type LogLevel string
 
 const (
+	LogLevelDebug    LogLevel = "debug"
 	LogLevelInfo     LogLevel = "info"
 	LogLevelWarn     LogLevel = "warn"
 	LogLevelError    LogLevel = "error"
 	LogLevelCritical LogLevel = "critical"
+	LogLevelFatal    LogLevel = "fatal"
 )
 
 func (l LogLevel) IsValid() bool {
 	switch l {
-	case LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelCritical:
+	case LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelCritical, LogLevelFatal:
 		return true
 	}
 	return false

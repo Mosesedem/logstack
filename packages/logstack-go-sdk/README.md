@@ -5,8 +5,18 @@ A Go SDK for the Logstack logging platform.
 ## Installation
 
 ```bash
-go get github.com/Mosesedem/logstack/packages/logstack-go-sdk
+go get github.com/Mosesedem/logstack/packages/logstack-go-sdk@v1.0.1
 ```
+
+> Go modules in a monorepo subdir are tagged `packages/logstack-go-sdk/vX.Y.Z`.
+
+## v1.0.1
+
+- Normalize API URL (strips redundant `/v1` suffix)
+- Idempotent `Close()`; `FlushContext(ctx)` for cancellable flushes
+- Optional `OnError` callback; timed background flush
+
+Access the release version via `logstack.Version`.
 
 ## Usage
 

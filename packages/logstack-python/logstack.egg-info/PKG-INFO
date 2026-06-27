@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: logstack
-Version: 1.0.0
+Version: 1.0.1
 Summary: A Python SDK for the Logstack logging platform
 Home-page: https://github.com/Mosesedem/logstack
 Author: Mosesedem
@@ -44,6 +44,13 @@ A Python SDK for the Logstack logging platform.
 ```bash
 pip install logstack
 ```
+
+## v1.0.1
+
+- Fix batch-flush deadlock when `batch_size` is reached
+- Normalize API URL (strips redundant `/v1` suffix)
+- Optional `on_error` callback; accepts HTTP 201 from ingest API
+- `create_fastapi_middleware(client)` for proper FastAPI/Starlette integration
 
 ## Usage
 

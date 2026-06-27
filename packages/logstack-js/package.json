@@ -1,6 +1,6 @@
 {
   "name": "logstack-js",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Logstack JavaScript/TypeScript SDK for log ingestion and querying",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -21,7 +21,7 @@
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "lint": "eslint src --ext .ts",
-    "test": "vitest",
+    "test": "vitest run",
     "prepublishOnly": "pnpm build"
   },
   "keywords": [

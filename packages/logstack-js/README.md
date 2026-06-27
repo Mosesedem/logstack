@@ -28,6 +28,12 @@ logstack.error("Payment failed", { orderId: "ord_123", code: 402 });
 await logstack.close();
 ```
 
+## v1.0.1
+
+- Normalize API endpoint (strips redundant `/v1` suffix)
+- Include `environment` in ingest payload
+- Stricter API error parsing (no `any`)
+
 ## Behavior
 
 - **Console and server are independent.** Every log is written to the console (always in

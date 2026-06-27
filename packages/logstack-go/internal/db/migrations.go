@@ -105,6 +105,14 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_polar_subscription ON subscriptions
 `,
 	},
 	{
+		Version: "022_log_levels_debug_fatal",
+		Up: `
+ALTER TABLE logs DROP CONSTRAINT IF EXISTS logs_level_check;
+ALTER TABLE logs ADD CONSTRAINT logs_level_check
+  CHECK (level IN ('debug', 'info', 'warn', 'error', 'critical', 'fatal'));
+`,
+	},
+	{
 		Version: "021_create_mobile_refresh_tokens",
 		Up: `
 CREATE TABLE IF NOT EXISTS mobile_refresh_tokens (

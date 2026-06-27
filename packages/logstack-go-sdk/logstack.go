@@ -8,14 +8,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
+
+// Version is the SDK release version (matches git tag packages/logstack-go-sdk/vX.Y.Z).
+const Version = "1.0.1"
 
 const (
 	defaultAPIURL        = "https://api.logstack.tech"
 	defaultFlushInterval = 5 * time.Second
 	defaultBatchSize     = 100
+	defaultSendTimeout   = 10 * time.Second
 )
 
 // Config holds the configuration for the Logstack client.
@@ -25,6 +30,8 @@ type Config struct {
 	FlushInterval time.Duration
 	BatchSize     int
 	Environment   string
+	// OnError is called when a flush fails after the batch has been re-queued.
+	OnError func(err error, logs []LogEntry)
 }
 
 // Client is the main Logstack client.
@@ -35,6 +42,8 @@ type Client struct {
 	mu          sync.Mutex
 	flushTicker *time.Ticker
 	done        chan struct{}
+	closeOnce   sync.Once
+	closed      bool
 }
 
 // LogEntry represents a single log entry.
@@ -50,6 +59,7 @@ func NewClient(config Config) *Client {
 	if config.APIURL == "" {
 		config.APIURL = defaultAPIURL
 	}
+	config.APIURL = normalizeAPIURL(config.APIURL)
 	if config.FlushInterval == 0 {
 		config.FlushInterval = defaultFlushInterval
 	}
@@ -62,24 +72,30 @@ func NewClient(config Config) *Client {
 
 	c := &Client{
 		config:     config,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{Timeout: defaultSendTimeout},
 		batch:      make([]LogEntry, 0, config.BatchSize),
 		done:       make(chan struct{}),
 	}
 
-	// Start background flusher
 	c.flushTicker = time.NewTicker(config.FlushInterval)
 	go c.backgroundFlush()
 
 	return c
 }
 
-// backgroundFlush periodically flushes the batch.
+func normalizeAPIURL(raw string) string {
+	url := strings.TrimRight(raw, "/")
+	url = strings.TrimSuffix(url, "/v1")
+	return strings.TrimRight(url, "/")
+}
+
 func (c *Client) backgroundFlush() {
 	for {
 		select {
 		case <-c.flushTicker.C:
-			c.Flush()
+			ctx, cancel := context.WithTimeout(context.Background(), defaultSendTimeout)
+			_ = c.FlushContext(ctx)
+			cancel()
 		case <-c.done:
 			c.flushTicker.Stop()
 			return
@@ -115,11 +131,13 @@ func (c *Client) Critical(ctx context.Context, message string, metadata ...map[s
 // Fatal sends a fatal level log and flushes immediately.
 func (c *Client) Fatal(ctx context.Context, message string, metadata ...map[string]interface{}) error {
 	err := c.log(ctx, "fatal", message, metadata...)
-	c.Flush()
-	return err
+	flushErr := c.FlushContext(ctx)
+	if err != nil {
+		return err
+	}
+	return flushErr
 }
 
-// log adds a log entry to the batch, flushing if the batch is full.
 func (c *Client) log(ctx context.Context, level, message string, metadata ...map[string]interface{}) error {
 	entry := LogEntry{
 		Level:    level,
@@ -133,9 +151,14 @@ func (c *Client) log(ctx context.Context, level, message string, metadata ...map
 	}
 
 	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return fmt.Errorf("client is closed")
+	}
 	c.batch = append(c.batch, entry)
+	shouldFlush := len(c.batch) >= c.config.BatchSize
 	var toSend []LogEntry
-	if len(c.batch) >= c.config.BatchSize {
+	if shouldFlush {
 		toSend = c.batch
 		c.batch = make([]LogEntry, 0, c.config.BatchSize)
 	}
@@ -149,8 +172,15 @@ func (c *Client) log(ctx context.Context, level, message string, metadata ...map
 
 // Flush sends any pending logs to the server.
 func (c *Client) Flush() error {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultSendTimeout)
+	defer cancel()
+	return c.FlushContext(ctx)
+}
+
+// FlushContext sends pending logs using the provided context.
+func (c *Client) FlushContext(ctx context.Context) error {
 	c.mu.Lock()
-	if len(c.batch) == 0 {
+	if len(c.batch) == 0 || c.closed {
 		c.mu.Unlock()
 		return nil
 	}
@@ -158,14 +188,9 @@ func (c *Client) Flush() error {
 	c.batch = make([]LogEntry, 0, c.config.BatchSize)
 	c.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	return c.send(ctx, toSend)
 }
 
-// send POSTs a batch of logs to the ingestion endpoint. The batch is snapshotted
-// by the caller, so this performs network I/O without holding the client lock.
 func (c *Client) send(ctx context.Context, batch []LogEntry) error {
 	if len(batch) == 0 {
 		return nil
@@ -179,7 +204,7 @@ func (c *Client) send(ctx context.Context, batch []LogEntry) error {
 		return fmt.Errorf("marshal logs: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.config.APIURL+"/v1/logs", bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.config.APIURL+"/v1/logs", bytes.NewReader(reqBody))
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
@@ -189,14 +214,20 @@ func (c *Client) send(ctx context.Context, batch []LogEntry) error {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if c.config.OnError != nil {
+			c.config.OnError(err, batch)
+		}
 		return fmt.Errorf("send logs: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// The ingestion endpoint returns 201 Created on success.
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("logstack API error (%d): %s", resp.StatusCode, body)
+		sendErr := fmt.Errorf("logstack API error (%d): %s", resp.StatusCode, body)
+		if c.config.OnError != nil {
+			c.config.OnError(sendErr, batch)
+		}
+		return sendErr
 	}
 
 	return nil
@@ -204,7 +235,13 @@ func (c *Client) send(ctx context.Context, batch []LogEntry) error {
 
 // Close closes the client and flushes any pending logs.
 func (c *Client) Close() error {
-	c.Flush()
-	close(c.done)
-	return nil
+	var err error
+	c.closeOnce.Do(func() {
+		c.mu.Lock()
+		c.closed = true
+		c.mu.Unlock()
+		err = c.Flush()
+		close(c.done)
+	})
+	return err
 }

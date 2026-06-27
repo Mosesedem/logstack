@@ -13,6 +13,32 @@ import {
 } from "./types";
 
 const DEFAULT_ENDPOINT = "https://api.logstack.tech";
+
+/** Strip trailing slashes and a redundant /v1 suffix from the API host. */
+function normalizeEndpoint(raw: string): string {
+  let url = raw.replace(/\/+$/, "");
+  if (url.endsWith("/v1")) {
+    url = url.slice(0, -3);
+  }
+  return url.replace(/\/+$/, "");
+}
+
+function parseApiErrorBody(
+  data: unknown,
+  fallback: LogStackErrorResponse,
+): LogStackErrorResponse {
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "code" in data &&
+    "message" in data &&
+    typeof (data as LogStackErrorResponse).code === "string" &&
+    typeof (data as LogStackErrorResponse).message === "string"
+  ) {
+    return data as LogStackErrorResponse;
+  }
+  return fallback;
+}
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_FLUSH_INTERVAL = 5000; // 5 seconds
 const DEFAULT_MAX_RETRIES = 3;
@@ -134,7 +160,7 @@ class LogStack implements LogStackClient {
 
     this.config = {
       apiKey: config.apiKey,
-      endpoint: config.endpoint || DEFAULT_ENDPOINT,
+      endpoint: normalizeEndpoint(config.endpoint || DEFAULT_ENDPOINT),
       batchSize: config.batchSize || DEFAULT_BATCH_SIZE,
       flushInterval: config.flushInterval || DEFAULT_FLUSH_INTERVAL,
       maxRetries: config.maxRetries || DEFAULT_MAX_RETRIES,
@@ -475,7 +501,10 @@ class LogStack implements LogStackClient {
           "Content-Type": "application/json",
           Authorization: `Bearer ${this.config.apiKey}`,
         },
-        body: JSON.stringify({ logs }),
+        body: JSON.stringify({
+          logs,
+          environment: this.config.environment,
+        }),
       });
 
       if (!response.ok) {
@@ -494,11 +523,7 @@ class LogStack implements LogStackClient {
         };
 
         try {
-          // JSON parse returns unknown; coerce to any for inspection
-          const data: any = await response.json();
-          if (data && data.code && data.message) {
-            errorData = data as LogStackErrorResponse;
-          }
+          errorData = parseApiErrorBody(await response.json(), errorData);
         } catch {
           // Use default error
         }
@@ -599,10 +624,7 @@ class LogStack implements LogStackClient {
       };
 
       try {
-        const data: any = await response.json();
-        if (data && data.code && data.message) {
-          errorData = data as LogStackErrorResponse;
-        }
+        errorData = parseApiErrorBody(await response.json(), errorData);
       } catch {
         // Use default error
       }

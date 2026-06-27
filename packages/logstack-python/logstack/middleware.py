@@ -2,9 +2,10 @@
 LogStack middleware for Django and FastAPI.
 """
 
-import json
 import traceback
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Optional
+
+from .client import LogStackClient
 
 
 class DjangoMiddleware:
@@ -12,19 +13,11 @@ class DjangoMiddleware:
     Django middleware to automatically log unhandled exceptions.
     """
 
-    def __init__(self, get_response, client=None):
-        """
-        Initialize the middleware.
-
-        Args:
-            get_response: The next middleware or view in the chain
-            client: LogStackClient instance (optional, creates one if not provided)
-        """
+    def __init__(self, get_response: Callable, client: Optional[LogStackClient] = None):
         self.get_response = get_response
         self.client = client
 
     def __call__(self, request):
-        """Handle the request."""
         try:
             return self.get_response(request)
         except Exception:
@@ -32,15 +25,14 @@ class DjangoMiddleware:
             raise
 
     def _log_exception(self, request) -> None:
-        """Log an exception with context."""
         if not self.client:
             return
 
-        # Get exception info
         exc_type, exc_value, exc_traceback = traceback.exc_info()
-        traceback_str = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        traceback_str = "".join(
+            traceback.format_exception(exc_type, exc_value, exc_traceback)
+        )
 
-        # Build metadata
         metadata = {
             "path": request.path,
             "method": request.method,
@@ -55,65 +47,56 @@ class DjangoMiddleware:
         )
 
     def _get_client_ip(self, request) -> str:
-        """Get client IP address."""
         x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
         if x_forwarded_for:
             return x_forwarded_for.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR")
+        return request.META.get("REMOTE_ADDR", "")
+
+
+def create_fastapi_middleware(client: LogStackClient):
+    """
+    Return a Starlette-compatible middleware class that logs unhandled exceptions.
+    """
+
+    try:
+        from starlette.middleware.base import BaseHTTPMiddleware
+        from starlette.requests import Request
+        from starlette.responses import Response
+    except ImportError as exc:
+        raise ImportError(
+            "FastAPI/Starlette is required for create_fastapi_middleware. "
+            "Install with: pip install logstack[fastapi]"
+        ) from exc
+
+    class LogStackExceptionMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next: Callable) -> Response:
+            try:
+                return await call_next(request)
+            except Exception as exc:
+                metadata = {
+                    "path": request.url.path,
+                    "method": request.method,
+                    "traceback": str(exc),
+                }
+                client.error(
+                    f"Unhandled exception in {request.url.path}",
+                    metadata=metadata,
+                )
+                raise
+
+    return LogStackExceptionMiddleware
 
 
 class FastAPIMiddleware:
     """
-    FastAPI middleware to automatically log unhandled exceptions.
+    Deprecated alias — use create_fastapi_middleware(client) instead.
     """
 
-    def __init__(self, app, client=None):
-        """
-        Initialize the middleware.
-
-        Args:
-            app: The FastAPI application
-            client: LogStackClient instance (optional, creates one if not provided)
-        """
-        self.app = app
-        self.client = client
-
-        # Register exception handler
-        async def exception_handler(request, exc):
-            self._log_exception(request, exc)
-            return await self.app.default_exception_handler(request, exc)
-
-        app.add_exception_handler(Exception, exception_handler)
+    def __init__(self, app, client: Optional[LogStackClient] = None):
+        if client is None:
+            raise ValueError("client is required for FastAPIMiddleware")
+        middleware_cls = create_fastapi_middleware(client)
+        self.app = middleware_cls(app)
 
     async def __call__(self, scope, receive, send):
-        """Handle the request."""
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        try:
-            await self.app(scope, receive, send)
-        except Exception as exc:
-            self._log_exception(scope, exc)
-            raise
-
-    def _log_exception(self, scope, exc) -> None:
-        """Log an exception with context."""
-        if not self.client:
-            return
-
-        # Get request info
-        path = scope.get("path", "/")
-        method = scope.get("method", "GET")
-
-        # Build metadata
-        metadata = {
-            "path": path,
-            "method": method,
-            "traceback": str(exc),
-        }
-
-        self.client.error(
-            f"Unhandled exception in {path}",
-            metadata=metadata,
-        )
+        await self.app(scope, receive, send)

@@ -10,3 +10,4 @@ logstack.egg-info/SOURCES.txt
 logstack.egg-info/dependency_links.txt
 logstack.egg-info/requires.txt
 logstack.egg-info/top_level.txt
+tests/test_client.py

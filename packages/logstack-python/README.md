@@ -8,6 +8,13 @@ A Python SDK for the Logstack logging platform.
 pip install logstack
 ```
 
+## v1.0.1
+
+- Fix batch-flush deadlock when `batch_size` is reached
+- Normalize API URL (strips redundant `/v1` suffix)
+- Optional `on_error` callback; accepts HTTP 201 from ingest API
+- `create_fastapi_middleware(client)` for proper FastAPI/Starlette integration
+
 ## Usage
 
 ### Basic Usage
