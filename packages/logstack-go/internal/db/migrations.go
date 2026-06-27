@@ -127,6 +127,23 @@ CREATE INDEX IF NOT EXISTS idx_mrt_user_id ON mobile_refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_mrt_token   ON mobile_refresh_tokens(token);
 `,
 	},
+	{
+		// GORM uniqueIndex expects uni_<table>_<column>; inline UNIQUE creates <table>_<column>_key.
+		Version: "023_align_gorm_unique_constraints",
+		Up: `
+ALTER TABLE invites DROP CONSTRAINT IF EXISTS invites_token_key;
+DROP INDEX IF EXISTS idx_invites_token;
+CREATE UNIQUE INDEX IF NOT EXISTS uni_invites_token ON invites (token);
+
+ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_reference_key;
+DROP INDEX IF EXISTS idx_invoices_reference;
+CREATE UNIQUE INDEX IF NOT EXISTS uni_invoices_reference ON invoices (reference);
+
+ALTER TABLE mobile_refresh_tokens DROP CONSTRAINT IF EXISTS mobile_refresh_tokens_token_key;
+DROP INDEX IF EXISTS idx_mrt_token;
+CREATE UNIQUE INDEX IF NOT EXISTS uni_mobile_refresh_tokens_token ON mobile_refresh_tokens (token);
+`,
+	},
 }
 
 func ensureEnumType(db *gorm.DB, name, values string) error {
