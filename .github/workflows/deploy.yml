@@ -50,11 +50,16 @@ jobs:
           ref: ${{ steps.sha.outputs.head_sha }}
           fetch-depth: 2
 
+      - name: Resolve parent commit SHA
+        id: parent
+        if: github.event_name == 'workflow_run'
+        run: echo "sha=$(git rev-parse HEAD~1)" >> "$GITHUB_OUTPUT"
+
       - uses: dorny/paths-filter@v4
         id: filter
         if: github.event_name == 'workflow_run'
         with:
-          base: ${{ steps.sha.outputs.head_sha }}~1
+          base: ${{ steps.parent.outputs.sha }}
           ref: ${{ steps.sha.outputs.head_sha }}
           filters: |
             api:
