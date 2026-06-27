@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, FileText, ChevronRight, CreditCard } from "lucide-react";
@@ -31,10 +31,48 @@ import { api } from "@/lib/api-client";
 import type {
   Subscription,
   UsageSummary,
+  BillingContext,
   BillingContextResponse,
+  PricingResponse,
   SubscriptionTier,
   Invoice,
 } from "@/types";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/v1";
+
+const DEFAULT_BILLING_CONTEXT: BillingContext = {
+  provider: "polar",
+  currency: "USD",
+  country: "",
+  isNigeria: false,
+  paymentLabel: "Polar",
+};
+
+async function loadPublicPricing(): Promise<BillingContextResponse> {
+  const response = await fetch(`${API_URL}/billing/pricing`);
+  if (!response.ok) {
+    throw new Error("Failed to load pricing");
+  }
+  const data = (await response.json()) as PricingResponse;
+  return {
+    context: DEFAULT_BILLING_CONTEXT,
+    tiers: data.tiers,
+  };
+}
+
+function scrollToElementInMain(element: HTMLElement | null) {
+  if (!element) return;
+  const main = element.closest("main");
+  if (main) {
+    const top =
+      element.getBoundingClientRect().top -
+      main.getBoundingClientRect().top +
+      main.scrollTop;
+    main.scrollTo({ top: Math.max(0, top - 16), behavior: "smooth" });
+    return;
+  }
+  element.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 function BillingPageContent() {
   const { toast } = useToast();
@@ -47,6 +85,9 @@ function BillingPageContent() {
     useState<BillingContextResponse | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [planPickerOpen, setPlanPickerOpen] = useState(false);
+  const [pricingLoadError, setPricingLoadError] = useState(false);
+  const pricingRef = useRef<HTMLDivElement>(null);
 
   const {
     data: invoicesData,
@@ -72,9 +113,11 @@ function BillingPageContent() {
     }
   }, [searchParams, toast]);
 
-  const loadBillingData = useCallback(async () => {
+  const loadBillingData = useCallback(async (options?: { silent?: boolean }) => {
     try {
-      setIsLoading(true);
+      if (!options?.silent) {
+        setIsLoading(true);
+      }
 
       const [subResult, contextResult] = await Promise.allSettled([
         api.get<Subscription>("/billing/subscription"),
@@ -98,6 +141,17 @@ function BillingPageContent() {
 
       if (contextResult.status === "fulfilled") {
         setBillingContextData(contextResult.value);
+        setPricingLoadError(false);
+      } else {
+        console.error("Failed to load billing context:", contextResult.reason);
+        try {
+          const fallback = await loadPublicPricing();
+          setBillingContextData(fallback);
+          setPricingLoadError(false);
+        } catch (fallbackError) {
+          console.error("Failed to load public pricing:", fallbackError);
+          setPricingLoadError(true);
+        }
       }
 
       if (usageResult[0].status === "fulfilled") {
@@ -111,13 +165,22 @@ function BillingPageContent() {
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
     }
   }, [toast]);
 
   useEffect(() => {
     loadBillingData();
   }, [loadBillingData]);
+
+  const handleChangePlan = () => {
+    setPlanPickerOpen(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollToElementInMain(pricingRef.current));
+    });
+  };
 
   const handleSelectTier = async (tier: SubscriptionTier, currency: string) => {
     if (tier === "enterprise") {
@@ -313,14 +376,7 @@ function BillingPageContent() {
             </div>
             <div className="flex gap-3">
               {subscription?.tier !== "enterprise" && (
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    document
-                      .getElementById("pricing-grid")
-                      ?.scrollIntoView({ behavior: "smooth" })
-                  }
-                >
+                <Button variant="outline" onClick={handleChangePlan}>
                   Change Plan
                 </Button>
               )}
@@ -337,8 +393,8 @@ function BillingPageContent() {
             </div>
           </Card>
 
-          <div id="pricing-grid">
-            {billingContext && pricingTiers.length > 0 && (
+          {planPickerOpen && (
+            <div id="pricing-grid" ref={pricingRef}>
               <Card>
                 <CardHeader>
                   <CardTitle>Available Plans</CardTitle>
@@ -347,17 +403,32 @@ function BillingPageContent() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <PricingTable
-                    tiers={pricingTiers}
-                    billingContext={billingContext}
-                    currentTier={subscription?.tier}
-                    onSelectTier={handleSelectTier}
-                    isLoading={isInitializing}
-                  />
+                  {pricingLoadError || pricingTiers.length === 0 ? (
+                    <div className="flex flex-col items-center gap-3 py-8 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        Unable to load plans right now.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadBillingData({ silent: true })}
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  ) : (
+                    <PricingTable
+                      tiers={pricingTiers}
+                      billingContext={billingContext}
+                      currentTier={subscription?.tier ?? "free"}
+                      onSelectTier={handleSelectTier}
+                      isLoading={isInitializing}
+                    />
+                  )}
                 </CardContent>
               </Card>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         <div className="grid gap-4">
