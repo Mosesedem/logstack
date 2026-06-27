@@ -20,7 +20,7 @@ func Health(database *gorm.DB, redisClient *redis.Client) gin.HandlerFunc {
 			"service": "logstack-api",
 			"time":    time.Now().UTC().Format(time.RFC3339),
 			"uptime":  time.Since(startTime).String(),
-			"what works?": "Database and Redis are functioning correctly. ✅",
+			"what works?": "Database and Redis are functioning correctly ✅ ✅",
 		})
 	}
 }
