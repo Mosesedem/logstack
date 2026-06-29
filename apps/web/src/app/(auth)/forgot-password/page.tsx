@@ -48,8 +48,8 @@ export default function ForgotPasswordPage() {
 
   if (isSubmitted) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <Card className="w-full max-w-md">
+      <div className="flex min-h-dvh items-start justify-center px-4 py-8 sm:items-center sm:py-12">
+        <Card className="my-auto w-full max-w-md border-border bg-card shadow-lg">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
               <svg
@@ -82,8 +82,8 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-dvh items-start justify-center px-4 py-8 sm:items-center sm:py-12">
+      <Card className="my-auto w-full max-w-md border-border bg-card shadow-lg">
         <CardHeader className="text-center">
           <CardTitle>Forgot Password</CardTitle>
           <CardDescription>

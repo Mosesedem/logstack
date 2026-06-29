@@ -98,14 +98,14 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Overview</h1>
           <p className="text-muted-foreground">
             Overview for {currentProject.name}
           </p>
         </div>
-        <Button onClick={loadStats}>
+        <Button onClick={loadStats} className="w-full sm:w-auto">
           <Activity className="mr-2 h-4 w-4" />
           Refresh
         </Button>

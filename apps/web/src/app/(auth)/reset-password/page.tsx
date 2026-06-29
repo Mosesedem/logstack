@@ -84,7 +84,7 @@ function ResetPasswordForm() {
   };
 
   return (
-    <Card className="w-full max-w-md">
+    <Card className="my-auto w-full max-w-md border-border bg-card shadow-lg">
       <CardHeader className="text-center">
         <CardTitle>Reset Password</CardTitle>
         <CardDescription>Enter your new password below</CardDescription>
@@ -133,7 +133,7 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-dvh items-start justify-center px-4 py-8 sm:items-center sm:py-12">
       <Suspense fallback={<div>Loading...</div>}>
         <ResetPasswordForm />
       </Suspense>

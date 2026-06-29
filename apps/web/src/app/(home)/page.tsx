@@ -14,6 +14,12 @@ import { Button } from "@/components/ui/button";
 import { TECH_STACK } from "./tech-stack";
 import LogstackMobile from "@/components/MobileDesign";
 import { Navbar } from "@/components/marketing/Navbar";
+import { FooterLinkGroup } from "@/components/marketing/footer-link-group";
+import {
+  companyFooterLinks,
+  productFooterLinks,
+  resourcesFooterLinks,
+} from "@/lib/navigation";
 
 export default function HomePage() {
   return (
@@ -496,89 +502,9 @@ export default function HomePage() {
                 Designed for scale, built for speed.
               </p>
             </div>
-            <div>
-              <h4 className="font-semibold text-white mb-4">Product</h4>
-              <ul className="space-y-2 text-sm text-zinc-400">
-                <li>
-                  <Link href="/#features" className="hover:text-primary">
-                    Features
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/integrations" className="hover:text-primary">
-                    Integrations
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/pricing" className="hover:text-primary">
-                    Pricing
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/changelog" className="hover:text-primary">
-                    Changelog
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-4">Resources</h4>
-              <ul className="space-y-2 text-sm text-zinc-400">
-                <li>
-                  <Link href="/docs" className="hover:text-primary">
-                    Documentation
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/docs#api" className="hover:text-primary">
-                    API Reference
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="https://github.com/mosesedem/logstack/discussions"
-                    className="hover:text-primary"
-                    target="_blank"
-                  >
-                    Community
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="https://github.com/mosesedem/logstack"
-                    className="hover:text-primary"
-                    target="_blank"
-                  >
-                    Github
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-4">Company</h4>
-              <ul className="space-y-2 text-sm text-zinc-400">
-                <li>
-                  <Link href="/about" className="hover:text-primary">
-                    About
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/blog" className="hover:text-primary">
-                    Blog
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/careers" className="hover:text-primary">
-                    Careers
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/contact" className="hover:text-primary">
-                    Contact
-                  </Link>
-                </li>
-              </ul>
-            </div>
+            <FooterLinkGroup title="Product" links={productFooterLinks} />
+            <FooterLinkGroup title="Resources" links={resourcesFooterLinks} />
+            <FooterLinkGroup title="Company" links={companyFooterLinks} />
           </div>
           <div className="border-t border-white/5 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-xs text-zinc-600">

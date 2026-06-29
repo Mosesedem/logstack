@@ -1,6 +1,7 @@
 'use client'
 
 import { useProject } from '@/hooks/use-project'
+import { cn } from '@/lib/utils'
 import {
   Select,
   SelectContent,
@@ -9,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-export function ProjectSwitcher() {
+export function ProjectSwitcher({ className }: { className?: string }) {
   const { projects, currentProject, setCurrentProject, isLoading } = useProject()
 
   if (isLoading) {
@@ -28,7 +29,7 @@ export function ProjectSwitcher() {
         if (project) setCurrentProject(project)
       }}
     >
-      <SelectTrigger className="w-48">
+      <SelectTrigger className={cn('w-48', className)}>
         <SelectValue placeholder="Select project" />
       </SelectTrigger>
       <SelectContent>
