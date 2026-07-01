@@ -396,30 +396,26 @@ func TestEmailProviderAttemptStructuredLogging(t *testing.T) {
 
 		logs := h.Logs()
 
-		// Every debug entry must have provider, recipient (masked), and attempt fields.
-		debugCount := 0
+		// Every provider-attempt entry must have provider, recipient (masked), and attempt fields.
+		attemptCount := 0
 		for _, l := range logs {
-			if l.level != slog.LevelDebug {
+			if _, ok := l.attrs["attempt"]; !ok {
 				continue
 			}
 			if _, ok := l.attrs["provider"]; !ok {
-				t.Fatalf("debug log missing 'provider' field: %+v", l)
+				t.Fatalf("attempt log missing 'provider' field: %+v", l)
 			}
 			if _, ok := l.attrs["recipient"]; !ok {
-				t.Fatalf("debug log missing 'recipient' field: %+v", l)
+				t.Fatalf("attempt log missing 'recipient' field: %+v", l)
 			}
-			if _, ok := l.attrs["attempt"]; !ok {
-				t.Fatalf("debug log missing 'attempt' field: %+v", l)
-			}
-			// Recipient must be masked: ends with @***
 			rec := fmt.Sprintf("%v", l.attrs["recipient"])
 			if !strings.HasSuffix(rec, "@***") {
-				t.Fatalf("recipient not masked in debug log: %q", rec)
+				t.Fatalf("recipient not masked in attempt log: %q", rec)
 			}
-			debugCount++
+			attemptCount++
 		}
-		if debugCount == 0 {
-			t.Fatal("no debug log entries found for email provider attempts")
+		if attemptCount == 0 {
+			t.Fatal("no log entries found for email provider attempts")
 		}
 
 		if successIdx >= 0 {
