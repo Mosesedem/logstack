@@ -373,3 +373,50 @@ func (h *AlertsHandler) GetHistory(c *gin.Context) {
 
 	c.JSON(http.StatusOK, history)
 }
+
+// SendTestEmail handles POST /v1/alerts/:id/test-email
+func (h *AlertsHandler) SendTestEmail(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:    "INVALID_ID",
+			Message: "Invalid alert rule ID",
+		})
+		return
+	}
+
+	rule, err := h.alertEngine.GetRule(c.Request.Context(), uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Code:    "NOT_FOUND",
+			Message: "Alert rule not found",
+		})
+		return
+	}
+
+	var project models.Project
+	if err := h.db.Where("id = ? AND owner_id = ?", rule.ProjectID, userID).First(&project).Error; err != nil {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Code:    "FORBIDDEN",
+			Message: "You do not have access to this alert rule",
+		})
+		return
+	}
+
+	if err := h.alertEngine.SendTestNotification(c.Request.Context(), uint(id)); err != nil {
+		slog.Error("Failed to send test alert email", "error", err, "ruleId", id)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "DELIVERY_FAILED",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	slog.Info("Test alert email sent", "ruleId", id, "recipient", rule.Recipient)
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "Test alert email sent",
+		"recipient": rule.Recipient,
+	})
+}

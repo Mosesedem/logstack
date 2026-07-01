@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -15,12 +16,18 @@ import (
 type LogsHandler struct {
 	ingestor     *services.Ingestor
 	queryBuilder *services.QueryBuilder
+	alertEngine  *services.AlertEngine
 }
 
-func NewLogsHandler(ingestor *services.Ingestor, queryBuilder *services.QueryBuilder) *LogsHandler {
+func NewLogsHandler(
+	ingestor *services.Ingestor,
+	queryBuilder *services.QueryBuilder,
+	alertEngine *services.AlertEngine,
+) *LogsHandler {
 	return &LogsHandler{
 		ingestor:     ingestor,
 		queryBuilder: queryBuilder,
+		alertEngine:  alertEngine,
 	}
 }
 
@@ -53,6 +60,22 @@ func (h *LogsHandler) IngestBatch(c *gin.Context) {
 			Message: err.Error(),
 		})
 		return
+	}
+
+	if h.alertEngine != nil && len(logs) > 0 {
+		batch := append([]models.Log(nil), logs...)
+		go func(entries []models.Log) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			for i := range entries {
+				if err := h.alertEngine.ProcessLog(ctx, &entries[i]); err != nil {
+					slog.Error("Failed to process log for alerts",
+						"logId", entries[i].ID,
+						"error", err,
+					)
+				}
+			}
+		}(batch)
 	}
 
 	// Logs are persisted and queryable for every environment.

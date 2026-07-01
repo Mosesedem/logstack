@@ -85,6 +85,14 @@ func NewEmailNotifier(cfg *config.Config, baseURL string) *EmailNotifier {
 	}
 	if configured == 0 {
 		slog.Warn("NewEmailNotifier: no email providers are configured — all send calls will fail")
+	} else {
+		names := make([]string, 0, configured)
+		for _, p := range providers {
+			if p.IsConfigured() {
+				names = append(names, p.Name())
+			}
+		}
+		slog.Info("email provider chain ready", "providers", strings.Join(names, " → "))
 	}
 
 	return notifier
@@ -103,7 +111,7 @@ func (e *EmailNotifier) sendEmail(ctx context.Context, to, toName, subject, html
 		}
 		attempt++
 		providerStart := time.Now()
-		slog.Debug("attempting email provider",
+		slog.Info("attempting email provider",
 			"provider", p.Name(),
 			"recipient", maskEmail(to),
 			"attempt", attempt,
@@ -158,6 +166,15 @@ func (e *EmailNotifier) Send(ctx context.Context, rule *models.AlertRule, log *m
 	`, rule.Name, log.Level, log.Message, log.Source, log.CreatedAt.Format("2006-01-02 15:04:05 MST"), rule.Name, rule.TriggerPattern)
 
 	return e.sendEmail(ctx, rule.Recipient, "", subject, htmlBody)
+}
+
+// SendTestEmail delivers a test message through the provider chain (Brevo → Resend → …).
+func (e *EmailNotifier) SendTestEmail(ctx context.Context, to string) error {
+	subject := "[Logstack] Test email"
+	htmlBody := `<h2>Logstack test email</h2>
+<p>If you received this, your email provider chain is working.</p>
+<p>Providers are tried in order: Mailcow → Brevo → Resend → Zoho. The first success wins.</p>`
+	return e.sendEmail(ctx, to, "", subject, htmlBody)
 }
 
 // SendVerificationEmail sends an email verification link to the user
@@ -478,14 +495,23 @@ func (b *brevoProvider) Send(ctx context.Context, to, toName, subject, htmlBody 
 	}
 	defer resp.Body.Close()
 
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return fmt.Errorf("brevo: read response: %w", readErr)
+	}
+
 	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("brevo: unexpected status %d (expected 201)", resp.StatusCode)
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			return fmt.Errorf("brevo: unexpected status %d (expected 201)", resp.StatusCode)
+		}
+		return fmt.Errorf("brevo: unexpected status %d (expected 201): %s", resp.StatusCode, msg)
 	}
 
 	var result struct {
 		MessageID string `json:"messageId"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return fmt.Errorf("brevo: failed to parse response body: %w", err)
 	}
 	if result.MessageID == "" {
@@ -650,12 +676,21 @@ func (r *resendProvider) Send(ctx context.Context, to, toName, subject, htmlBody
 	}
 	defer resp.Body.Close()
 
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return fmt.Errorf("resend: read response: %w", readErr)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("resend: unexpected status %d", resp.StatusCode)
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			return fmt.Errorf("resend: unexpected status %d", resp.StatusCode)
+		}
+		return fmt.Errorf("resend: unexpected status %d: %s", resp.StatusCode, msg)
 	}
 
 	var result resendEmailResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return fmt.Errorf("resend: failed to decode response: %w", err)
 	}
 

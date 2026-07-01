@@ -98,7 +98,7 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		logs.Use(ingestLimiter.LimitByAPIKey())
 		logs.Use(usageLimiter.Enforce()) // Enforce usage limits based on tier
 		{
-			logsHandler := handlers.NewLogsHandler(cfg.Ingestor, cfg.QueryBuilder)
+			logsHandler := handlers.NewLogsHandler(cfg.Ingestor, cfg.QueryBuilder, cfg.AlertEngine)
 			logs.POST("", logsHandler.IngestBatch)
 			logs.GET("", logsHandler.Query)
 			logs.GET("/:id", logsHandler.GetByID)
@@ -160,6 +160,7 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 				alerts.PUT("/:id", alertsHandler.Update)
 				alerts.DELETE("/:id", alertsHandler.Delete)
 				alerts.GET("/:id/history", alertsHandler.GetHistory)
+				alerts.POST("/:id/test-email", alertsHandler.SendTestEmail)
 			}
 
 			// User settings

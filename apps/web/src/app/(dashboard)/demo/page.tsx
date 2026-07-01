@@ -2,17 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createLogStack, type LogStackClient, type LogLevel } from "logstack-js";
 import {
   ArrowRight,
+  Bell,
   CheckCircle2,
   Loader2,
+  Mail,
   Play,
   ShoppingCart,
   Zap,
 } from "lucide-react";
 
 import { useProject } from "@/hooks/use-project";
+import { api } from "@/lib/api-client";
+import { AlertHistory, AlertRule } from "@/types";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -61,9 +67,9 @@ const SCENARIOS: Scenario[] = [
   {
     id: "payment-error",
     label: "Payment failed",
-    description: "Card declined — triggers alerts",
+    description: "Card declined — triggers email alerts",
     level: "error",
-    message: "Payment authorization failed",
+    message: "Payment authorization error: card declined",
     metadata: {
       gateway: "paystack",
       reason: "card_declined",
@@ -111,15 +117,72 @@ function maskApiKey(key: string): string {
 export default function DemoPage() {
   const router = useRouter();
   const { currentProject } = useProject();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [apiKey, setApiKey] = useState("");
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [sending, setSending] = useState<string | null>(null);
   const [runningBurst, setRunningBurst] = useState(false);
+  const [alertPollKey, setAlertPollKey] = useState(0);
 
   useEffect(() => {
     const stored = sessionStorage.getItem(API_KEY_STORAGE_KEY);
     if (stored) setApiKey(stored);
   }, []);
+
+  const { data: projectAlerts } = useQuery({
+    queryKey: ["alerts", currentProject?.id],
+    queryFn: () =>
+      api.get<AlertRule[]>(`/alerts?projectId=${currentProject?.id}`),
+    enabled: !!currentProject?.id,
+  });
+
+  const primaryAlert = projectAlerts?.find((rule) => rule.enabled);
+  const hasEmailAlert = primaryAlert?.channels?.includes("email");
+
+  const { data: alertHistory } = useQuery({
+    queryKey: ["alert-history", primaryAlert?.id, alertPollKey],
+    queryFn: () =>
+      api.get<AlertHistory[]>(
+        `/alerts/${primaryAlert?.id}/history?limit=5`,
+      ),
+    enabled: !!primaryAlert?.id,
+    refetchInterval: alertPollKey > 0 ? 3000 : false,
+  });
+
+  const latestDelivery = alertHistory?.[0];
+
+  const inCooldown =
+    latestDelivery?.status === "success" &&
+    primaryAlert &&
+    new Date(latestDelivery.sentAt).getTime() +
+      primaryAlert.cooldownMinutes * 60_000 >
+      Date.now();
+
+  const testEmailMutation = useMutation({
+    mutationFn: () =>
+      api.post<{ message: string; recipient: string }>(
+        `/alerts/${primaryAlert?.id}/test-email`,
+        {},
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        queryKey: ["alert-history", primaryAlert?.id],
+      });
+      setAlertPollKey((k) => k + 1);
+      toast({
+        title: "Test alert sent",
+        description: `Check ${data.recipient} (and spam).`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Test alert failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const client = useMemo<LogStackClient | null>(() => {
     if (!apiKey.startsWith("ls_")) return null;
@@ -186,6 +249,9 @@ export default function DemoPage() {
           message: scenario.message,
           status: "sent",
         });
+        if (scenario.level === "error" || scenario.level === "critical") {
+          setAlertPollKey((k) => k + 1);
+        }
       } catch (error) {
         const detail =
           error instanceof Error ? error.message : "Failed to send log";
@@ -209,9 +275,13 @@ export default function DemoPage() {
     try {
       for (let i = 0; i < 8; i++) {
         const level = levels[i % levels.length];
+        const message =
+          level === "error"
+            ? `Burst traffic error event #${i + 1}`
+            : `Burst traffic event #${i + 1}`;
         client.log({
           level,
-          message: `Burst traffic event #${i + 1}`,
+          message,
           metadata: { source: "mock-shop", burst: true, index: i + 1 },
         });
       }
@@ -221,6 +291,7 @@ export default function DemoPage() {
         message: "Sent 8 burst logs",
         status: "sent",
       });
+      setAlertPollKey((k) => k + 1);
     } catch (error) {
       pushActivity({
         level: "error",
@@ -302,6 +373,84 @@ export default function DemoPage() {
                 <Badge variant="secondary">{currentProject.name}</Badge>
               </div>
             )}
+
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+              <div className="flex items-start gap-2">
+                <Bell className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <div className="space-y-1">
+                  <p className="font-medium">Email alerts</p>
+                  {!currentProject ? (
+                    <p className="text-muted-foreground">
+                      Select a project to check alert configuration.
+                    </p>
+                  ) : !primaryAlert ? (
+                    <p className="text-muted-foreground">
+                      No alert rules yet.{" "}
+                      <button
+                        type="button"
+                        className="underline hover:text-foreground"
+                        onClick={() => router.push("/create")}
+                      >
+                        Set up alerts
+                      </button>{" "}
+                      or add one on the Alerts page.
+                    </p>
+                  ) : hasEmailAlert ? (
+                    <>
+                      <p className="text-muted-foreground">
+                        <Mail className="mr-1 inline h-3.5 w-3.5" />
+                        Sends to <strong>{primaryAlert.recipient}</strong> when a
+                        log matches your rule (level + patterns). Use{" "}
+                        <strong>Payment failed</strong> — it sends an error log
+                        that matches the default patterns.
+                      </p>
+                      {inCooldown && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          Cooldown active ({primaryAlert.cooldownMinutes} min
+                          between alerts). SDK logs won&apos;t trigger another
+                          email until it expires.
+                        </p>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        disabled={testEmailMutation.isPending}
+                        onClick={() => testEmailMutation.mutate()}
+                      >
+                        {testEmailMutation.isPending
+                          ? "Sending…"
+                          : "Send test alert email"}
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      Alert rules exist but none use email. Add an email channel
+                      on the Alerts page to receive notifications here.
+                    </p>
+                  )}
+                  {latestDelivery && (
+                    <p className="text-xs text-muted-foreground">
+                      Latest delivery:{" "}
+                      <Badge
+                        variant={
+                          latestDelivery.status === "success"
+                            ? "default"
+                            : "destructive"
+                        }
+                        className="ml-1"
+                      >
+                        {latestDelivery.status}
+                      </Badge>
+                      {latestDelivery.errorMessage
+                        ? ` — ${latestDelivery.errorMessage}`
+                        : null}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <div className="grid gap-2 sm:grid-cols-2">
               {SCENARIOS.map((scenario) => (

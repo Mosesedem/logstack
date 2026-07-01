@@ -55,19 +55,22 @@ func (e *AlertEngine) ProcessLog(ctx context.Context, log *models.Log) error {
 }
 
 func (e *AlertEngine) processRule(ctx context.Context, rule models.AlertRule, log *models.Log) error {
-	// Check if rule matches
 	if !e.matches(rule, log) {
 		return nil
 	}
 
-	// Check cooldown
 	cooldownKey := fmt.Sprintf("alert:%d:cooldown", rule.ID)
-	exists, err := e.redis.Exists(ctx, cooldownKey).Result()
+	acquired, err := e.redis.SetNX(ctx, cooldownKey, "1", time.Duration(rule.CooldownMinutes)*time.Minute).Result()
 	if err != nil {
 		return err
 	}
-	if exists > 0 {
-		return nil // Still in cooldown
+	if !acquired {
+		slog.Info("alert skipped: cooldown active",
+			"ruleId", rule.ID,
+			"logId", log.ID,
+			"cooldownMinutes", rule.CooldownMinutes,
+		)
+		return nil
 	}
 
 	// Send notification
@@ -75,34 +78,85 @@ func (e *AlertEngine) processRule(ctx context.Context, rule models.AlertRule, lo
 	var errorMessage string
 
 	if err := e.notifier.Send(ctx, &rule, log); err != nil {
+		e.redis.Del(ctx, cooldownKey)
 		alertStatus = models.AlertStatusFailed
 		errorMessage = err.Error()
 	} else {
 		alertStatus = models.AlertStatusSuccess
 	}
 
-	// Record alert history
 	history := models.AlertHistory{
 		AlertRuleID:  rule.ID,
-		LogID:        &log.ID,
+		Status:       alertStatus,
+		ErrorMessage: errorMessage,
+	}
+	if log.ID > 0 {
+		history.LogID = &log.ID
+	}
+	if err := e.db.Create(&history).Error; err != nil {
+		e.redis.Del(ctx, cooldownKey)
+		return err
+	}
+
+	return nil
+}
+
+// SendTestNotification delivers a demo/test alert email, bypassing match rules and cooldown.
+func (e *AlertEngine) SendTestNotification(ctx context.Context, ruleID uint) error {
+	rule, err := e.GetRule(ctx, ruleID)
+	if err != nil {
+		return err
+	}
+
+	testLog := &models.Log{
+		Level:     models.LogLevelError,
+		Message:   "Logstack demo test — payment authorization error (simulated)",
+		Source:    "sdk-demo",
+		CreatedAt: time.Now(),
+		ProjectID: rule.ProjectID,
+	}
+
+	var alertStatus models.AlertStatus
+	var errorMessage string
+	if err := e.notifier.Send(ctx, rule, testLog); err != nil {
+		alertStatus = models.AlertStatusFailed
+		errorMessage = err.Error()
+	} else {
+		alertStatus = models.AlertStatusSuccess
+	}
+
+	history := models.AlertHistory{
+		AlertRuleID:  rule.ID,
 		Status:       alertStatus,
 		ErrorMessage: errorMessage,
 	}
 	if err := e.db.Create(&history).Error; err != nil {
 		return err
 	}
-
-	// Set cooldown only on success
-	if alertStatus == models.AlertStatusSuccess {
-		e.redis.Set(ctx, cooldownKey, "1", time.Duration(rule.CooldownMinutes)*time.Minute)
+	if alertStatus == models.AlertStatusFailed {
+		return fmt.Errorf("%s", errorMessage)
 	}
-
 	return nil
 }
 
+var logLevelRank = map[models.LogLevel]int{
+	models.LogLevelDebug:    0,
+	models.LogLevelInfo:     1,
+	models.LogLevelWarn:     2,
+	models.LogLevelError:    3,
+	models.LogLevelCritical: 4,
+	models.LogLevelFatal:    5,
+}
+
+func logLevelAtOrAbove(logLevel, minLevel models.LogLevel) bool {
+	if minLevel == "" {
+		return true
+	}
+	return logLevelRank[logLevel] >= logLevelRank[minLevel]
+}
+
 func (e *AlertEngine) matches(rule models.AlertRule, log *models.Log) bool {
-	// Level filter
-	if rule.TriggerLevel != "" && rule.TriggerLevel != log.Level {
+	if rule.TriggerLevel != "" && !logLevelAtOrAbove(log.Level, rule.TriggerLevel) {
 		return false
 	}
 
