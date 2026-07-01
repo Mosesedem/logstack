@@ -67,3 +67,5 @@ progress.txt
 # backend_documentation.mdapps/mobile/lib/firebase_options.dart
 
 .source
+
+*.env
