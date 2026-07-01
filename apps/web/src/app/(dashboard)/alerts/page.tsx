@@ -115,7 +115,7 @@ export default function AlertsPage() {
             right after your API key is generated.
           </p>
         </div>
-        <Button onClick={() => router.push("/projects")}>Create Project</Button>
+        <Button onClick={() => router.push("/create")}>Create Project</Button>
       </div>
     );
   }

@@ -45,14 +45,14 @@ Sign up → Verify email → Create project → Copy API key
 | Layer | What happens | Key files |
 |-------|--------------|-----------|
 | Web | Projects page → name → `POST /projects` | `apps/web/src/app/(dashboard)/projects/page.tsx` |
-| Onboarding | `ProjectOnboardingDialog`: API key → alert setup | `components/projects/project-onboarding-dialog.tsx` |
+| Onboarding | `ProjectOnboardingWizard`: API key → alert form → SDK | `components/projects/project-onboarding-wizard.tsx` |
 
-**After create, always offer:**
-1. Copy API key (shown once)
-2. **Set up alerts** (default error email rule to session email)
-3. Skip → SDK demo or alerts page
+**After create, always run the 3-step wizard** (see `logstack-onboarding-ux` skill):
+1. Copy API key (acknowledgment required)
+2. **Customize alert** via shared `AlertFormFields` (not a rigid summary)
+3. SDK install snippet → `/demo` or `/logs`
 
-Never end project creation at the API key modal alone.
+Key rotation uses `ApiKeyRevealDialog` only — never the full wizard.
 
 ### Step 3 — Alerts (create on project, edit on Alerts page)
 

@@ -107,7 +107,7 @@ export default function LogsPage() {
             Select or create a project to view its logs
           </p>
         </div>
-        <Button onClick={() => router.push("/projects")}>Create Project</Button>
+        <Button onClick={() => router.push("/create")}>Create Project</Button>
       </div>
     );
   }

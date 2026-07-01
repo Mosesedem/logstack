@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -170,23 +172,66 @@ func (h *ProjectsHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	result := h.db.Where("id = ? AND owner_id = ?", projectID, userID).Delete(&models.Project{})
-	if result.Error != nil {
+	if err := deleteProjectWithDependencies(h.db, projectID, userID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Code:    "PROJECT_NOT_FOUND",
+				Message: "Project not found",
+			})
+			return
+		}
+		slog.Error("Failed to delete project",
+			"error", err,
+			"projectId", projectID,
+			"userId", userID,
+		)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Code:    "INTERNAL_ERROR",
 			Message: "Failed to delete project",
 		})
 		return
 	}
-	if result.RowsAffected == 0 {
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Code:    "PROJECT_NOT_FOUND",
-			Message: "Project not found",
-		})
-		return
-	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Project deleted successfully"})
+}
+
+// deleteProjectWithDependencies removes a project and all child rows in FK-safe order.
+// Neon/AutoMigrate databases may lack ON DELETE CASCADE on every constraint.
+func deleteProjectWithDependencies(db *gorm.DB, projectID uuid.UUID, ownerID uint) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		var project models.Project
+		if err := tx.Where("id = ? AND owner_id = ?", projectID, ownerID).First(&project).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where(
+			"alert_rule_id IN (SELECT id FROM alert_rules WHERE project_id = ?)",
+			projectID,
+		).Delete(&models.AlertHistory{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("project_id = ?", projectID).Delete(&models.AlertRule{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("project_id = ?", projectID).Delete(&models.Log{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("project_id = ?", projectID).Delete(&models.UsageLog{}).Error; err != nil {
+			return err
+		}
+
+		result := tx.Where("id = ? AND owner_id = ?", projectID, ownerID).Delete(&models.Project{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
 }
 
 // RotateAPIKey handles POST /v1/projects/:id/rotate-key

@@ -6,21 +6,22 @@ import { cn } from "@/lib/utils";
 export interface CheckboxProps
   extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
+  labelClassName?: string;
 }
 
 const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ className, label, id, ...props }, ref) => {
+  ({ className, label, labelClassName, id, ...props }, ref) => {
     return (
       <label
         htmlFor={id}
-        className="flex items-center gap-2 cursor-pointer select-none"
+        className="flex min-w-0 items-start gap-2 cursor-pointer select-none"
       >
         <input
           type="checkbox"
           id={id}
           ref={ref}
           className={cn(
-            "h-4 w-4 rounded border border-input bg-background text-primary accent-primary cursor-pointer",
+            "mt-0.5 h-4 w-4 shrink-0 rounded border border-input bg-background text-primary accent-primary cursor-pointer",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             "disabled:cursor-not-allowed disabled:opacity-50",
             className
@@ -28,7 +29,12 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
           {...props}
         />
         {label && (
-          <span className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+          <span
+            className={cn(
+              "min-w-0 text-sm font-medium leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+              labelClassName,
+            )}
+          >
             {label}
           </span>
         )}

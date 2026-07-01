@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { useProject } from "@/hooks/use-project";
 import { Button } from "@/components/ui/button";
@@ -11,15 +12,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -30,51 +22,26 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api-client";
-import { Project } from "@/types";
-import { ProjectOnboardingDialog } from "@/components/projects/project-onboarding-dialog";
+import { ApiKeyRevealDialog } from "@/components/projects/api-key-reveal-dialog";
 import { Plus, Copy, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ProjectsPage() {
   const { projects, refreshProjects } = useProject();
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [newProjectName, setNewProjectName] = useState("");
-  const [apiKeyToDisplay, setApiKeyToDisplay] = useState<string | null>(null);
-  const [onboardingProject, setOnboardingProject] = useState<Project | null>(
-    null,
-  );
+  const [rotatedApiKey, setRotatedApiKey] = useState<string | null>(null);
   const { toast } = useToast();
 
   const hasProjects = projects.length > 0;
-
-  const createMutation = useMutation({
-    mutationFn: (name: string) => api.post<Project>("/projects", { name }),
-    onSuccess: (project) => {
-      refreshProjects();
-      setIsFormOpen(false);
-      setNewProjectName("");
-      setOnboardingProject(project);
-      setApiKeyToDisplay(project.apiKey ?? null);
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
 
   const rotateKeyMutation = useMutation({
     mutationFn: (id: string) =>
       api.post<{ apiKey: string }>(`/projects/${id}/rotate-key`, {}),
     onSuccess: (data) => {
       refreshProjects();
-      setApiKeyToDisplay(data.apiKey ?? null);
+      setRotatedApiKey(data.apiKey ?? null);
       toast({
         title: "API Key rotated",
         description: "Copy your new key now — it won't be shown again.",
@@ -109,81 +76,33 @@ export default function ProjectsPage() {
     toast({ title: "Copied to clipboard" });
   };
 
-  const handleCreateProject = () => {
-    const name = newProjectName.trim();
-    if (!name) {
-      toast({
-        title: "Project name required",
-        description: "Enter a name for your project.",
-        variant: "destructive",
-      });
-      return;
-    }
-    createMutation.mutate(name);
-  };
-
-  const createProjectDialog = (
-    <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-      {hasProjects ? (
-        <DialogTrigger asChild>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            New Project
-          </Button>
-        </DialogTrigger>
-      ) : null}
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create Project</DialogTitle>
-          <DialogDescription>
-            Create a new project to start collecting logs.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Project Name</Label>
-            <Input
-              id="name"
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-              placeholder="My App"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreateProject();
-              }}
-            />
-          </div>
-          <Button
-            onClick={handleCreateProject}
-            disabled={!newProjectName.trim() || createMutation.isPending}
-            className="w-full"
-          >
-            {createMutation.isPending ? "Creating..." : "Create Project"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-
   return (
     <>
       {!hasProjects ? (
-        <div className="flex flex-col items-center justify-center h-full space-y-4">
-          <div className="text-center space-y-2 max-w-md">
+        <div className="flex h-full flex-col items-center justify-center space-y-4">
+          <div className="max-w-md space-y-2 text-center">
             <h2 className="text-2xl font-bold">No Projects Yet</h2>
             <p className="text-muted-foreground">
               Create your first project to start ingesting logs.
             </p>
           </div>
-          <Button onClick={() => setIsFormOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Project
+          <Button asChild>
+            <Link href="/create">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Project
+            </Link>
           </Button>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold">Projects</h1>
-            {createProjectDialog}
+            <Button asChild>
+              <Link href="/create">
+                <Plus className="mr-2 h-4 w-4" />
+                New Project
+              </Link>
+            </Button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -288,22 +207,13 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Always mounted so the empty-state button can open it */}
-      {!hasProjects ? createProjectDialog : null}
-
-      <ProjectOnboardingDialog
-        project={onboardingProject}
-        apiKey={apiKeyToDisplay}
-        open={!!apiKeyToDisplay && !!onboardingProject}
+      <ApiKeyRevealDialog
+        apiKey={rotatedApiKey}
+        title="API key rotated"
+        description="Your previous key is invalid. Copy the new key now — it won't be shown again."
+        open={!!rotatedApiKey}
         onOpenChange={(open) => {
-          if (!open) {
-            setApiKeyToDisplay(null);
-            setOnboardingProject(null);
-          }
-        }}
-        onComplete={() => {
-          setApiKeyToDisplay(null);
-          setOnboardingProject(null);
+          if (!open) setRotatedApiKey(null);
         }}
       />
     </>

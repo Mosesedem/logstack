@@ -5,17 +5,19 @@ go 1.25.0
 require (
 	firebase.google.com/go/v4 v4.19.0
 	github.com/gin-gonic/gin v1.9.1
+	github.com/glebarez/sqlite v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.2.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.1
-	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.4.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	golang.org/x/crypto v0.53.0
 	google.golang.org/api v0.231.0
 	gorm.io/datatypes v1.2.4
 	gorm.io/driver/postgres v1.5.11
+	gorm.io/driver/sqlite v1.4.3
 	gorm.io/gorm v1.25.12
+	pgregory.net/rapid v1.3.0
 )
 
 require (
@@ -47,7 +49,6 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/glebarez/go-sqlite v1.21.2 // indirect
-	github.com/glebarez/sqlite v1.11.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.0.5 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -71,6 +72,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.6 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-sqlite3 v1.14.16 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.1 // indirect
@@ -109,5 +111,4 @@ require (
 	modernc.org/mathutil v1.5.0 // indirect
 	modernc.org/memory v1.5.0 // indirect
 	modernc.org/sqlite v1.23.1 // indirect
-	pgregory.net/rapid v1.3.0 // indirect
 )
