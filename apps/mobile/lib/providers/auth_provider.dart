@@ -98,24 +98,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> signup({
-    required String email,
-    required String password,
-  }) async {
-    state = state.copyWith(isLoading: true, error: null);
-    try {
-      final response = await _authService.signup(
-        email: email,
-        password: password,
-      );
-      state = AuthState(user: response.user);
-      _listenForFcmToken();
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
-      rethrow;
-    }
-  }
-
   Future<void> logout() async {
     // Best-effort revocation of the refresh token before clearing local state.
     final refreshToken = await _storage.getRefreshToken();

@@ -36,25 +36,6 @@ class AuthService {
     return authResponse;
   }
 
-  Future<AuthResponse> signup({
-    required String email,
-    required String password,
-  }) async {
-    final response = await _api.post<Map<String, dynamic>>(
-      '/auth/signup',
-      data: {'email': email, 'password': password},
-    );
-
-    final authResponse = AuthResponse.fromJson(response);
-    await _storage.setToken(authResponse.token);
-    await _storage.setUserData(jsonEncode(authResponse.user.toJson()));
-
-    // Register FCM token after signup
-    await _registerPushToken();
-
-    return authResponse;
-  }
-
   /// Confirms a QR login session.
   ///
   /// Calls `POST /auth/qr/:token/confirm` with [email] and [password] credentials.
