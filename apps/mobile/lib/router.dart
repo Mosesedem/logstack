@@ -6,6 +6,7 @@ import 'package:logstack_mobile/screens/auth/signup_screen.dart';
 import 'package:logstack_mobile/screens/auth/qr_scanner_screen.dart';
 import 'package:logstack_mobile/screens/auth/pin_login_screen.dart';
 import 'package:logstack_mobile/screens/home/home_screen.dart';
+import 'package:logstack_mobile/models/log.dart';
 import 'package:logstack_mobile/screens/logs/log_detail_screen.dart';
 import 'package:logstack_mobile/screens/logs/logs_screen.dart';
 import 'package:logstack_mobile/screens/alerts/alerts_screen.dart';
@@ -60,6 +61,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/logs/:id',
             builder: (context, state) => LogDetailScreen(
               logId: state.pathParameters['id']!,
+              initialLog: state.extra is Log ? state.extra as Log : null,
             ),
           ),
           GoRoute(

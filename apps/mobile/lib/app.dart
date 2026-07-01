@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logstack_mobile/router.dart';
-import 'package:logstack_mobile/theme.dart';
+import 'package:logstack_mobile/theme/app_theme.dart';
+import 'package:logstack_mobile/widgets/app_lock_gate.dart';
 
 class LogstackApp extends ConsumerWidget {
   const LogstackApp({super.key});
@@ -10,13 +11,15 @@ class LogstackApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
 
-    return MaterialApp.router(
-      title: 'Logstack',
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
-      routerConfig: router,
-      debugShowCheckedModeBanner: false,
+    return AppLockGate(
+      child: MaterialApp.router(
+        title: 'Logstack',
+        theme: AppTheme.dark,
+        darkTheme: AppTheme.dark,
+        themeMode: ThemeMode.dark,
+        routerConfig: router,
+        debugShowCheckedModeBanner: false,
+      ),
     );
   }
 }

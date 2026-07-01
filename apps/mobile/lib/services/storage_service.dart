@@ -19,20 +19,17 @@ class StorageService {
   Future<SharedPreferences> get _prefs async =>
       await SharedPreferences.getInstance();
 
-  // Token management
+  // Access token — secure storage only
   Future<void> setToken(String token) async {
-    final prefs = await _prefs;
-    await prefs.setString(_tokenKey, token);
+    await _secureStorage.write(key: _tokenKey, value: token);
   }
 
   Future<String?> getToken() async {
-    final prefs = await _prefs;
-    return prefs.getString(_tokenKey);
+    return _secureStorage.read(key: _tokenKey);
   }
 
   Future<void> clearToken() async {
-    final prefs = await _prefs;
-    await prefs.remove(_tokenKey);
+    await _secureStorage.delete(key: _tokenKey);
   }
 
   // User data
@@ -67,6 +64,7 @@ class StorageService {
     final prefs = await _prefs;
     await prefs.clear();
     await _secureStorage.delete(key: _refreshTokenKey);
+    await _secureStorage.delete(key: _tokenKey);
   }
 
   // Refresh token (stored in secure storage)

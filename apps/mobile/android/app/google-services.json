@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "826122369446",
+    "project_id": "general-saas-project",
+    "storage_bucket": "general-saas-project.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:826122369446:android:d30206fba1ce55035ef767",
+        "android_client_info": {
+          "package_name": "tech.logstack.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "826122369446-1h2840c2bclee8uikdb2bca57tmoc4km.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_JdTwqGj-ey0YxphZ9VHKVmKi0eBxgl0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "826122369446-1h2840c2bclee8uikdb2bca57tmoc4km.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

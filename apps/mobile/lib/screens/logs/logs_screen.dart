@@ -1,76 +1,129 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/models/log.dart';
 import 'package:logstack_mobile/providers/logs_provider.dart';
+import 'package:logstack_mobile/theme/logstack_colors.dart';
+import 'package:logstack_mobile/widgets/connection_banner.dart';
+import 'package:logstack_mobile/widgets/empty_state.dart';
 import 'package:logstack_mobile/widgets/log_card.dart';
 
-class LogsScreen extends ConsumerWidget {
+class LogsScreen extends ConsumerStatefulWidget {
   const LogsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final logsState = ref.watch(logsProvider);
-    final logs = logsState.logs;
-    final isLoading = logsState.isLoading;
-    final error = logsState.error;
+  ConsumerState<LogsScreen> createState() => _LogsScreenState();
+}
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Logs'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => ref.read(logsProvider.notifier).loadLogs(),
+class _LogsScreenState extends ConsumerState<LogsScreen> {
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final logsState = ref.watch(logsProvider);
+
+    return Column(
+      children: [
+        ConnectionBanner(
+          isLive: logsState.isLive,
+          isOfflineMode: logsState.isOfflineData,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(
+              hintText: 'Search logs…',
+              prefixIcon: Icon(Icons.search, size: 20),
+            ),
+            onSubmitted: (q) => ref.read(logsProvider.notifier).setSearchQuery(q),
           ),
-          PopupMenuButton<LogLevel?>(
-            icon: const Icon(Icons.filter_list),
-            onSelected: (level) {
-              ref.read(logsProvider.notifier).setLevelFilter(level);
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem<LogLevel?>(value: null, child: Text('All levels')),
-              const PopupMenuItem(value: LogLevel.info, child: Text('Info')),
-              const PopupMenuItem(value: LogLevel.warn, child: Text('Warn')),
-              const PopupMenuItem(value: LogLevel.error, child: Text('Error')),
-              const PopupMenuItem(value: LogLevel.critical, child: Text('Critical')),
-              // Note: 'fatal' may be sent by SDKs but enum is info/warn/error/critical in current models
-            ],
-          ),
+        ),
+        Expanded(child: _buildBody(logsState)),
+      ],
+    );
+  }
+
+  Widget _buildBody(LogsState logsState) {
+    if (logsState.isLoading && logsState.logs.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (logsState.error != null && logsState.logs.isEmpty) {
+      return EmptyState(
+        icon: Icons.error_outline,
+        title: 'Could not load logs',
+        subtitle: logsState.error,
+        action: FilledButton(
+          onPressed: () => ref.read(logsProvider.notifier).loadLogs(),
+          child: const Text('Retry'),
+        ),
+      );
+    }
+
+    if (logsState.logs.isEmpty) {
+      return const EmptyState(
+        icon: Icons.terminal,
+        title: 'No logs yet',
+        subtitle: 'Send logs from your SDK or wait for the live stream.',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => ref.read(logsProvider.notifier).loadLogs(),
+      color: LogstackColors.accentBlue,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: logsState.logs.length + (logsState.hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == logsState.logs.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: logsState.isLoading
+                    ? const CircularProgressIndicator()
+                    : TextButton(
+                        onPressed: () => ref.read(logsProvider.notifier).loadMore(),
+                        child: const Text('Load more'),
+                      ),
+              ),
+            );
+          }
+          final log = logsState.logs[index];
+          return LogCard(
+            log: log,
+            onTap: () => context.push('/logs/${log.id}', extra: log),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class LogsScreenActions {
+  static List<Widget> buildActions(BuildContext context, WidgetRef ref) {
+    return [
+      IconButton(
+        icon: const Icon(Icons.refresh),
+        onPressed: () => ref.read(logsProvider.notifier).loadLogs(),
+      ),
+      PopupMenuButton<LogLevel?>(
+        icon: const Icon(Icons.filter_list),
+        onSelected: (level) => ref.read(logsProvider.notifier).setLevelFilter(level),
+        itemBuilder: (context) => const [
+          PopupMenuItem(value: null, child: Text('All levels')),
+          PopupMenuItem(value: LogLevel.info, child: Text('Info')),
+          PopupMenuItem(value: LogLevel.warn, child: Text('Warn')),
+          PopupMenuItem(value: LogLevel.error, child: Text('Error')),
+          PopupMenuItem(value: LogLevel.critical, child: Text('Critical')),
         ],
       ),
-      body: isLoading && logs.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : error != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('Error: $error'),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () => ref.read(logsProvider.notifier).loadLogs(),
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
-              : logs.isEmpty
-                  ? const Center(child: Text('No logs yet. Send some logs from your app!'))
-                  : RefreshIndicator(
-                      onRefresh: () => ref.read(logsProvider.notifier).loadLogs(),
-                      child: ListView.builder(
-                        itemCount: logs.length,
-                        itemBuilder: (context, index) {
-                          final log = logs[index];
-                          return LogCard(
-                            log: log,
-                            onTap: () {
-                              // go_router will navigate via the ShellRoute definition in router.dart
-                            },
-                          );
-                        },
-                      ),
-                    ),
-    );
+    ];
   }
 }

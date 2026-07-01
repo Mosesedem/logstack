@@ -34,3 +34,15 @@ cp assets/icons/web/apple-touch-icon.png web/apple-touch-icon.png
 ```bash
 flutter run
 ```
+
+### iOS simulator (Xcode 16.x cache issues)
+
+If `flutter run` fails with `sdkstatcache not found` or `ModuleCache` errors,
+use the helper script (builds with project-local DerivedData):
+
+```bash
+./scripts/run_ios.sh -d "iPhone 16 Pro"
+```
+
+Plain `flutter run` may still fail on some Macs due to a corrupted global Xcode
+DerivedData cache. Android and physical iOS devices are unaffected.

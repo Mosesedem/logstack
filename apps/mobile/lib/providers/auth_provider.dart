@@ -75,6 +75,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       final user = await _authService.getCurrentUser();
       state = AuthState(user: user);
+      if (user != null) {
+        _listenForFcmToken();
+      }
     } catch (e) {
       state = AuthState();
     }
@@ -168,6 +171,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // response also returns user data). Fall back to a minimal reload.
     final user = await _authService.getCurrentUser();
     state = AuthState(user: user);
+    _listenForFcmToken();
   }
 
   /// Exposed for property testing. Calls [_registerPushToken] directly.

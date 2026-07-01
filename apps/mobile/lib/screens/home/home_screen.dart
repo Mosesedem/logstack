@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/providers/project_provider.dart';
+import 'package:logstack_mobile/screens/logs/logs_screen.dart';
+import 'package:logstack_mobile/theme/logstack_colors.dart';
 
 class HomeScreen extends ConsumerWidget {
   final Widget child;
@@ -12,6 +14,8 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final projectState = ref.watch(projectProvider);
     final currentIndex = _calculateSelectedIndex(context);
+    final location = GoRouterState.of(context).uri.path;
+    final isLogsTab = location == '/' || location.startsWith('/logs');
 
     return Scaffold(
       appBar: AppBar(
@@ -31,10 +35,12 @@ class HomeScreen extends ConsumerWidget {
                   ref.read(projectProvider.notifier).setCurrentProject(project);
                 },
               )
-            : const Text('LogStack'),
+            : const Text('Logstack'),
+        actions: isLogsTab ? LogsScreenActions.buildActions(context, ref) : null,
       ),
       body: child,
       bottomNavigationBar: NavigationBar(
+        backgroundColor: LogstackColors.surface,
         selectedIndex: currentIndex,
         onDestinationSelected: (index) => _onItemTapped(index, context),
         destinations: const [

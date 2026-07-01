@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logstack_mobile/config/app_config.dart';
 import 'package:logstack_mobile/services/storage_service.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
@@ -11,7 +12,7 @@ class ApiClient {
   final StorageService _storage;
   late final Dio _dio;
 
-  static const String baseUrl = 'http://localhost:8080/v1';
+  static String get baseUrl => AppConfig.apiBaseUrl;
 
   ApiClient(this._storage) {
     _dio = Dio(BaseOptions(
