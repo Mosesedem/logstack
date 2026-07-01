@@ -46,11 +46,12 @@ languages. Headline rules: structured `slog` (never `fmt.Print*`) in Go; no `any
 config instead of hardcoding endpoints.
 
 ## Known gotchas (verified)
-- **Silent no-op logger:** `apps/web/src/lib/logger.ts` replaces the client with a no-op when
-  `NEXT_PUBLIC_LOGSTACK_API_KEY` is unset → no console output at all locally. Logging must
-  degrade to console-only, never to nothing.
-- **Dev logs vanish:** SDK only sends in `production`/`staging`; backend `ingestor.go` *drops*
-  (Redis-only, no persist) non-production logs → dev/staging logs never reach the dashboard.
+- **Console-only without API key:** `apps/web/src/lib/logger.ts` uses `disabled: !apiKey` so
+  console output still works locally; logs are not shipped without `NEXT_PUBLIC_LOGSTACK_API_KEY`.
+- **JS SDK ships in all envs:** when `apiKey` is set and `disabled` is false, dev mode still
+  POSTs to `/v1/logs`. Console gating is separate from network shipping.
+- **Ingestor persists all envs:** `ingestor.go` writes dev/staging/prod logs to Postgres;
+  usage metering is production-only.
 - **Double `/v1`:** `apiClient` base URL already ends in `/v1`; some calls (e.g. audit page)
   prepend `/v1` again → `/v1/v1/...` 404. Use paths relative to `/v1`.
 - **WebSocket endpoint:** the web hook streams from `/v1/mobile/stream` (mobile endpoint).

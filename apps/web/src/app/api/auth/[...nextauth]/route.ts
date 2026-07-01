@@ -141,6 +141,7 @@ const authOptions: NextAuthOptions = {
       if (user) {
         return {
           ...token,
+          id: user.id,
           accessToken: user.accessToken,
           refreshToken: user.refreshToken,
           accessTokenExpires: Date.now() + ACCESS_TOKEN_EXPIRY,
@@ -185,6 +186,11 @@ const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       session.accessToken = token.accessToken as string;
       session.error = token.error as string | undefined;
+      if (token.sub) {
+        session.user.id = token.sub;
+      } else if (token.id) {
+        session.user.id = token.id as string;
+      }
       session.user.emailVerified = token.emailVerified as boolean;
       return session;
     },

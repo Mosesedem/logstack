@@ -10,19 +10,19 @@ import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
 Endpoints for ingesting and querying logs.
 
-## POST /logs/ingest
+## POST /logs
 
 Ingest logs for a project. Supports batch ingestion.
 
 <Callout type="info">
-  This endpoint uses API key authentication, not JWT tokens.
+  This endpoint uses API key authentication via `Authorization: Bearer`, not JWT tokens.
 </Callout>
 
 ### Request
 
 ```bash
-curl -X POST https://api.logstack.tech/v1/logs/ingest \
-  -H "X-API-Key: ls_live_abc123xyz789" \
+curl -X POST https://api.logstack.tech/v1/logs \
+  -H "Authorization: Bearer ls_live_abc123xyz789" \
   -H "Content-Type: application/json" \
   -d '{
     "logs": [
@@ -185,8 +185,8 @@ logstack.error("Database connection failed", {
 For custom integrations or non-JavaScript environments:
 
 ```bash
-curl -X POST https://api.logstack.tech/v1/logs/ingest \
-  -H "X-API-Key: ls_live_abc123xyz789" \
+curl -X POST https://api.logstack.tech/v1/logs \
+  -H "Authorization: Bearer ls_live_abc123xyz789" \
   -H "Content-Type: application/json" \
   -d '{
     "logs": [{

@@ -22,8 +22,11 @@ const logstack = createLogStack({
   endpoint: "https://api.logstack.tech",
 
   // Environment mode: 'development' | 'production' | 'staging' | 'test'
-  // Development mode logs to console only, production sends to server
+  // Controls console output — network shipping is independent (see below)
   environment: process.env.NODE_ENV as "development" | "production",
+
+  // Console-only locally when no API key is configured
+  disabled: !process.env.LOGSTACK_API_KEY,
 
   // Also log to console in production mode
   consoleInProduction: false,
@@ -66,14 +69,14 @@ apiKey: "ls_live_abc123xyz789";
 
 ### `environment`
 
-Controls whether logs are sent to the server or only to console.
+Controls **console output only**. Network shipping is controlled separately by `apiKey` and `disabled`.
 
-| Value         | Behavior                                           |
-| ------------- | -------------------------------------------------- |
-| `development` | Logs to console only with colored output           |
-| `production`  | Logs sent to server, triggers alerts/notifications |
-| `staging`     | Same as production (logs to server)                |
-| `test`        | Logs to console only                               |
+| Value         | Console output                          | Ships to server (if `apiKey` set, `disabled: false`) |
+| ------------- | --------------------------------------- | ---------------------------------------------------- |
+| `development` | Colored console output (default on)     | Yes                                                  |
+| `production`  | Off by default (`consoleInProduction`)  | Yes                                                  |
+| `staging`     | Same as production                      | Yes                                                  |
+| `test`        | Console on                              | Yes                                                  |
 
 ```typescript
 // Auto-detect from NODE_ENV (recommended)
@@ -84,9 +87,17 @@ environment: 'production',
 ```
 
 <Callout type="info">
-  In development mode, no network requests are made. Logs appear in your
-  terminal with colored formatting for easy reading.
+  Console and network are decoupled. Use `disabled: true` for console-only
+  mode when you have no API key locally — you still get colored terminal output.
 </Callout>
+
+### `disabled`
+
+When `true`, logs are written to the console (unless `silent: true`) but **never** sent to the server. Use this for local development without an API key:
+
+```typescript
+disabled: !process.env.LOGSTACK_API_KEY,
+```
 
 ### `consoleInProduction`
 

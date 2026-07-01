@@ -272,10 +272,10 @@ export class LoggerService implements OnModuleDestroy {
 #### Ingest Logs
 
 ```
-POST /api/v1/logs/ingest
+POST /v1/logs
 Headers:
   Content-Type: application/json
-  X-API-Key: ls_live_your_api_key
+  Authorization: Bearer ls_live_your_api_key
 
 Body:
 {

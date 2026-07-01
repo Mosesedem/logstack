@@ -32,7 +32,7 @@ export function AlertHistory({ history, isLoading }: AlertHistoryProps) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">Alert #{item.alertRuleId}</span>
-                  {/* TODO: Fix types - LevelBadge level={item.level} */}
+                  {item.log?.level && <LevelBadge level={item.log.level} />}
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   Status: {item.status}

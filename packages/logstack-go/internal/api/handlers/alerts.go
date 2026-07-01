@@ -124,9 +124,15 @@ func (h *AlertsHandler) Create(c *gin.Context) {
 	// Set multi-value fields from request
 	if len(req.TriggerPatterns) > 0 {
 		rule.TriggerPatterns = datatypes.JSONSlice[string](req.TriggerPatterns)
+		if rule.TriggerPattern == "" {
+			rule.TriggerPattern = req.TriggerPatterns[0]
+		}
 	}
 	if len(req.Channels) > 0 {
 		rule.Channels = datatypes.JSONSlice[string](req.Channels)
+		if rule.Channel == "" {
+			rule.Channel = models.AlertChannel(req.Channels[0])
+		}
 	}
 
 	if err := h.alertEngine.CreateRule(c.Request.Context(), &rule); err != nil {

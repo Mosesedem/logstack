@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertRule, AlertOptions, LogLevel } from "@/types";
 import { api } from "@/lib/api-client";
@@ -31,6 +31,7 @@ interface AlertFormProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: Partial<AlertRule>) => void;
   initialData?: AlertRule | null;
+  defaultRecipient?: string;
   isSubmitting?: boolean;
 }
 
@@ -44,22 +45,36 @@ interface AlertFormData {
   enabled: boolean;
 }
 
+const defaultFormData = (
+  initialData?: AlertRule | null,
+  defaultRecipient?: string,
+): AlertFormData => ({
+  name: initialData?.name || "",
+  triggerPatterns: initialData?.triggerPatterns ?? [],
+  triggerLevel: initialData?.triggerLevel || "error",
+  channels: initialData?.channels ?? (defaultRecipient ? ["email"] : []),
+  recipient: initialData?.recipient || defaultRecipient || "",
+  cooldownMinutes: initialData?.cooldownMinutes || 15,
+  enabled: initialData?.enabled ?? true,
+});
+
 export function AlertForm({
   open,
   onOpenChange,
   onSubmit,
   initialData,
+  defaultRecipient,
   isSubmitting,
 }: AlertFormProps) {
-  const [formData, setFormData] = useState<AlertFormData>({
-    name: initialData?.name || "",
-    triggerPatterns: initialData?.triggerPatterns ?? [],
-    triggerLevel: initialData?.triggerLevel || "error",
-    channels: initialData?.channels ?? [],
-    recipient: initialData?.recipient || "",
-    cooldownMinutes: initialData?.cooldownMinutes || 15,
-    enabled: initialData?.enabled ?? true,
-  });
+  const [formData, setFormData] = useState<AlertFormData>(
+    defaultFormData(initialData, defaultRecipient),
+  );
+
+  useEffect(() => {
+    if (open) {
+      setFormData(defaultFormData(initialData, defaultRecipient));
+    }
+  }, [open, initialData, defaultRecipient]);
 
   const { data: options, isLoading: optionsLoading } = useQuery<AlertOptions>({
     queryKey: ["alert-options"],
@@ -198,16 +213,34 @@ export function AlertForm({
 
             {/* Recipient */}
             <div className="grid gap-2">
-              <Label htmlFor="recipient">Recipient</Label>
+              <Label htmlFor="recipient">
+                {formData.channels.includes("webhook")
+                  ? "Webhook URL"
+                  : formData.channels.includes("push") &&
+                      !formData.channels.includes("email")
+                    ? "Push recipient"
+                    : "Email recipient"}
+              </Label>
               <Input
                 id="recipient"
                 value={formData.recipient}
                 onChange={(e) =>
                   setFormData({ ...formData, recipient: e.target.value })
                 }
-                placeholder="user@example.com or webhook URL"
+                placeholder={
+                  formData.channels.includes("webhook")
+                    ? "https://hooks.example.com/alerts"
+                    : "you@company.com"
+                }
                 required
               />
+              {formData.channels.includes("push") && (
+                <p className="text-xs text-muted-foreground">
+                  Push notifications are delivered to your registered mobile
+                  devices. Email is used for the email channel; push uses your
+                  account automatically.
+                </p>
+              )}
             </div>
 
             {/* Cooldown — Select from options */}

@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api-client";
 import { Project } from "@/types";
+import { ProjectOnboardingDialog } from "@/components/projects/project-onboarding-dialog";
 import { Plus, Copy, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -43,6 +44,9 @@ export default function ProjectsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [apiKeyToDisplay, setApiKeyToDisplay] = useState<string | null>(null);
+  const [onboardingProject, setOnboardingProject] = useState<Project | null>(
+    null,
+  );
   const { toast } = useToast();
 
   const hasProjects = projects.length > 0;
@@ -53,6 +57,7 @@ export default function ProjectsPage() {
       refreshProjects();
       setIsFormOpen(false);
       setNewProjectName("");
+      setOnboardingProject(project);
       setApiKeyToDisplay(project.apiKey ?? null);
     },
     onError: (error: Error) => {
@@ -286,52 +291,21 @@ export default function ProjectsPage() {
       {/* Always mounted so the empty-state button can open it */}
       {!hasProjects ? createProjectDialog : null}
 
-      {apiKeyToDisplay && (
-        <Dialog
-          open={!!apiKeyToDisplay}
-          onOpenChange={(open) => {
-            if (!open) setApiKeyToDisplay(null);
-          }}
-        >
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Project Created</DialogTitle>
-              <DialogDescription>
-                Your API key has been generated. Store it securely — it will not
-                be shown again.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="apiKey">API Key</Label>
-                <div className="flex gap-2">
-                  <code className="flex-1 rounded bg-muted px-3 py-2 font-mono text-sm break-all">
-                    {apiKeyToDisplay}
-                  </code>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => {
-                      navigator.clipboard.writeText(apiKeyToDisplay);
-                      toast({ title: "Copied to clipboard" });
-                    }}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  This key will not be shown again. Keep it secure.
-                </p>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button onClick={() => setApiKeyToDisplay(null)}>
-                I've saved my key
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      <ProjectOnboardingDialog
+        project={onboardingProject}
+        apiKey={apiKeyToDisplay}
+        open={!!apiKeyToDisplay && !!onboardingProject}
+        onOpenChange={(open) => {
+          if (!open) {
+            setApiKeyToDisplay(null);
+            setOnboardingProject(null);
+          }
+        }}
+        onComplete={() => {
+          setApiKeyToDisplay(null);
+          setOnboardingProject(null);
+        }}
+      />
     </>
   );
 }

@@ -5,13 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { LevelBadge } from "@/components/logs";
-import { Edit, Trash2 } from "lucide-react";
+import { Edit, Plus, Trash2 } from "lucide-react";
 
 interface AlertListProps {
   alerts: AlertRule[];
   onToggle: (id: number, enabled: boolean) => void;
   onEdit: (alert: AlertRule) => void;
   onDelete: (id: number) => void;
+  onCreate?: () => void;
   isLoading?: boolean;
 }
 
@@ -20,12 +21,22 @@ export function AlertList({
   onToggle,
   onEdit,
   onDelete,
+  onCreate,
   isLoading,
 }: AlertListProps) {
   if (alerts.length === 0 && !isLoading) {
     return (
-      <div className="flex items-center justify-center py-12 text-muted-foreground">
-        No alert rules configured
+      <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+        <p className="text-muted-foreground max-w-md">
+          No alert rules yet. Create one to get emailed (or pushed) when logs
+          match error patterns — or finish setup from project creation.
+        </p>
+        {onCreate && (
+          <Button onClick={onCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create your first alert
+          </Button>
+        )}
       </div>
     );
   }

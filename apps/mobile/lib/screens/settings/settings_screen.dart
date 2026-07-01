@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/providers/billing_provider.dart';
+import 'package:logstack_mobile/widgets/push_debug_card.dart';
 import 'package:logstack_mobile/widgets/usage_card.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -168,22 +169,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.notifications),
-                  title: const Text('Push Notifications'),
-                  trailing: Switch(
-                    value: true,
-                    onChanged: (value) {
-                      // TODO: Implement notification settings
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
+          const PushDebugCard(),
           const SizedBox(height: 16),
           Card(
             child: Column(

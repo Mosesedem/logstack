@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
@@ -94,9 +95,13 @@ func (p *PushNotifier) Send(ctx context.Context, rule *models.AlertRule, log *mo
 		return fmt.Errorf("FCM client not initialized")
 	}
 
-	// Get push tokens for the recipient (user ID)
+	userID, err := p.resolveUserID(rule, log)
+	if err != nil {
+		return err
+	}
+
 	var tokens []models.PushToken
-	if err := p.db.Where("user_id = ?", rule.Recipient).Find(&tokens).Error; err != nil {
+	if err := p.db.Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
 		return fmt.Errorf("failed to fetch push tokens: %w", err)
 	}
 
@@ -163,6 +168,21 @@ func (p *PushNotifier) Send(ctx context.Context, rule *models.AlertRule, log *mo
 	)
 
 	return nil
+}
+
+// resolveUserID returns the push recipient user ID. When the rule recipient is
+// an email address (common for multi-channel rules), fall back to the project owner.
+func (p *PushNotifier) resolveUserID(rule *models.AlertRule, log *models.Log) (uint, error) {
+	if id, err := strconv.ParseUint(rule.Recipient, 10, 32); err == nil {
+		return uint(id), nil
+	}
+
+	var project models.Project
+	if err := p.db.Where("id = ?", log.ProjectID).First(&project).Error; err != nil {
+		return 0, fmt.Errorf("failed to resolve push recipient from project: %w", err)
+	}
+
+	return project.OwnerID, nil
 }
 
 func truncate(s string, maxLen int) string {

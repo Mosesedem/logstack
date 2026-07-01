@@ -2,11 +2,21 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logstack_mobile/firebase_options.dart';
 import 'package:logstack_mobile/models/user.dart';
 import 'package:logstack_mobile/services/api_client.dart';
 import 'package:logstack_mobile/services/auth_service.dart';
 import 'package:logstack_mobile/services/notification_service.dart';
 import 'package:logstack_mobile/services/storage_service.dart';
+
+enum PushRegistrationStatus {
+  notConfigured,
+  awaitingToken,
+  notAuthenticated,
+  registering,
+  registered,
+  failed,
+}
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final authService = ref.watch(authServiceProvider);
@@ -19,11 +29,15 @@ class AuthState {
   final User? user;
   final bool isLoading;
   final String? error;
+  final String? pushToken;
+  final PushRegistrationStatus pushStatus;
 
   AuthState({
     this.user,
     this.isLoading = false,
     this.error,
+    this.pushToken,
+    this.pushStatus = PushRegistrationStatus.notConfigured,
   });
 
   bool get isAuthenticated => user != null;
@@ -32,11 +46,15 @@ class AuthState {
     User? user,
     bool? isLoading,
     String? error,
+    String? pushToken,
+    PushRegistrationStatus? pushStatus,
   }) {
     return AuthState(
       user: user ?? this.user,
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      pushToken: pushToken ?? this.pushToken,
+      pushStatus: pushStatus ?? this.pushStatus,
     );
   }
 }
@@ -50,8 +68,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
   String? _currentFcmToken;
 
   AuthNotifier(this._authService, this._storage, this._apiClient)
-      : super(AuthState()) {
+      : super(AuthState(pushStatus: _initialPushStatus())) {
     _checkAuth();
+  }
+
+  static PushRegistrationStatus _initialPushStatus() {
+    if (!DefaultFirebaseOptions.isConfigured) {
+      return PushRegistrationStatus.notConfigured;
+    }
+    return NotificationService.instance.fcmToken == null
+        ? PushRegistrationStatus.awaitingToken
+        : PushRegistrationStatus.notAuthenticated;
   }
 
   Future<void> _checkAuth() async {
@@ -119,7 +146,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _tokenSubscription = null;
     _currentFcmToken = null;
     await _authService.logout();
-    state = AuthState();
+    state = AuthState(pushStatus: _initialPushStatus());
   }
 
   /// Subscribes to the FCM token stream and registers tokens with the backend.
@@ -129,18 +156,62 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _tokenSubscription =
         NotificationService.instance.tokenStream.listen((token) {
       _currentFcmToken = token;
+      state = state.copyWith(
+        pushToken: token,
+        pushStatus: PushRegistrationStatus.registering,
+      );
       _registerPushToken(token);
     });
     final existing = NotificationService.instance.fcmToken;
     if (existing != null) {
       _currentFcmToken = existing;
+      state = state.copyWith(
+        pushToken: existing,
+        pushStatus: PushRegistrationStatus.registering,
+      );
       _registerPushToken(existing);
+    } else if (!DefaultFirebaseOptions.isConfigured) {
+      state = state.copyWith(pushStatus: PushRegistrationStatus.notConfigured);
+    } else {
+      state = state.copyWith(pushStatus: PushRegistrationStatus.awaitingToken);
     }
+  }
+
+  /// Re-attempts backend registration for the current FCM token.
+  Future<void> retryPushRegistration() async {
+    if (!state.isAuthenticated) {
+      state = state.copyWith(
+        pushStatus: PushRegistrationStatus.notAuthenticated,
+      );
+      return;
+    }
+
+    final token =
+        _currentFcmToken ?? NotificationService.instance.fcmToken;
+    if (token == null) {
+      state = state.copyWith(pushStatus: PushRegistrationStatus.awaitingToken);
+      return;
+    }
+
+    _currentFcmToken = token;
+    state = state.copyWith(
+      pushToken: token,
+      pushStatus: PushRegistrationStatus.registering,
+    );
+    await _registerPushToken(token);
   }
 
   /// Registers [token] with the backend with up to 3 attempts and
   /// exponential back-off (delays: 1 s, 2 s before retries 2 and 3).
   Future<void> _registerPushToken(String token) async {
+    if (!state.isAuthenticated) {
+      state = state.copyWith(
+        pushToken: token,
+        pushStatus: PushRegistrationStatus.notAuthenticated,
+      );
+      return;
+    }
+
     const maxRetries = 3;
     for (int attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -148,15 +219,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'token': token,
           'deviceType': Platform.isIOS ? 'ios' : 'android',
         });
-        return; // success
+        state = state.copyWith(
+          pushToken: token,
+          pushStatus: PushRegistrationStatus.registered,
+        );
+        return;
       } catch (_) {
         if (attempt < maxRetries - 1) {
           // Back-off: 1 s before attempt 2, 2 s before attempt 3
           await Future.delayed(Duration(seconds: 1 << attempt));
         }
-        // After the last attempt, silently give up
       }
     }
+
+    state = state.copyWith(
+      pushToken: token,
+      pushStatus: PushRegistrationStatus.failed,
+    );
   }
 
   /// Stores a [TokenPair] received from QR login and updates auth state.

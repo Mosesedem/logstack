@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
@@ -18,7 +19,7 @@ type AlertEngine struct {
 	db           *gorm.DB
 	redis        *redis.Client
 	notifier     *notification.Service
-	regexCache   map[uint]*regexp.Regexp
+	regexCache   map[string]*regexp.Regexp
 	regexCacheMu sync.RWMutex
 }
 
@@ -27,7 +28,7 @@ func NewAlertEngine(db *gorm.DB, redis *redis.Client, notifier *notification.Ser
 		db:         db,
 		redis:      redis,
 		notifier:   notifier,
-		regexCache: make(map[uint]*regexp.Regexp),
+		regexCache: make(map[string]*regexp.Regexp),
 	}
 }
 
@@ -105,32 +106,43 @@ func (e *AlertEngine) matches(rule models.AlertRule, log *models.Log) bool {
 		return false
 	}
 
-	// Pattern matching (regex or keyword)
-	if rule.TriggerPattern != "" {
-		// Use cached regex for performance
-		e.regexCacheMu.RLock()
-		re, exists := e.regexCache[rule.ID]
-		e.regexCacheMu.RUnlock()
-
-		if !exists {
-			// Compile and cache the regex
-			compiled, err := regexp.Compile(rule.TriggerPattern)
-			if err != nil {
-				// Invalid regex - don't match
-				return false
-			}
-			e.regexCacheMu.Lock()
-			e.regexCache[rule.ID] = compiled
-			e.regexCacheMu.Unlock()
-			re = compiled
-		}
-
-		return re.MatchString(log.Message)
+	patterns := []string(rule.TriggerPatterns)
+	if len(patterns) == 0 && rule.TriggerPattern != "" {
+		patterns = []string{rule.TriggerPattern}
 	}
 
-	// If no pattern is specified but level matches, return true
-	// This allows level-only alert rules
+	if len(patterns) > 0 {
+		for _, pattern := range patterns {
+			if e.matchPattern(rule.ID, pattern, log.Message) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Level-only rules: fire when the level matches and no patterns are set.
 	return rule.TriggerLevel != ""
+}
+
+func (e *AlertEngine) matchPattern(ruleID uint, pattern, message string) bool {
+	cacheKey := strconv.FormatUint(uint64(ruleID), 10) + ":" + pattern
+
+	e.regexCacheMu.RLock()
+	re, exists := e.regexCache[cacheKey]
+	e.regexCacheMu.RUnlock()
+
+	if !exists {
+		compiled, err := regexp.Compile(pattern)
+		if err != nil {
+			return false
+		}
+		e.regexCacheMu.Lock()
+		e.regexCache[cacheKey] = compiled
+		e.regexCacheMu.Unlock()
+		re = compiled
+	}
+
+	return re.MatchString(message)
 }
 
 // GetRulesForProject returns all alert rules for a project
