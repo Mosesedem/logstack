@@ -151,10 +151,9 @@ class UsageCard extends StatelessWidget {
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
+                child: FilledButton(
                   onPressed: onUpgradePressed,
-                  icon: const Icon(Icons.rocket_launch),
-                  label: const Text('Upgrade Plan'),
+                  child: const Text('Upgrade Plan'),
                 ),
               ),
             ],

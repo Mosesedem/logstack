@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
+import 'package:logstack_mobile/widgets/app_logo.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -65,11 +66,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(
-                  Icons.rocket_launch,
-                  size: 64,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+                const AppLogo(size: 64),
                 const SizedBox(height: 16),
                 Text(
                   'Create Account',

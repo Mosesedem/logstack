@@ -30,6 +30,13 @@ class NotificationService {
   String? get fcmToken => _fcmToken;
 
   Future<void> initialize() async {
+    if (!DefaultFirebaseOptions.isConfigured) {
+      _logger.w(
+        'Skipping notification setup — Firebase options are still placeholders.',
+      );
+      return;
+    }
+
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     // Request permission
@@ -105,7 +112,13 @@ class NotificationService {
       }
     }
 
-    _fcmToken = await _messaging.getToken();
+    try {
+      _fcmToken = await _messaging.getToken();
+    } catch (error, stackTrace) {
+      _logger.e('Failed to retrieve FCM token', error: error, stackTrace: stackTrace);
+      return;
+    }
+
     if (_fcmToken != null) {
       _tokenController.add(_fcmToken!);
       _logger.i('FCM Token: $_fcmToken');

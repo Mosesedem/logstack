@@ -112,7 +112,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.rocket_launch),
+                    leading: const Icon(Icons.credit_card),
                     title: const Text('Manage Subscription'),
                     trailing: const Icon(Icons.open_in_new),
                     onTap: _openBillingPage,
