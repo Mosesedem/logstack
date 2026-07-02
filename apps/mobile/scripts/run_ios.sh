@@ -5,6 +5,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Aggressively clean global Xcode DerivedData/ModuleCache.
+# This is the source of the "Unable to rename ... .pcm.tmp" / "Could not build Objective-C module 'Darwin'" errors
+# when using plain `flutter run` on some machines (especially with low disk space).
+rm -rf "$HOME/Library/Developer/Xcode/DerivedData/ModuleCache.noindex"
+rm -rf "$HOME/Library/Developer/Xcode/DerivedData"/Runner-*
+
 STAT_CACHE_DIR="$HOME/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex"
 STAT_CACHE_FILE="$STAT_CACHE_DIR/iphonesimulator18.2-22C146-07b28473f605e47e75261259d3ef3b5a.sdkstatcache"
 SDK_ROOT="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.2.sdk"

@@ -28,6 +28,9 @@ services:
       - PAYSTACK_WEBHOOK_URL=${PAYSTACK_WEBHOOK_URL:-}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_JSON=${LOG_JSON:-true}
+    volumes:
+      # Mount FCM service account (read-only). File must exist on host.
+      - /etc/logstack/secrets/firebase-service-account.json:/etc/logstack/secrets/firebase-service-account.json:ro
     depends_on:
       - postgres
       - redis
