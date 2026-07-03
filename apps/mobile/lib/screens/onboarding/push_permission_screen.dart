@@ -60,7 +60,7 @@ class _PushPermissionScreenState extends State<PushPermissionScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 16),
-              const AppLogo(size: 56),
+              const Center(child: AppLogo(size: 72)),
               const SizedBox(height: 32),
               Icon(
                 Icons.notifications_active_outlined,

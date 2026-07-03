@@ -30,7 +30,7 @@ class LoginScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(),
-              const AppLogo(size: 64),
+              const Center(child: AppLogo()),
               const SizedBox(height: 32),
               Text(
                 'Logstack',

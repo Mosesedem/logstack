@@ -162,7 +162,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
             child: Column(
               children: [
                 const Spacer(),
-                const AppLogo(size: 72),
+                const AppLogo(),
                 const SizedBox(height: 24),
                 Text(
                   'Logstack is locked',

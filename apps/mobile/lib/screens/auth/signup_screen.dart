@@ -34,7 +34,7 @@ class SignupScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(),
-              const Center(child: AppLogo(size: 64)),
+              const Center(child: AppLogo()),
               const SizedBox(height: 16),
               Text(
                 'Create Account',
