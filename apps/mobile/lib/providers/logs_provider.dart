@@ -62,6 +62,8 @@ class LogsState {
     bool? isDeviceOffline,
     bool? isShowingCachedLogs,
     bool clearError = false,
+    bool clearLevelFilter = false,
+    bool clearSearchQuery = false,
   }) {
     return LogsState(
       logs: logs ?? this.logs,
@@ -69,8 +71,10 @@ class LogsState {
       hasMore: hasMore ?? this.hasMore,
       offset: offset ?? this.offset,
       error: clearError ? null : (error ?? this.error),
-      levelFilter: levelFilter ?? this.levelFilter,
-      searchQuery: searchQuery ?? this.searchQuery,
+      levelFilter:
+          clearLevelFilter ? null : (levelFilter ?? this.levelFilter),
+      searchQuery:
+          clearSearchQuery ? null : (searchQuery ?? this.searchQuery),
       isLive: isLive ?? this.isLive,
       isDeviceOffline: isDeviceOffline ?? this.isDeviceOffline,
       isShowingCachedLogs: isShowingCachedLogs ?? this.isShowingCachedLogs,
@@ -263,12 +267,20 @@ class LogsNotifier extends StateNotifier<LogsState> {
   }
 
   void setLevelFilter(LogLevel? level) {
-    _patchState((s) => s.copyWith(levelFilter: level));
+    _patchState((s) => s.copyWith(
+          levelFilter: level,
+          clearLevelFilter: level == null,
+        ));
     loadLogs();
   }
 
   void setSearchQuery(String? query) {
-    _patchState((s) => s.copyWith(searchQuery: query));
+    final trimmed = query?.trim();
+    final effective = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    _patchState((s) => s.copyWith(
+          searchQuery: effective,
+          clearSearchQuery: effective == null,
+        ));
     loadLogs();
   }
 
