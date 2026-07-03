@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/services/auth_service.dart';
-import 'package:logstack_mobile/services/biometric_service.dart';
+import 'package:logstack_mobile/utils/biometric_prompt.dart';
 
 class PINLoginScreen extends ConsumerStatefulWidget {
   const PINLoginScreen({super.key});
@@ -36,7 +36,7 @@ class _PINLoginScreenState extends ConsumerState<PINLoginScreen> {
           await authService.confirmQRByPIN(_pinController.text.trim());
       await ref.read(authProvider.notifier).setTokensFromPair(tokenPair);
       if (!mounted) return;
-      await _maybeOfferBiometric();
+      await maybeOfferBiometricUnlock(context, ref);
       if (mounted) context.go('/');
     } catch (e) {
       setState(() {
@@ -44,36 +44,6 @@ class _PINLoginScreenState extends ConsumerState<PINLoginScreen> {
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _maybeOfferBiometric() async {
-    final biometric = ref.read(biometricServiceProvider);
-    if (!await biometric.isAvailable() || await biometric.isEnabled()) {
-      return;
-    }
-    if (!mounted) return;
-    final enable = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Enable biometric unlock?'),
-        content: const Text(
-          'Use Face ID or fingerprint to unlock Logstack when you return to the app.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Not now'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Enable'),
-          ),
-        ],
-      ),
-    );
-    if (enable == true) {
-      await biometric.setEnabled(true);
     }
   }
 

@@ -8,6 +8,7 @@ import 'package:logstack_mobile/providers/logs_provider.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/connection_banner.dart';
 import 'package:logstack_mobile/widgets/empty_state.dart';
+import 'package:logstack_mobile/widgets/loading_states.dart';
 import 'package:logstack_mobile/widgets/log_card.dart';
 
 class LogsScreen extends ConsumerStatefulWidget {
@@ -68,7 +69,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
 
   Widget _buildBody(LogsState logsState) {
     if (logsState.isLoading && logsState.logs.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const LogListSkeleton();
     }
 
     if (logsState.error != null && logsState.logs.isEmpty) {

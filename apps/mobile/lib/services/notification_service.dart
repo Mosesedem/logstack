@@ -38,22 +38,27 @@ class NotificationService {
     }
 
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    await _initializeLocalNotifications();
+  }
 
-    // Request permission
+  Future<NotificationSettings> requestPermission() async {
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
       provisional: false,
     );
-
     _logger.i('Notification permission: ${settings.authorizationStatus}');
+    return settings;
+  }
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional) {
-      await _initializeLocalNotifications();
-      await _initializeFCM();
-    }
+  Future<void> completeSetupAfterPermission() async {
+    await _initializeFCM();
+  }
+
+  Future<AuthorizationStatus> getPermissionStatus() async {
+    final settings = await _messaging.getNotificationSettings();
+    return settings.authorizationStatus;
   }
 
   Future<void> _initializeLocalNotifications() async {

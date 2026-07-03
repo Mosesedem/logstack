@@ -11,7 +11,17 @@ abstract final class AppConfig {
   static String get webSocketBaseUrl {
     final uri = Uri.parse(apiBaseUrl);
     final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
-    return '$scheme://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}${uri.path}';
+    final hostPort = _hostPort(uri, scheme);
+    return '$scheme://$hostPort${uri.path}';
+  }
+
+  /// Avoid emitting invalid `:0` when the API URL uses implicit default ports.
+  static String _hostPort(Uri uri, String wsScheme) {
+    final port = uri.port;
+    if (port == 0) return uri.host;
+    if (wsScheme == 'wss' && port == 443) return uri.host;
+    if (wsScheme == 'ws' && port == 80) return uri.host;
+    return '${uri.host}:$port';
   }
 
   static String logStreamUrl({

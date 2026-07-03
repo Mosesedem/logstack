@@ -12,6 +12,9 @@ class StorageService {
   static const String _projectKey = 'current_project';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _biometricEnabledKey = 'biometric_enabled';
+  static const String _appLockModeKey = 'app_lock_mode';
+  static const String _appPinHashKey = 'app_pin_hash';
+  static const String _onboardingCompleteKey = 'onboarding_complete';
 
   static const _secureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -89,5 +92,37 @@ class StorageService {
   Future<bool> isBiometricEnabled() async {
     final prefs = await _prefs;
     return prefs.getBool(_biometricEnabledKey) ?? false;
+  }
+
+  Future<void> setAppLockMode(String mode) async {
+    final prefs = await _prefs;
+    await prefs.setString(_appLockModeKey, mode);
+  }
+
+  Future<String> getAppLockMode() async {
+    final prefs = await _prefs;
+    return prefs.getString(_appLockModeKey) ?? 'immediate';
+  }
+
+  Future<void> setAppPinHash(String hash) async {
+    await _secureStorage.write(key: _appPinHashKey, value: hash);
+  }
+
+  Future<String?> getAppPinHash() async {
+    return _secureStorage.read(key: _appPinHashKey);
+  }
+
+  Future<void> clearAppPinHash() async {
+    await _secureStorage.delete(key: _appPinHashKey);
+  }
+
+  Future<bool> isOnboardingComplete() async {
+    final prefs = await _prefs;
+    return prefs.getBool(_onboardingCompleteKey) ?? false;
+  }
+
+  Future<void> setOnboardingComplete(bool complete) async {
+    final prefs = await _prefs;
+    await prefs.setBool(_onboardingCompleteKey, complete);
   }
 }

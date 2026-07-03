@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/services/auth_service.dart';
-import 'package:logstack_mobile/services/biometric_service.dart';
+import 'package:logstack_mobile/utils/biometric_prompt.dart';
 
 /// QR scanner — scan the code from the web dashboard to link this device.
 /// No credentials required; the web user is bound when the QR is generated.
@@ -66,7 +66,7 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
       await ref.read(authProvider.notifier).setTokensFromPair(tokenPair);
 
       if (!mounted) return;
-      await _maybeOfferBiometric();
+      await maybeOfferBiometricUnlock(context, ref);
       if (mounted) context.go('/');
     } catch (e) {
       if (mounted) {
@@ -77,36 +77,6 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
         });
         await _scannerController.start();
       }
-    }
-  }
-
-  Future<void> _maybeOfferBiometric() async {
-    final biometric = ref.read(biometricServiceProvider);
-    if (!await biometric.isAvailable() || await biometric.isEnabled()) {
-      return;
-    }
-    if (!mounted) return;
-    final enable = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Enable biometric unlock?'),
-        content: const Text(
-          'Use Face ID or fingerprint to unlock Logstack when you return to the app.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Not now'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Enable'),
-          ),
-        ],
-      ),
-    );
-    if (enable == true) {
-      await biometric.setEnabled(true);
     }
   }
 
