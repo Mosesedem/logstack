@@ -1,18 +1,15 @@
 Metadata-Version: 2.4
 Name: logstack-py
-Version: 1.0.1
+Version: 1.0.2
 Summary: A Python SDK for the Logstack logging platform
-Home-page: https://github.com/Mosesedem/logstack
-Author: Mosesedem
 Author-email: Mosesedem <team@logstack.tech>
-License: MIT
+License-Expression: MIT
 Project-URL: Homepage, https://github.com/Mosesedem/logstack
 Project-URL: Repository, https://github.com/Mosesedem/logstack
 Project-URL: Issues, https://github.com/Mosesedem/logstack/issues
 Keywords: logstack,logging,logs,monitoring,observability
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.7
@@ -30,10 +27,7 @@ Provides-Extra: fastapi
 Requires-Dist: fastapi>=0.95.0; extra == "fastapi"
 Provides-Extra: async
 Requires-Dist: aiohttp>=3.8.0; extra == "async"
-Dynamic: author
-Dynamic: home-page
 Dynamic: license-file
-Dynamic: requires-python
 
 # Logstack Python SDK
 
@@ -44,6 +38,15 @@ A Python SDK for the Logstack logging platform.
 ```bash
 pip install logstack-py
 ```
+
+The import name is still `logstack` (e.g. `from logstack import LogStackClient`).
+
+## v1.0.2
+
+- **`capture_logging` default on.** Automatically forwards stdlib `logging` calls with
+  `source: "python-logging"`. Original handlers (console, etc.) are preserved.
+- Lowers root logger level when needed so `info` / `debug` records reach the capture handler.
+- Skips re-entrant capture from the internal Logstack logger.
 
 ## v1.0.1
 
@@ -60,18 +63,40 @@ pip install logstack-py
 from logstack import LogStackClient
 
 # Create a client
+# capture_logging=True (default): any logging.getLogger(...).info / error etc.
+# is automatically captured and sent with source="python-logging".
+# Your normal logging configuration (console handlers etc.) continues to work.
 client = LogStackClient(
     api_key="your-api-key",
     environment="production",
 )
 
-# Send logs
+# Explicit structured logs
 client.info("Application started", metadata={"version": "1.0.0"})
 client.error("Database connection failed", metadata={"error": "connection refused"})
 
 # Flush and close
 client.close()
 ```
+
+### Automatic stdlib logging capture
+
+By default `capture_logging=True`. All Python `logging` calls across your app (including libraries) are forwarded:
+
+```python
+import logging
+from logstack import LogStackClient
+
+client = LogStackClient(api_key="...")  # capture_logging=True by default
+
+log = logging.getLogger(__name__)
+log.info("User action", extra={"user_id": 123})   # <- captured automatically
+log.error("Failed to process")                    # <- captured as error level
+```
+
+The original log records still go to any handlers you have configured (StreamHandler, etc.).
+
+Disable with `capture_logging=False` if you only want explicit `client.xxx()` calls.
 
 ### Using Context Manager
 
@@ -120,7 +145,7 @@ FastAPIMiddleware(app, client=client)
 
 ## API Reference
 
-### `LogStackClient(api_key, api_url="https://api.logstack.tech", environment="production", flush_interval=5.0, batch_size=100)`
+### `LogStackClient(api_key, ..., capture_logging=True)`
 
 Create a new Logstack client.
 

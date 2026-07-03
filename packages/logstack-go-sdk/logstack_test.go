@@ -11,6 +11,12 @@ import (
 	"testing"
 )
 
+func TestVersion(t *testing.T) {
+	if Version != "1.0.3" {
+		t.Fatalf("Version = %q, want 1.0.3", Version)
+	}
+}
+
 func TestNormalizeAPIURL(t *testing.T) {
 	tests := []struct {
 		in   string

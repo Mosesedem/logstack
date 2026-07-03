@@ -18,6 +18,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify NPM_TOKEN secret
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "::error::NPM_TOKEN is not set. Add an npm automation token:"
+            echo "  GitHub repo → Settings → Secrets and variables → Actions → New repository secret"
+            echo "  Name: NPM_TOKEN  Value: npm_... (from npmjs.com → Access Tokens → Granular or Classic publish token)"
+            exit 1
+          fi
+
+      - name: Verify package version matches tag
+        working-directory: packages/logstack-js
+        run: |
+          TAG="${GITHUB_REF#refs/tags/logstack-js-v}"
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Tag: logstack-js-v${TAG}"
+          echo "package.json version: ${VERSION}"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::Tag version (${TAG}) does not match package.json (${VERSION})."
+            echo "Commit the version bump, delete the old tag, recreate it on the new commit, and push."
+            exit 1
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -32,8 +54,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build package
-        run: pnpm build
+      - name: Build and test
+        run: pnpm build && pnpm test
 
       - name: Publish to npm
         run: npm publish --access public

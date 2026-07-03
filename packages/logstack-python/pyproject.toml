@@ -4,17 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "logstack-py"
-version = "1.0.1"
+version = "1.0.2"
 description = "A Python SDK for the Logstack logging platform"
 readme = "README.md"
 requires-python = ">=3.7"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Mosesedem", email = "team@logstack.tech" }]
 keywords = ["logstack", "logging", "logs", "monitoring", "observability"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.7",

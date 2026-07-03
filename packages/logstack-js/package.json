@@ -1,6 +1,6 @@
 {
   "name": "logstack-js",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Logstack JavaScript/TypeScript SDK for log ingestion and querying",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

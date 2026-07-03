@@ -28,6 +28,13 @@ logstack.error("Payment failed", { orderId: "ord_123", code: 402 });
 await logstack.close();
 ```
 
+## v1.0.2
+
+- **`captureConsole` hardened (default on).** Re-entrancy guard, `console.trace` / `console.assert`
+  support, always invokes the original console method first, tags captured entries with
+  `source: "console"`.
+- Export `VERSION` constant from the package entrypoint.
+
 ## v1.0.1
 
 - Normalize API endpoint (strips redundant `/v1` suffix)

@@ -12,6 +12,9 @@ import {
   LogStackErrorResponse,
 } from "./types";
 
+/** SDK release version (matches npm package version). */
+export const VERSION = "1.0.2";
+
 const DEFAULT_ENDPOINT = "https://api.logstack.tech";
 
 /** Strip trailing slashes and a redundant /v1 suffix from the API host. */

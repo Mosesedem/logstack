@@ -264,9 +264,32 @@ Workflow: `.github/workflows/publish-js.yml`
 
 **Required secret:** `NPM_TOKEN` (npm automation token with publish access)
 
+1. npmjs.com → **Access Tokens** → **Generate New Token** (Granular: package `logstack-js`, permission **Read and write**, or Classic **Automation**).
+2. GitHub repo → **Settings → Secrets and variables → Actions** → **New repository secret** → name `NPM_TOKEN`, paste the `npm_...` token.
+
+**Release steps** (version in `package.json` must match the tag):
+
 ```bash
-git tag logstack-js-v1.0.1
-git push origin logstack-js-v1.0.1
+# 1. Commit the version bump first (package.json, src/index.ts VERSION, dist after build)
+cd packages/logstack-js && pnpm build && pnpm test
+git add packages/logstack-js && git commit -m "chore(js-sdk): release logstack-js v1.0.2"
+
+# 2. Tag the commit that contains the bump (delete old tag if you tagged too early)
+git tag -d logstack-js-v1.0.2
+git push origin :refs/tags/logstack-js-v1.0.2   # delete remote tag
+git tag logstack-js-v1.0.2
+git push origin logstack-js-v1.0.2
+```
+
+The workflow fails fast if `NPM_TOKEN` is missing or if the tag version ≠ `package.json` version.
+
+**Manual fallback** (if you prefer not to use CI):
+
+```bash
+cd packages/logstack-js
+npm login   # or: export NODE_AUTH_TOKEN=npm_...
+pnpm build && pnpm test
+npm publish --access public
 ```
 
 ---

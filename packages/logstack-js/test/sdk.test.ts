@@ -1,5 +1,11 @@
 import { describe, it, beforeEach, expect, vi, afterEach } from "vitest";
-import { createLogStack } from "../src/index";
+import { createLogStack, VERSION } from "../src/index";
+
+describe("VERSION", () => {
+  it("matches package release", () => {
+    expect(VERSION).toBe("1.0.2");
+  });
+});
 
 describe("endpoint normalization", () => {
   beforeEach(() => {

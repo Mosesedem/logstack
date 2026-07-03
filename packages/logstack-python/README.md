@@ -10,6 +10,13 @@ pip install logstack-py
 
 The import name is still `logstack` (e.g. `from logstack import LogStackClient`).
 
+## v1.0.2
+
+- **`capture_logging` default on.** Automatically forwards stdlib `logging` calls with
+  `source: "python-logging"`. Original handlers (console, etc.) are preserved.
+- Lowers root logger level when needed so `info` / `debug` records reach the capture handler.
+- Skips re-entrant capture from the internal Logstack logger.
+
 ## v1.0.1
 
 - Fix batch-flush deadlock when `batch_size` is reached

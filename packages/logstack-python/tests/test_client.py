@@ -1,6 +1,11 @@
 import logging
 
+import logstack
 from logstack.client import LogStackClient, normalize_api_url
+
+
+def test_version():
+    assert logstack.__version__ == "1.0.2"
 
 
 def test_normalize_api_url():
