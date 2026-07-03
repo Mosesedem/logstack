@@ -34,6 +34,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final location = state.matchedLocation;
       final isOnboardingRoute = location.startsWith('/onboarding') ||
           location == '/splash';
+      final isPushRoute = location == '/onboarding/push';
+      final isSettingsPushRoute = location == '/settings/push';
       final isSecurityRoute = location == '/onboarding/security';
       final isAuthRoute = location == '/login' ||
           state.matchedLocation == '/qr-scanner' ||
@@ -41,12 +43,20 @@ final routerProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == '/email-login';
 
       if (!onboarding.isComplete) {
-        if (!isOnboardingRoute) return '/splash';
+        if (location != '/splash' && !isPushRoute) return '/splash';
         return null;
       }
 
+      if (isSettingsPushRoute && !authState.isAuthenticated) {
+        return '/login';
+      }
+
       // First-run onboarding only — not post-login security re-setup.
-      if (isOnboardingRoute && !isSecurityRoute) {
+      if (isOnboardingRoute && !isSecurityRoute && !isPushRoute) {
+        return authState.isAuthenticated ? '/' : '/login';
+      }
+
+      if (isPushRoute && onboarding.isComplete) {
         return authState.isAuthenticated ? '/' : '/login';
       }
 
@@ -83,6 +93,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding/security',
         builder: (context, state) => const SecuritySetupScreen(),
+      ),
+      GoRoute(
+        path: '/settings/push',
+        builder: (context, state) => const PushPermissionScreen(
+          flow: PushPermissionFlow.settings,
+        ),
       ),
       GoRoute(
         path: '/login',

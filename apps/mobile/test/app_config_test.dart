@@ -14,5 +14,11 @@ void main() {
       expect(url, contains('projectId=proj-1'));
       expect(url, contains('token=jwt-token'));
     });
+
+    test('omits token query param when token is absent', () {
+      final url = AppConfig.logStreamUrl(projectId: 'proj-1');
+      expect(url, contains('projectId=proj-1'));
+      expect(url, isNot(contains('token=')));
+    });
   });
 }

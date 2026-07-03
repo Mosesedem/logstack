@@ -1,6 +1,8 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:logstack_mobile/firebase_options.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/services/app_lock_service.dart';
 import 'package:logstack_mobile/services/notification_service.dart';
@@ -23,11 +25,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _biometricEnabled = false;
   bool _hasPin = false;
   bool _loadingSecurity = true;
+  AuthorizationStatus? _pushPermission;
+  bool _loadingPush = true;
 
   @override
   void initState() {
     super.initState();
     _loadSecurityState();
+    _loadPushPermission();
+  }
+
+  Future<void> _loadPushPermission() async {
+    if (!DefaultFirebaseOptions.isConfigured) {
+      if (mounted) setState(() => _loadingPush = false);
+      return;
+    }
+    final status = await NotificationService.instance.getPermissionStatus();
+    if (mounted) {
+      setState(() {
+        _pushPermission = status;
+        _loadingPush = false;
+      });
+    }
+  }
+
+  bool get _pushEnabled =>
+      _pushPermission == AuthorizationStatus.authorized ||
+      _pushPermission == AuthorizationStatus.provisional;
+
+  String _pushPermissionLabel() {
+    if (!DefaultFirebaseOptions.isConfigured) {
+      return 'Not available in this build';
+    }
+    return switch (_pushPermission) {
+      AuthorizationStatus.authorized => 'Enabled',
+      AuthorizationStatus.provisional => 'Enabled (provisional)',
+      AuthorizationStatus.denied => 'Denied — enable in system settings',
+      AuthorizationStatus.notDetermined => 'Not enabled',
+      _ => 'Unknown',
+    };
   }
 
   Future<void> _loadSecurityState() async {
@@ -157,6 +193,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     },
                   ),
                 ],
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  'Push notifications',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (_loadingPush)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              else ...[
+                ListTile(
+                  leading: const Icon(Icons.notifications_outlined),
+                  title: const Text('Alert notifications'),
+                  subtitle: Text(_pushPermissionLabel()),
+                  trailing: _pushEnabled
+                      ? null
+                      : const Icon(Icons.chevron_right),
+                  onTap: _pushEnabled || !DefaultFirebaseOptions.isConfigured
+                      ? null
+                      : () async {
+                          await context.push('/settings/push');
+                          await _loadPushPermission();
+                        },
+                ),
+                if (DefaultFirebaseOptions.isConfigured && !_pushEnabled)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Text(
+                      'Open the setup screen to enable alert and escalation notifications. The system permission prompt appears only when you tap Enable there.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                  ),
               ],
               const SizedBox(height: 8),
             ],

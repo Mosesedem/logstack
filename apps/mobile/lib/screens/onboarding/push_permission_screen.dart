@@ -1,16 +1,29 @@
+import 'dart:io';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logstack_mobile/firebase_options.dart';
+import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/providers/onboarding_provider.dart';
 import 'package:logstack_mobile/services/notification_service.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/app_logo.dart';
 import 'package:logstack_mobile/widgets/loading_states.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+enum PushPermissionFlow { onboarding, settings }
+
+/// Explains push alerts and triggers the OS permission dialog only when the
+/// user taps Enable — never on screen load or app launch.
 class PushPermissionScreen extends ConsumerStatefulWidget {
-  const PushPermissionScreen({super.key});
+  const PushPermissionScreen({
+    super.key,
+    this.flow = PushPermissionFlow.onboarding,
+  });
+
+  final PushPermissionFlow flow;
 
   @override
   ConsumerState<PushPermissionScreen> createState() =>
@@ -22,14 +35,25 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
   bool _declined = false;
   String? _statusMessage;
 
+  bool get _fromSettings => widget.flow == PushPermissionFlow.settings;
+
   Future<void> _finishOnboarding() async {
     await ref.read(onboardingProvider.notifier).markComplete();
     if (mounted) context.go('/login');
   }
 
+  Future<void> _finishFromSettings() async {
+    await ref.read(authProvider.notifier).registerPushAfterPermission();
+    if (mounted) context.pop();
+  }
+
   Future<void> _requestPermission() async {
     if (!DefaultFirebaseOptions.isConfigured) {
-      await _finishOnboarding();
+      if (_fromSettings) {
+        if (mounted) context.pop();
+      } else {
+        await _finishOnboarding();
+      }
       return;
     }
 
@@ -46,30 +70,52 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
     if (settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional) {
       await NotificationService.instance.completeSetupAfterPermission();
-      await _finishOnboarding();
+      if (_fromSettings) {
+        await _finishFromSettings();
+      } else {
+        await _finishOnboarding();
+      }
       return;
     }
 
     setState(() {
       _requesting = false;
       _declined = true;
-      _statusMessage =
-          'Push notifications are required for alert delivery. Please enable them to continue.';
+      _statusMessage = _fromSettings
+          ? 'Notifications were not enabled. You can allow them in system settings, then try again.'
+          : 'Push notifications are required for alert delivery. Please enable them to continue.';
     });
+  }
+
+  Future<void> _openSystemNotificationSettings() async {
+    if (Platform.isIOS) {
+      await launchUrl(Uri.parse('app-settings:'));
+      return;
+    }
+    if (Platform.isAndroid) {
+      await launchUrl(Uri.parse('package:tech.logstack.mobile'));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: _fromSettings
+          ? AppBar(
+              title: const Text('Push notifications'),
+            )
+          : null,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 16),
-              const Center(child: AppLogo(size: 72)),
-              const SizedBox(height: 32),
+              if (!_fromSettings) ...[
+                const SizedBox(height: 16),
+                const Center(child: AppLogo(size: 72)),
+                const SizedBox(height: 32),
+              ],
               Icon(
                 Icons.notifications_active_outlined,
                 size: 48,
@@ -136,12 +182,24 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
                 ),
                 if (_declined) ...[
                   const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _openSystemNotificationSettings,
+                    child: const Text('Open system settings'),
+                  ),
+                  const SizedBox(height: 4),
                   Text(
                     'If you previously declined, open Settings → Logstack → Notifications and enable alerts, then tap Try again.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: LogstackColors.textMuted,
                         ),
+                  ),
+                ],
+                if (_fromSettings) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => context.pop(),
+                    child: const Text('Not now'),
                   ),
                 ],
               ],

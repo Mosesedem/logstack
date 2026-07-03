@@ -1,41 +1,68 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logstack_mobile/config/app_config.dart';
 import 'package:logstack_mobile/models/log.dart';
+import 'package:logstack_mobile/services/auth_service.dart';
 import 'package:logstack_mobile/services/storage_service.dart';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+
+enum StreamConnectionStatus {
+  disconnected,
+  connecting,
+  connected,
+  /// Gave up after repeated failures; REST logs still work.
+  unavailable,
+}
 
 final logStreamServiceProvider = Provider<LogStreamService>((ref) {
   final storage = ref.watch(storageServiceProvider);
-  final service = LogStreamService(storage);
+  final authService = ref.watch(authServiceProvider);
+  final service = LogStreamService(storage, authService);
   ref.onDispose(service.dispose);
   return service;
 });
 
 class LogStreamService {
-  LogStreamService(this._storage);
+  LogStreamService(this._storage, this._authService);
+
+  static const _maxFastRetries = 5;
 
   final StorageService _storage;
+  final AuthService _authService;
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnectTimer;
   String? _projectId;
   int _attempt = 0;
+  int _consecutiveFailures = 0;
   bool _connecting = false;
   int _connectGeneration = 0;
 
-  final _connectionController = StreamController<bool>.broadcast();
+  final _statusController =
+      StreamController<StreamConnectionStatus>.broadcast();
   final _logController = StreamController<Log>.broadcast();
 
-  Stream<bool> get connectionStream => _connectionController.stream;
+  Stream<StreamConnectionStatus> get statusStream => _statusController.stream;
   Stream<Log> get logStream => _logController.stream;
 
+  /// @deprecated Use [statusStream]; kept for quick migration.
+  Stream<bool> get connectionStream =>
+      statusStream.map((s) => s == StreamConnectionStatus.connected);
+
   Future<void> connect(String projectId) async {
-    if (_projectId == projectId && (_connecting || _channel != null)) return;
+    if (_projectId == projectId &&
+        (_connecting || _channel != null)) {
+      return;
+    }
+    final projectChanged = _projectId != projectId;
     await disconnect();
     _projectId = projectId;
+    if (projectChanged) {
+      _attempt = 0;
+      _consecutiveFailures = 0;
+    }
     await _open();
   }
 
@@ -50,26 +77,48 @@ class LogStreamService {
     } catch (_) {}
     _channel = null;
     _connecting = false;
-    _connectionController.add(false);
+    _statusController.add(StreamConnectionStatus.disconnected);
+  }
+
+  Future<void> retry() async {
+    if (_projectId == null) return;
+    _attempt = 0;
+    _consecutiveFailures = 0;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    await _open();
+  }
+
+  Future<String?> _resolveAccessToken() async {
+    try {
+      final fresh = await _authService.refreshStoredAccessToken();
+      await _storage.setToken(fresh);
+      return fresh;
+    } catch (_) {
+      return _storage.getToken();
+    }
   }
 
   Future<void> _open() async {
     final projectId = _projectId;
     if (projectId == null || _connecting) return;
 
-    final token = await _storage.getToken();
-    if (token == null) {
-      _connectionController.add(false);
+    final token = await _resolveAccessToken();
+    if (token == null || token.isEmpty) {
+      _statusController.add(StreamConnectionStatus.unavailable);
       return;
     }
 
     final generation = ++_connectGeneration;
     _connecting = true;
-    _connectionController.add(false);
+    _statusController.add(StreamConnectionStatus.connecting);
 
     final url = AppConfig.logStreamUrl(projectId: projectId, token: token);
     try {
-      final channel = WebSocketChannel.connect(Uri.parse(url));
+      final channel = IOWebSocketChannel.connect(
+        Uri.parse(url),
+        headers: {'Authorization': 'Bearer $token'},
+      );
       _subscription = channel.stream.listen(
         _onMessage,
         onError: (_) => _scheduleReconnect(),
@@ -86,7 +135,8 @@ class LogStreamService {
       _channel = channel;
       _connecting = false;
       _attempt = 0;
-      _connectionController.add(true);
+      _consecutiveFailures = 0;
+      _statusController.add(StreamConnectionStatus.connected);
     } catch (_) {
       _connecting = false;
       if (generation == _connectGeneration) {
@@ -106,21 +156,36 @@ class LogStreamService {
 
   void _scheduleReconnect() {
     if (_connecting) return;
-    _connectionController.add(false);
     _subscription?.cancel();
     _subscription = null;
     _channel = null;
 
-    if (_projectId == null) return;
+    if (_projectId == null) {
+      _statusController.add(StreamConnectionStatus.disconnected);
+      return;
+    }
+
+    _attempt++;
+    _consecutiveFailures++;
+    if (_consecutiveFailures >= _maxFastRetries) {
+      _statusController.add(StreamConnectionStatus.unavailable);
+      _reconnectTimer?.cancel();
+      _reconnectTimer = Timer(const Duration(seconds: 60), () {
+        _consecutiveFailures = _maxFastRetries - 1;
+        _open();
+      });
+      return;
+    }
+
+    _statusController.add(StreamConnectionStatus.disconnected);
     _reconnectTimer?.cancel();
     final delay = Duration(seconds: (1 << _attempt.clamp(0, 4)).clamp(1, 16));
-    _attempt++;
     _reconnectTimer = Timer(delay, _open);
   }
 
   void dispose() {
     disconnect();
-    _connectionController.close();
+    _statusController.close();
     _logController.close();
   }
 }

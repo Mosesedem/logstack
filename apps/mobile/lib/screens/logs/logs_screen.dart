@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/providers/logs_provider.dart';
+import 'package:logstack_mobile/services/log_stream_service.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/connection_banner.dart';
 import 'package:logstack_mobile/widgets/empty_state.dart';
@@ -48,6 +49,8 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
           isLive: logsState.isLive,
           isShowingCachedLogs: logsState.isShowingCachedLogs,
           isDeviceOffline: logsState.isDeviceOffline,
+          isStreamUnavailable: logsState.isStreamUnavailable,
+          onRetryStream: () => ref.read(logStreamServiceProvider).retry(),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -104,7 +107,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(logsProvider.notifier).loadLogs(),
+      onRefresh: () => ref.read(logsProvider.notifier).refresh(),
       color: LogstackColors.accentBlue,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -140,7 +143,7 @@ class LogsScreenActions {
       IconButton(
         icon: const Icon(Icons.refresh),
         tooltip: 'Refresh logs',
-        onPressed: () => ref.read(logsProvider.notifier).loadLogs(),
+        onPressed: () => ref.read(logsProvider.notifier).refresh(),
       ),
     ];
   }

@@ -168,7 +168,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           hasPersistedSession: refreshToken != null,
           pushStatus: _initialPushStatus(),
         );
-        _listenForFcmToken();
+        unawaited(_setupPushIfPermitted());
       } else if (refreshToken != null) {
         _setAuthenticatedOffline(cachedUser);
       } else {
@@ -192,7 +192,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       hasPersistedSession: true,
       pushStatus: _initialPushStatus(),
     );
-    _listenForFcmToken();
+    unawaited(_setupPushIfPermitted());
   }
 
   Future<_RefreshResult> _tryRefreshAccessToken(String refreshToken) async {
@@ -235,7 +235,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final user = await _authService.fetchCurrentUser();
       state = state.copyWith(user: user, isOfflineAuth: false, clearError: true);
-      _listenForFcmToken();
+      unawaited(_setupPushIfPermitted());
     } catch (e) {
       if (!isNetworkError(e)) {
         state = state.copyWith(error: e.toString());
@@ -250,7 +250,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
     await _onSecurityChanged();
     state = AuthState(user: response.user, hasPersistedSession: true);
-    _listenForFcmToken();
+    unawaited(_setupPushIfPermitted());
   }
 
   Future<void> logout() async {
@@ -276,8 +276,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthState(pushStatus: _initialPushStatus());
   }
 
-  void _listenForFcmToken() {
+  /// Registers for push only when the user has already granted OS permission.
+  /// Permission is requested from Settings via [enablePushNotifications].
+  Future<void> _setupPushIfPermitted() async {
     _tokenSubscription?.cancel();
+
+    if (!DefaultFirebaseOptions.isConfigured) {
+      state = state.copyWith(pushStatus: PushRegistrationStatus.notConfigured);
+      return;
+    }
+
+    if (!await NotificationService.instance.hasPushPermission()) {
+      state = state.copyWith(pushStatus: PushRegistrationStatus.awaitingToken);
+      return;
+    }
+
+    await NotificationService.instance.completeSetupAfterPermission();
+
     _tokenSubscription =
         NotificationService.instance.tokenStream.listen((token) {
       _currentFcmToken = token;
@@ -295,11 +310,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         pushStatus: PushRegistrationStatus.registering,
       );
       _registerPushToken(existing);
-    } else if (!DefaultFirebaseOptions.isConfigured) {
-      state = state.copyWith(pushStatus: PushRegistrationStatus.notConfigured);
     } else {
       state = state.copyWith(pushStatus: PushRegistrationStatus.awaitingToken);
     }
+  }
+
+  /// Registers the device token after the user granted OS permission on the
+  /// push setup screen. Does not show the system permission dialog.
+  Future<void> registerPushAfterPermission() async {
+    if (!state.isAuthenticated) return;
+    await _setupPushIfPermitted();
   }
 
   Future<void> retryPushRegistration() async {
@@ -384,7 +404,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
     await _onSecurityChanged();
     state = AuthState(user: user, hasPersistedSession: true);
-    _listenForFcmToken();
+    unawaited(_setupPushIfPermitted());
   }
 
   @visibleForTesting

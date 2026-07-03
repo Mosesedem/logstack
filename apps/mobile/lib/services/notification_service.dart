@@ -61,14 +61,32 @@ class NotificationService {
     return settings.authorizationStatus;
   }
 
+  Future<bool> hasPushPermission() async {
+    final status = await getPermissionStatus();
+    return status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
+  }
+
+  /// Called from Settings when the user opts in to push alerts.
+  Future<bool> enablePushFromSettings() async {
+    final settings = await requestPermission();
+    if (settings.authorizationStatus != AuthorizationStatus.authorized &&
+        settings.authorizationStatus != AuthorizationStatus.provisional) {
+      return false;
+    }
+    await completeSetupAfterPermission();
+    return true;
+  }
+
   Future<void> _initializeLocalNotifications() async {
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
     );
+    // Do not request OS permission here — only from Settings when the user opts in.
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
 
     const initSettings = InitializationSettings(

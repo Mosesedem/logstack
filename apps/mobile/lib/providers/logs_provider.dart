@@ -32,6 +32,8 @@ class LogsState {
   final String? searchQuery;
   /// WebSocket is open and passing the handshake (see [LogStreamService]).
   final bool isLive;
+  /// Repeated connect failures — show a stable message instead of "Reconnecting…".
+  final bool isStreamUnavailable;
   /// Device has no network connectivity.
   final bool isDeviceOffline;
   /// REST fetch failed or device offline — list may be stale cache.
@@ -46,6 +48,7 @@ class LogsState {
     this.levelFilter,
     this.searchQuery,
     this.isLive = false,
+    this.isStreamUnavailable = false,
     this.isDeviceOffline = false,
     this.isShowingCachedLogs = false,
   });
@@ -59,6 +62,7 @@ class LogsState {
     LogLevel? levelFilter,
     String? searchQuery,
     bool? isLive,
+    bool? isStreamUnavailable,
     bool? isDeviceOffline,
     bool? isShowingCachedLogs,
     bool clearError = false,
@@ -76,6 +80,7 @@ class LogsState {
       searchQuery:
           clearSearchQuery ? null : (searchQuery ?? this.searchQuery),
       isLive: isLive ?? this.isLive,
+      isStreamUnavailable: isStreamUnavailable ?? this.isStreamUnavailable,
       isDeviceOffline: isDeviceOffline ?? this.isDeviceOffline,
       isShowingCachedLogs: isShowingCachedLogs ?? this.isShowingCachedLogs,
     );
@@ -103,7 +108,7 @@ class LogsNotifier extends StateNotifier<LogsState> {
   bool _disposed = false;
 
   StreamSubscription<Log>? _logSub;
-  StreamSubscription<bool>? _connSub;
+  StreamSubscription<StreamConnectionStatus>? _connSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   Timer? _connectivityDebounce;
 
@@ -119,17 +124,26 @@ class LogsNotifier extends StateNotifier<LogsState> {
 
   Future<void> _init() async {
     _logSub = _streamService.logStream.listen(_onRealtimeLog);
-    _connSub = _streamService.connectionStream.listen((live) {
-      _patchState((s) => s.copyWith(isLive: live));
+    _connSub = _streamService.statusStream.listen((status) {
+      _patchState((s) => s.copyWith(
+            isLive: status == StreamConnectionStatus.connected,
+            isStreamUnavailable:
+                status == StreamConnectionStatus.unavailable,
+          ));
     });
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
       final online = !results.contains(ConnectivityResult.none);
+      final wasOffline = state.isDeviceOffline;
       _patchState((s) => s.copyWith(isDeviceOffline: !online));
       _connectivityDebounce?.cancel();
       _connectivityDebounce = Timer(const Duration(milliseconds: 800), () {
         if (_disposed) return;
         if (online && _projectId != null) {
-          unawaited(_streamService.connect(_projectId!));
+          if (wasOffline || state.isStreamUnavailable) {
+            unawaited(_streamService.retry());
+          } else {
+            unawaited(_streamService.connect(_projectId!));
+          }
         }
         loadLogs();
       });
@@ -173,6 +187,13 @@ class LogsNotifier extends StateNotifier<LogsState> {
       await _streamService.connect(projectId);
     }
     if (_disposed) return;
+    await loadLogs();
+  }
+
+  Future<void> refresh() async {
+    if (_projectId != null) {
+      await _streamService.retry();
+    }
     await loadLogs();
   }
 

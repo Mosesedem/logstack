@@ -26,14 +26,13 @@ abstract final class AppConfig {
 
   static String logStreamUrl({
     required String projectId,
-    required String token,
+    String? token,
   }) {
-    final params = Uri(queryParameters: {
-      'projectId': projectId,
-      'token': token,
-    });
-    // Use /stream (WSAuth, query token) — same as the web dashboard.
-    // /mobile/stream requires Authorization header which WebSocketChannel cannot set.
-    return '$webSocketBaseUrl/stream?${params.query}';
+    final params = <String, String>{'projectId': projectId};
+    if (token != null && token.isNotEmpty) {
+      params['token'] = token;
+    }
+    // /stream with WSAuth — query token matches web; Bearer header for native clients.
+    return '$webSocketBaseUrl/stream?${Uri(queryParameters: params).query}';
   }
 }
