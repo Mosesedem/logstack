@@ -4,20 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/services/auth_service.dart';
-import 'package:logstack_mobile/services/storage_service.dart';
+import 'package:logstack_mobile/services/biometric_service.dart';
 
-/// QR scanner screen that allows a mobile user to confirm a QR login session
-/// initiated on the web.
-///
-/// Flow:
-///   1. User enters their email + password in the fields at the bottom.
-///   2. User points the camera at a Logstack QR code on the web dashboard.
-///   3. The screen extracts the `token` query parameter from the scanned URL
-///      (e.g. `https://app.logstack.io/link-mobile?token=<uuid>`).
-///   4. Calls `POST /v1/auth/qr/:token/confirm` with the supplied credentials.
-///   5. On success: stores both the access token and refresh token, then
-///      navigates to `'/'`.
-///   6. On error: shows an inline banner with a "Try Again" button.
+/// QR scanner — scan the code from the web dashboard to link this device.
+/// No credentials required; the web user is bound when the QR is generated.
 class QRScannerScreen extends ConsumerStatefulWidget {
   const QRScannerScreen({super.key});
 
@@ -26,9 +16,6 @@ class QRScannerScreen extends ConsumerStatefulWidget {
 }
 
 class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   final MobileScannerController _scannerController = MobileScannerController();
 
   bool _isConfirming = false;
@@ -37,16 +24,10 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
     _scannerController.dispose();
     super.dispose();
   }
 
-  /// Extracts the `token` query parameter from a scanned Logstack QR URL such
-  /// as `https://app.logstack.io/link-mobile?token=<uuid>`.
-  ///
-  /// Returns `null` if the barcode value is not a valid URL or lacks the token.
   String? _extractToken(String? rawValue) {
     if (rawValue == null || rawValue.isEmpty) return null;
     try {
@@ -58,8 +39,6 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    // Ignore subsequent detections while we are confirming or have already
-    // processed a barcode in this session.
     if (_isConfirming || _scanProcessed) return;
 
     final barcodes = capture.barcodes;
@@ -73,35 +52,22 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
       return;
     }
 
-    // Validate credentials form before proceeding.
-    if (!_formKey.currentState!.validate()) return;
-
     setState(() {
       _isConfirming = true;
       _scanProcessed = true;
       _error = null;
     });
 
-    // Pause the scanner while we confirm to avoid re-entrant calls.
     await _scannerController.stop();
 
     try {
       final authService = ref.read(authServiceProvider);
-      final tokenPair = await authService.confirmQR(
-        token,
-        _emailController.text.trim(),
-        _passwordController.text,
-      );
-
-      // Persist refresh token in secure storage before updating auth state.
-      final storage = ref.read(storageServiceProvider);
-      await storage.setRefreshToken(tokenPair.refreshToken);
-
+      final tokenPair = await authService.confirmQR(token);
       await ref.read(authProvider.notifier).setTokensFromPair(tokenPair);
 
-      if (mounted) {
-        context.go('/');
-      }
+      if (!mounted) return;
+      await _maybeOfferBiometric();
+      if (mounted) context.go('/');
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -109,9 +75,38 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
           _isConfirming = false;
           _scanProcessed = false;
         });
-        // Resume the scanner so the user can try again.
         await _scannerController.start();
       }
+    }
+  }
+
+  Future<void> _maybeOfferBiometric() async {
+    final biometric = ref.read(biometricServiceProvider);
+    if (!await biometric.isAvailable() || await biometric.isEnabled()) {
+      return;
+    }
+    if (!mounted) return;
+    final enable = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enable biometric unlock?'),
+        content: const Text(
+          'Use Face ID or fingerprint to unlock Logstack when you return to the app.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Enable'),
+          ),
+        ],
+      ),
+    );
+    if (enable == true) {
+      await biometric.setEnabled(true);
     }
   }
 
@@ -132,12 +127,12 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
       appBar: AppBar(
         title: const Text('Scan QR Code'),
         leading: BackButton(
-          onPressed: () => context.canPop() ? context.pop() : context.go('/login'),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/login'),
         ),
       ),
       body: Column(
         children: [
-          // ── Scanner viewport ────────────────────────────────────────────
           Expanded(
             child: Stack(
               alignment: Alignment.center,
@@ -146,7 +141,6 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
                   controller: _scannerController,
                   onDetect: _onDetect,
                 ),
-                // Viewfinder overlay
                 Container(
                   width: 240,
                   height: 240,
@@ -158,7 +152,6 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                // Loading overlay while confirming
                 if (_isConfirming)
                   Container(
                     color: Colors.black54,
@@ -169,105 +162,59 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
               ],
             ),
           ),
-
-          // ── Credentials + error section ─────────────────────────────────
-          SingleChildScrollView(
+          Padding(
             padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Enter your credentials to confirm login',
-                    style: theme.textTheme.titleSmall,
-                    textAlign: TextAlign.center,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Point the camera at the QR code on the web dashboard.',
+                  style: theme.textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Your account is linked automatically — no password needed.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
+                  textAlign: TextAlign.center,
+                ),
+                if (_error != null) ...[
                   const SizedBox(height: 16),
-
-                  // Error banner
-                  if (_error != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: theme.colorScheme.onErrorContainer,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _error!,
-                              style: TextStyle(
-                                color: theme.colorScheme.onErrorContainer,
-                              ),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: theme.colorScheme.onErrorContainer,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: TextStyle(
+                              color: theme.colorScheme.onErrorContainer,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: _handleTryAgain,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Try Again'),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your email';
-                      }
-                      if (!value.contains('@')) {
-                        return 'Please enter a valid email';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    textInputAction: TextInputAction.done,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock_outlined),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your password';
-                      }
-                      if (value.length < 8) {
-                        return 'Password must be at least 8 characters';
-                      }
-                      return null;
-                    },
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Point the camera at the QR code shown on the web login page.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
+                  OutlinedButton.icon(
+                    onPressed: _handleTryAgain,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Try Again'),
                   ),
                 ],
-              ),
+              ],
             ),
           ),
         ],

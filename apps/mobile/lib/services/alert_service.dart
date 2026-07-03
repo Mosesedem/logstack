@@ -17,35 +17,57 @@ class AlertService {
       '/alerts',
       queryParameters: {'projectId': projectId},
     );
-    return response.map((a) => AlertRule.fromJson(a)).toList();
+    return response
+        .map((a) => AlertRule.fromJson(a as Map<String, dynamic>))
+        .toList();
   }
 
   Future<AlertRule> createAlert(
       String projectId, Map<String, dynamic> data) async {
     return await _api.post(
-      '/alerts?projectId=$projectId',
+      '/alerts',
+      queryParameters: {'projectId': projectId},
       data: data,
-      fromJson: (data) => AlertRule.fromJson(data),
+      fromJson: (data) => AlertRule.fromJson(data as Map<String, dynamic>),
     );
   }
 
-  Future<AlertRule> updateAlert(String id, Map<String, dynamic> data) async {
+  Future<AlertRule> updateAlert(int id, Map<String, dynamic> data) async {
     return await _api.put(
       '/alerts/$id',
       data: data,
-      fromJson: (data) => AlertRule.fromJson(data),
+      fromJson: (data) => AlertRule.fromJson(data as Map<String, dynamic>),
     );
   }
 
-  Future<void> deleteAlert(String id) async {
+  Future<void> deleteAlert(int id) async {
     await _api.delete('/alerts/$id');
   }
 
-  Future<List<AlertHistory>> getAlertHistory(String projectId) async {
+  /// Fetches delivery history for a single alert rule.
+  Future<List<AlertHistory>> getAlertHistory(int ruleId, {int limit = 50}) async {
     final response = await _api.get<List<dynamic>>(
-      '/alerts/history',
-      queryParameters: {'projectId': projectId},
+      '/alerts/$ruleId/history',
+      queryParameters: {'limit': limit},
     );
-    return response.map((h) => AlertHistory.fromJson(h)).toList();
+    return response
+        .map((h) => AlertHistory.fromJson(h as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Aggregates history across all rules for a project (newest first).
+  Future<List<AlertHistory>> getProjectAlertHistory(String projectId) async {
+    final rules = await getAlerts(projectId);
+    final all = <AlertHistory>[];
+    for (final rule in rules) {
+      try {
+        final history = await getAlertHistory(rule.id, limit: 20);
+        all.addAll(history);
+      } catch (_) {
+        // Skip rules we can't read history for
+      }
+    }
+    all.sort((a, b) => b.sentAt.compareTo(a.sentAt));
+    return all;
   }
 }

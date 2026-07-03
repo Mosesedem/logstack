@@ -60,7 +60,11 @@ func (e *AlertEngine) processRule(ctx context.Context, rule models.AlertRule, lo
 	}
 
 	cooldownKey := fmt.Sprintf("alert:%d:cooldown", rule.ID)
-	acquired, err := e.redis.SetNX(ctx, cooldownKey, "1", time.Duration(rule.CooldownMinutes)*time.Minute).Result()
+	cooldown := time.Duration(rule.CooldownMinutes) * time.Minute
+	if cooldown <= 0 {
+		cooldown = 15 * time.Minute
+	}
+	acquired, err := e.redis.SetNX(ctx, cooldownKey, "1", cooldown).Result()
 	if err != nil {
 		return err
 	}
@@ -188,6 +192,11 @@ func (e *AlertEngine) matchPattern(ruleID uint, pattern, message string) bool {
 	if !exists {
 		compiled, err := regexp.Compile(pattern)
 		if err != nil {
+			slog.Warn("invalid alert regex pattern",
+				"ruleId", ruleID,
+				"pattern", pattern,
+				"error", err,
+			)
 			return false
 		}
 		e.regexCacheMu.Lock()

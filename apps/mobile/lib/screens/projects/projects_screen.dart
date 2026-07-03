@@ -129,23 +129,26 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                                 : null,
                           ),
                           title: Text(project.name),
-                          subtitle: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '${project.apiKey.substring(0, 16)}...',
-                                  style:
-                                      const TextStyle(fontFamily: 'monospace'),
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.copy, size: 18),
-                                onPressed: () => _copyApiKey(project.apiKey),
-                                tooltip: 'Copy API key',
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ],
-                          ),
+                          subtitle: project.apiKey != null
+                              ? Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${project.apiKey!.substring(0, project.apiKey!.length.clamp(0, 16))}...',
+                                        style: const TextStyle(
+                                            fontFamily: 'monospace'),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.copy, size: 18),
+                                      onPressed: () =>
+                                          _copyApiKey(project.apiKey!),
+                                      tooltip: 'Copy API key',
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  ],
+                                )
+                              : const Text('API key hidden'),
                           trailing: PopupMenuButton(
                             itemBuilder: (context) => [
                               PopupMenuItem(

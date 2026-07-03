@@ -56,6 +56,11 @@ func (s *Service) GetEmailNotifier() *EmailNotifier {
 	return s.email
 }
 
+// GetPushNotifier returns the push notifier for direct delivery (e.g. escalations).
+func (s *Service) GetPushNotifier() *PushNotifier {
+	return s.push
+}
+
 func (s *Service) Send(ctx context.Context, rule *models.AlertRule, log *models.Log) error {
 	channels := channelsForRule(rule)
 	if len(channels) == 0 {
@@ -63,6 +68,7 @@ func (s *Service) Send(ctx context.Context, rule *models.AlertRule, log *models.
 	}
 
 	var errs []error
+	succeeded := 0
 	for _, channel := range channels {
 		channelRule := *rule
 		channelRule.Channel = channel
@@ -73,9 +79,14 @@ func (s *Service) Send(ctx context.Context, rule *models.AlertRule, log *models.
 				"ruleId", rule.ID,
 				"error", err,
 			)
+			continue
 		}
+		succeeded++
 	}
 
+	if succeeded > 0 {
+		return nil
+	}
 	return errors.Join(errs...)
 }
 

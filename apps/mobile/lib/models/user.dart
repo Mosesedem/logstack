@@ -6,23 +6,43 @@ part 'user.g.dart';
 @freezed
 class User with _$User {
   const factory User({
-    required String id,
+    required int id,
     required String email,
+    String? name,
     required DateTime createdAt,
   }) = _User;
 
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);
 }
 
-@freezed
-class AuthResponse with _$AuthResponse {
-  const factory AuthResponse({
-    required User user,
-    required String token,
-  }) = _AuthResponse;
+/// Login/signup response from the API: `{ user, tokens: { accessToken, refreshToken } }`.
+class AuthResponse {
+  final User user;
+  final String accessToken;
+  final String refreshToken;
 
-  factory AuthResponse.fromJson(Map<String, dynamic> json) =>
-      _$AuthResponseFromJson(json);
+  const AuthResponse({
+    required this.user,
+    required this.accessToken,
+    required this.refreshToken,
+  });
+
+  factory AuthResponse.fromJson(Map<String, dynamic> json) {
+    final tokens = json['tokens'] as Map<String, dynamic>? ?? json;
+    return AuthResponse(
+      user: User.fromJson(json['user'] as Map<String, dynamic>),
+      accessToken: (tokens['accessToken'] ??
+              tokens['access_token'] ??
+              json['token'] ??
+              '') as String,
+      refreshToken: (tokens['refreshToken'] ??
+              tokens['refresh_token'] ??
+              '') as String,
+    );
+  }
+
+  /// Legacy alias used by older call sites.
+  String get token => accessToken;
 }
 
 /// Represents a JWT token pair returned by QR confirm and similar endpoints.
@@ -37,7 +57,6 @@ class TokenPair {
 
   factory TokenPair.fromJson(Map<String, dynamic> json) {
     return TokenPair(
-      // Backend may return "token" (single) or "accessToken" / "access_token"
       accessToken: (json['accessToken'] ??
               json['access_token'] ??
               json['token'] ??

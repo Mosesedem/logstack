@@ -50,7 +50,7 @@ type AlertRuleCreateRequest struct {
 	TriggerLevel    LogLevel     `json:"triggerLevel,omitempty"`
 	Channel         AlertChannel `json:"channel,omitempty"`
 	Channels        []string     `json:"channels,omitempty"`
-	Recipient       string       `json:"recipient" binding:"required"`
+	Recipient       string       `json:"recipient"`
 	CooldownMinutes int          `json:"cooldownMinutes" binding:"min=0"`
 	Enabled         *bool        `json:"enabled"`
 }

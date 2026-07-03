@@ -90,6 +90,52 @@ func buildFCMMessage(token string, title, body string, data map[string]string) *
 	}
 }
 
+// SendDirect delivers a push notification to every device registered for [userID].
+func (p *PushNotifier) SendDirect(
+	ctx context.Context,
+	userID uint,
+	title, body string,
+	data map[string]string,
+) error {
+	if p.client == nil {
+		return fmt.Errorf("FCM client not initialized")
+	}
+
+	var tokens []models.PushToken
+	if err := p.db.Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
+		return fmt.Errorf("failed to fetch push tokens: %w", err)
+	}
+	if len(tokens) == 0 {
+		return fmt.Errorf("no push tokens found for user")
+	}
+
+	checker := p.isInvalidTokenErr
+	if checker == nil {
+		checker = func(err error) bool {
+			return messaging.IsRegistrationTokenNotRegistered(err) || messaging.IsInvalidArgument(err)
+		}
+	}
+
+	successCount := 0
+	for _, token := range tokens {
+		message := buildFCMMessage(token.Token, title, body, data)
+		response, err := p.client.Send(ctx, message)
+		if err != nil {
+			if checker(err) {
+				p.db.Where("token = ?", token.Token).Delete(&models.PushToken{})
+			}
+			continue
+		}
+		slog.Info("direct push sent", "userId", userID, "messageId", response)
+		successCount++
+	}
+
+	if successCount == 0 {
+		return fmt.Errorf("failed to send notifications to any device")
+	}
+	return nil
+}
+
 func (p *PushNotifier) Send(ctx context.Context, rule *models.AlertRule, log *models.Log) error {
 	if p.client == nil {
 		return fmt.Errorf("FCM client not initialized")

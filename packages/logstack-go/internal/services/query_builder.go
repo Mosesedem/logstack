@@ -21,6 +21,7 @@ type QueryOptions struct {
 	Offset    int
 	Limit     int
 	Level     string
+	Source    string
 	Search    string
 	StartTime *time.Time
 	EndTime   *time.Time
@@ -40,6 +41,10 @@ func (q *QueryBuilder) Query(opts QueryOptions) (*models.LogQueryResponse, error
 	// Apply filters
 	if opts.Level != "" {
 		query = query.Where("level = ?", opts.Level)
+	}
+
+	if opts.Source != "" {
+		query = query.Where("source = ?", opts.Source)
 	}
 
 	if opts.Search != "" {

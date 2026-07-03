@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { LevelBadge } from "@/components/logs";
-import { Edit, Plus, Trash2 } from "lucide-react";
+import { Edit, Mail, Plus, Trash2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface AlertListProps {
   alerts: AlertRule[];
@@ -13,6 +14,8 @@ interface AlertListProps {
   onEdit: (alert: AlertRule) => void;
   onDelete: (id: number) => void;
   onCreate?: () => void;
+  onTestEmail?: (id: number) => void;
+  testingAlertId?: number | null;
   isLoading?: boolean;
 }
 
@@ -22,8 +25,20 @@ export function AlertList({
   onEdit,
   onDelete,
   onCreate,
+  onTestEmail,
+  testingAlertId,
   isLoading,
 }: AlertListProps) {
+  if (isLoading && alerts.length === 0) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-32 w-full rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+
   if (alerts.length === 0 && !isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
@@ -53,6 +68,17 @@ export function AlertList({
                   checked={alert.enabled}
                   onCheckedChange={(checked) => onToggle(alert.id, checked)}
                 />
+                {onTestEmail && alert.channels?.includes("email") && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Send test email"
+                    disabled={testingAlertId === alert.id}
+                    onClick={() => onTestEmail(alert.id)}
+                  >
+                    <Mail className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"

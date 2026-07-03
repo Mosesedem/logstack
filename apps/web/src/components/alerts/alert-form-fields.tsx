@@ -34,9 +34,9 @@ export function buildDefaultAlertFormData(options?: {
 
   return {
     name: initialData?.name || defaultName || "",
-    triggerPatterns:
-      initialData?.triggerPatterns ??
-      (hasEmailDefault ? [".*error.*", ".*exception.*"] : []),
+    // Level-only by default — fires on any log at/above triggerLevel.
+    // Users can opt into pattern filters via the checkboxes below.
+    triggerPatterns: initialData?.triggerPatterns ?? [],
     triggerLevel: initialData?.triggerLevel || "error",
     channels:
       initialData?.channels ?? (hasEmailDefault ? ["email"] : []),

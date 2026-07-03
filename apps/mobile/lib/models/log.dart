@@ -4,6 +4,8 @@ part 'log.freezed.dart';
 part 'log.g.dart';
 
 enum LogLevel {
+  @JsonValue('debug')
+  debug,
   @JsonValue('info')
   info,
   @JsonValue('warn')
@@ -12,12 +14,14 @@ enum LogLevel {
   error,
   @JsonValue('critical')
   critical,
+  @JsonValue('fatal')
+  fatal,
 }
 
 @freezed
 class Log with _$Log {
   const factory Log({
-    required String id,
+    required int id,
     required String projectId,
     required LogLevel level,
     required String message,
@@ -35,6 +39,7 @@ class LogsResponse with _$LogsResponse {
     required List<Log> logs,
     required bool hasMore,
     required int offset,
+    int? total,
   }) = _LogsResponse;
 
   factory LogsResponse.fromJson(Map<String, dynamic> json) =>

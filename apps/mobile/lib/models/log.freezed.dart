@@ -20,7 +20,7 @@ Log _$LogFromJson(Map<String, dynamic> json) {
 
 /// @nodoc
 mixin _$Log {
-  String get id => throw _privateConstructorUsedError;
+  int get id => throw _privateConstructorUsedError;
   String get projectId => throw _privateConstructorUsedError;
   LogLevel get level => throw _privateConstructorUsedError;
   String get message => throw _privateConstructorUsedError;
@@ -39,7 +39,7 @@ abstract class $LogCopyWith<$Res> {
       _$LogCopyWithImpl<$Res, Log>;
   @useResult
   $Res call(
-      {String id,
+      {int id,
       String projectId,
       LogLevel level,
       String message,
@@ -72,7 +72,7 @@ class _$LogCopyWithImpl<$Res, $Val extends Log> implements $LogCopyWith<$Res> {
       id: null == id
           ? _value.id
           : id // ignore: cast_nullable_to_non_nullable
-              as String,
+              as int,
       projectId: null == projectId
           ? _value.projectId
           : projectId // ignore: cast_nullable_to_non_nullable
@@ -108,7 +108,7 @@ abstract class _$$LogImplCopyWith<$Res> implements $LogCopyWith<$Res> {
   @override
   @useResult
   $Res call(
-      {String id,
+      {int id,
       String projectId,
       LogLevel level,
       String message,
@@ -138,7 +138,7 @@ class __$$LogImplCopyWithImpl<$Res> extends _$LogCopyWithImpl<$Res, _$LogImpl>
       id: null == id
           ? _value.id
           : id // ignore: cast_nullable_to_non_nullable
-              as String,
+              as int,
       projectId: null == projectId
           ? _value.projectId
           : projectId // ignore: cast_nullable_to_non_nullable
@@ -184,7 +184,7 @@ class _$LogImpl implements _Log {
       _$$LogImplFromJson(json);
 
   @override
-  final String id;
+  final int id;
   @override
   final String projectId;
   @override
@@ -248,7 +248,7 @@ class _$LogImpl implements _Log {
 
 abstract class _Log implements Log {
   const factory _Log(
-      {required final String id,
+      {required final int id,
       required final String projectId,
       required final LogLevel level,
       required final String message,
@@ -259,7 +259,7 @@ abstract class _Log implements Log {
   factory _Log.fromJson(Map<String, dynamic> json) = _$LogImpl.fromJson;
 
   @override
-  String get id;
+  int get id;
   @override
   String get projectId;
   @override
@@ -285,8 +285,10 @@ LogsResponse _$LogsResponseFromJson(Map<String, dynamic> json) {
 /// @nodoc
 mixin _$LogsResponse {
   List<Log> get logs => throw _privateConstructorUsedError;
+  @JsonKey(name: 'hasMore')
   bool get hasMore => throw _privateConstructorUsedError;
   int get offset => throw _privateConstructorUsedError;
+  int? get total => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -300,7 +302,11 @@ abstract class $LogsResponseCopyWith<$Res> {
           LogsResponse value, $Res Function(LogsResponse) then) =
       _$LogsResponseCopyWithImpl<$Res, LogsResponse>;
   @useResult
-  $Res call({List<Log> logs, bool hasMore, int offset});
+  $Res call(
+      {List<Log> logs,
+      @JsonKey(name: 'hasMore') bool hasMore,
+      int offset,
+      int? total});
 }
 
 /// @nodoc
@@ -319,6 +325,7 @@ class _$LogsResponseCopyWithImpl<$Res, $Val extends LogsResponse>
     Object? logs = null,
     Object? hasMore = null,
     Object? offset = null,
+    Object? total = freezed,
   }) {
     return _then(_value.copyWith(
       logs: null == logs
@@ -333,6 +340,10 @@ class _$LogsResponseCopyWithImpl<$Res, $Val extends LogsResponse>
           ? _value.offset
           : offset // ignore: cast_nullable_to_non_nullable
               as int,
+      total: freezed == total
+          ? _value.total
+          : total // ignore: cast_nullable_to_non_nullable
+              as int?,
     ) as $Val);
   }
 }
@@ -345,7 +356,11 @@ abstract class _$$LogsResponseImplCopyWith<$Res>
       __$$LogsResponseImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({List<Log> logs, bool hasMore, int offset});
+  $Res call(
+      {List<Log> logs,
+      @JsonKey(name: 'hasMore') bool hasMore,
+      int offset,
+      int? total});
 }
 
 /// @nodoc
@@ -362,6 +377,7 @@ class __$$LogsResponseImplCopyWithImpl<$Res>
     Object? logs = null,
     Object? hasMore = null,
     Object? offset = null,
+    Object? total = freezed,
   }) {
     return _then(_$LogsResponseImpl(
       logs: null == logs
@@ -376,6 +392,10 @@ class __$$LogsResponseImplCopyWithImpl<$Res>
           ? _value.offset
           : offset // ignore: cast_nullable_to_non_nullable
               as int,
+      total: freezed == total
+          ? _value.total
+          : total // ignore: cast_nullable_to_non_nullable
+              as int?,
     ));
   }
 }
@@ -385,8 +405,9 @@ class __$$LogsResponseImplCopyWithImpl<$Res>
 class _$LogsResponseImpl implements _LogsResponse {
   const _$LogsResponseImpl(
       {required final List<Log> logs,
-      required this.hasMore,
-      required this.offset})
+      @JsonKey(name: 'hasMore') required this.hasMore,
+      required this.offset,
+      this.total})
       : _logs = logs;
 
   factory _$LogsResponseImpl.fromJson(Map<String, dynamic> json) =>
@@ -401,13 +422,16 @@ class _$LogsResponseImpl implements _LogsResponse {
   }
 
   @override
+  @JsonKey(name: 'hasMore')
   final bool hasMore;
   @override
   final int offset;
+  @override
+  final int? total;
 
   @override
   String toString() {
-    return 'LogsResponse(logs: $logs, hasMore: $hasMore, offset: $offset)';
+    return 'LogsResponse(logs: $logs, hasMore: $hasMore, offset: $offset, total: $total)';
   }
 
   @override
@@ -417,13 +441,14 @@ class _$LogsResponseImpl implements _LogsResponse {
             other is _$LogsResponseImpl &&
             const DeepCollectionEquality().equals(other._logs, _logs) &&
             (identical(other.hasMore, hasMore) || other.hasMore == hasMore) &&
-            (identical(other.offset, offset) || other.offset == offset));
+            (identical(other.offset, offset) || other.offset == offset) &&
+            (identical(other.total, total) || other.total == total));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType, const DeepCollectionEquality().hash(_logs), hasMore, offset);
+  int get hashCode => Object.hash(runtimeType,
+      const DeepCollectionEquality().hash(_logs), hasMore, offset, total);
 
   @JsonKey(ignore: true)
   @override
@@ -442,8 +467,9 @@ class _$LogsResponseImpl implements _LogsResponse {
 abstract class _LogsResponse implements LogsResponse {
   const factory _LogsResponse(
       {required final List<Log> logs,
-      required final bool hasMore,
-      required final int offset}) = _$LogsResponseImpl;
+      @JsonKey(name: 'hasMore') required final bool hasMore,
+      required final int offset,
+      final int? total}) = _$LogsResponseImpl;
 
   factory _LogsResponse.fromJson(Map<String, dynamic> json) =
       _$LogsResponseImpl.fromJson;
@@ -451,9 +477,12 @@ abstract class _LogsResponse implements LogsResponse {
   @override
   List<Log> get logs;
   @override
+  @JsonKey(name: 'hasMore')
   bool get hasMore;
   @override
   int get offset;
+  @override
+  int? get total;
   @override
   @JsonKey(ignore: true)
   _$$LogsResponseImplCopyWith<_$LogsResponseImpl> get copyWith =>

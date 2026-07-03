@@ -76,21 +76,40 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
 
-    // Create notification channel for Android
     if (Platform.isAndroid) {
-      const channel = AndroidNotificationChannel(
-        'logstack_alerts',
-        'Logstack Alerts',
-        description: 'Notifications for Logstack alert triggers',
-        importance: Importance.high,
-      );
-
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(channel);
+      await applyToneChannel('default');
     }
   }
+
+  /// Creates (or recreates) the Android notification channel for [tone].
+  /// Android 8+ cannot change sound on an existing channel — use a new ID per tone.
+  Future<void> applyToneChannel(String tone) async {
+    if (!Platform.isAndroid) return;
+
+    final channelId = 'logstack_alerts_$tone';
+    final importance = tone == 'subtle'
+        ? Importance.defaultImportance
+        : tone == 'urgent'
+            ? Importance.max
+            : Importance.high;
+
+    final channel = AndroidNotificationChannel(
+      channelId,
+      'Logstack Alerts ($tone)',
+      description: 'Alert and escalation notifications',
+      importance: importance,
+      playSound: true,
+    );
+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    _activeAndroidChannelId = channelId;
+  }
+
+  String _activeAndroidChannelId = 'logstack_alerts_default';
 
   Future<void> _initializeFCM() async {
     if (Platform.isIOS) {
@@ -172,12 +191,13 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
-    const androidDetails = AndroidNotificationDetails(
-      'logstack_alerts',
+    final androidDetails = AndroidNotificationDetails(
+      _activeAndroidChannelId,
       'Logstack Alerts',
       channelDescription: 'Notifications for Logstack alert triggers',
       importance: Importance.high,
       priority: Priority.high,
+      playSound: true,
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -186,7 +206,7 @@ class NotificationService {
       presentSound: true,
     );
 
-    const details = NotificationDetails(
+    final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );

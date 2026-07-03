@@ -17,10 +17,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { api } from "@/lib/api-client";
 import { AlertHistory as AlertHistoryType, AlertRule } from "@/types";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 
@@ -34,25 +41,44 @@ export default function AlertsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAlert, setEditingAlert] = useState<AlertRule | null>(null);
   const [deletingAlertId, setDeletingAlertId] = useState<number | null>(null);
+  const [historyAlertId, setHistoryAlertId] = useState<number | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: alerts, isLoading } = useQuery({
+  const {
+    data: alerts,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["alerts", currentProject?.id],
     queryFn: () =>
       api.get<AlertRule[]>(`/alerts?projectId=${currentProject?.id}`),
     enabled: !!currentProject?.id,
   });
 
-  const selectedAlertId = alerts?.[0]?.id;
+  useEffect(() => {
+    if (!alerts?.length) {
+      setHistoryAlertId(null);
+      return;
+    }
+    if (
+      historyAlertId === null ||
+      !alerts.some((a) => a.id === historyAlertId)
+    ) {
+      setHistoryAlertId(alerts[0].id);
+    }
+  }, [alerts, historyAlertId]);
+
+  const historyRule = alerts?.find((a) => a.id === historyAlertId);
 
   const { data: history, isLoading: historyLoading } = useQuery({
-    queryKey: ["alert-history", selectedAlertId],
+    queryKey: ["alert-history", historyAlertId],
     queryFn: () =>
       api.get<AlertHistoryType[]>(
-        `/alerts/${selectedAlertId}/history?limit=50`,
+        `/alerts/${historyAlertId}/history?limit=50`,
       ),
-    enabled: tab === "history" && !!selectedAlertId,
+    enabled: tab === "history" && !!historyAlertId,
   });
 
   const createMutation = useMutation({
@@ -105,6 +131,28 @@ export default function AlertsPage() {
     },
   });
 
+  const testEmailMutation = useMutation({
+    mutationFn: (alertId: number) =>
+      api.post<{ message: string; recipient: string }>(
+        `/alerts/${alertId}/test-email`,
+        {},
+      ),
+    onSuccess: (data, alertId) => {
+      queryClient.invalidateQueries({ queryKey: ["alert-history", alertId] });
+      toast({
+        title: "Test alert sent",
+        description: `Check ${data.recipient} (and spam).`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Test alert failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!currentProject) {
     return (
       <div className="flex flex-col items-center justify-center h-full space-y-4">
@@ -120,6 +168,15 @@ export default function AlertsPage() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 space-y-4">
+        <p className="text-muted-foreground">Failed to load alert rules.</p>
+        <Button onClick={() => refetch()}>Retry</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -130,7 +187,8 @@ export default function AlertsPage() {
             <span className="font-medium text-foreground">
               {currentProject.name}
             </span>
-            . Add new rules or edit existing ones here.
+            . Level-only rules fire on any matching log level; add patterns to
+            narrow further.
           </p>
         </div>
         {tab === "rules" && (
@@ -168,9 +226,49 @@ export default function AlertsPage() {
           onToggle={(id, enabled) =>
             updateMutation.mutate({ id, data: { enabled } })
           }
+          onTestEmail={(id) => testEmailMutation.mutate(id)}
+          testingAlertId={
+            testEmailMutation.isPending ? testEmailMutation.variables : null
+          }
         />
       ) : alerts && alerts.length > 0 ? (
-        <AlertHistory history={history ?? []} isLoading={historyLoading} />
+        <div className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="grid gap-1.5 max-w-sm w-full">
+              <label className="text-sm font-medium">Alert rule</label>
+              <Select
+                value={String(historyAlertId ?? "")}
+                onValueChange={(value) => setHistoryAlertId(Number(value))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select alert rule" />
+                </SelectTrigger>
+                <SelectContent>
+                  {alerts.map((alert) => (
+                    <SelectItem key={alert.id} value={String(alert.id)}>
+                      {alert.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {historyRule?.channels.includes("email") && historyAlertId && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={testEmailMutation.isPending}
+                onClick={() => testEmailMutation.mutate(historyAlertId)}
+              >
+                Send test email
+              </Button>
+            )}
+          </div>
+          <AlertHistory
+            history={history ?? []}
+            isLoading={historyLoading}
+            ruleName={historyRule?.name}
+          />
+        </div>
       ) : (
         <div className="py-12 text-center text-muted-foreground">
           Create an alert rule first to see delivery history.

@@ -43,6 +43,8 @@ abstract final class LogstackColors {
 
   static Color levelForeground(LogLevel level) {
     switch (level) {
+      case LogLevel.debug:
+        return debugPurple;
       case LogLevel.info:
         return infoBlue;
       case LogLevel.warn:
@@ -50,12 +52,15 @@ abstract final class LogstackColors {
       case LogLevel.error:
         return errorRed;
       case LogLevel.critical:
+      case LogLevel.fatal:
         return criticalRed;
     }
   }
 
   static Color levelBackground(LogLevel level) {
     switch (level) {
+      case LogLevel.debug:
+        return debugPurpleBg;
       case LogLevel.info:
         return infoBlueBg;
       case LogLevel.warn:
@@ -63,6 +68,7 @@ abstract final class LogstackColors {
       case LogLevel.error:
         return errorRedBg;
       case LogLevel.critical:
+      case LogLevel.fatal:
         return criticalRedBg;
     }
   }

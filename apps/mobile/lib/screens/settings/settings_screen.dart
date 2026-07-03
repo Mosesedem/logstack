@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:logstack_mobile/providers/auth_provider.dart';
-import 'package:logstack_mobile/providers/billing_provider.dart';
-import 'package:logstack_mobile/widgets/push_debug_card.dart';
-import 'package:logstack_mobile/widgets/usage_card.dart';
 import 'package:go_router/go_router.dart';
+import 'package:logstack_mobile/providers/auth_provider.dart';
+import 'package:logstack_mobile/services/biometric_service.dart';
+import 'package:logstack_mobile/services/notification_service.dart';
+import 'package:logstack_mobile/services/notification_tone_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// Minimal settings: notification tone, biometric lock, account, logout.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -15,175 +16,148 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  bool? _biometricAvailable;
+  bool _biometricEnabled = false;
+
   @override
   void initState() {
     super.initState();
-    // Load billing data when the screen is first shown
-    Future.microtask(() {
-      ref.read(billingProvider.notifier).loadBillingData();
-    });
+    _loadBiometricState();
   }
 
-  Future<void> _openBillingPage() async {
-    // Open the web billing page
-    const billingUrl = 'https://logstack.io/dashboard/billing';
-    final uri = Uri.parse(billingUrl);
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not open billing page'),
-          ),
-        );
-      }
+  Future<void> _loadBiometricState() async {
+    final biometric = ref.read(biometricServiceProvider);
+    final available = await biometric.isAvailable();
+    final enabled = await biometric.isEnabled();
+    if (mounted) {
+      setState(() {
+        _biometricAvailable = available;
+        _biometricEnabled = enabled;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final billingState = ref.watch(billingProvider);
+    final tone = ref.watch(notificationToneProvider);
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        await ref.read(billingProvider.notifier).loadBillingData();
-      },
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Usage Card
-          if (billingState.usage != null)
-            UsageCard(
-              usage: billingState.usage!,
-              onUpgradePressed: _openBillingPage,
-            )
-          else if (billingState.isLoading)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(
-                  child: CircularProgressIndicator(),
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  'Notification tone',
+                  style: TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
-            ),
-
-          const SizedBox(height: 16),
-
-          // Subscription info
-          if (billingState.subscription != null)
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.credit_card),
-                    title: const Text('Current Plan'),
-                    subtitle: Text(
-                      billingState.subscription!.tierName,
-                    ),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: billingState.subscription!.isActive
-                            ? Colors.green.withValues(alpha: 0.1)
-                            : Colors.red.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        billingState.subscription!.isActive
-                            ? 'Active'
-                            : 'Inactive',
-                        style: TextStyle(
-                          color: billingState.subscription!.isActive
-                              ? Colors.green
-                              : Colors.red,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.credit_card),
-                    title: const Text('Manage Subscription'),
-                    trailing: const Icon(Icons.open_in_new),
-                    onTap: _openBillingPage,
-                  ),
-                ],
-              ),
-            ),
-
-          const SizedBox(height: 16),
-
-          // Account Card
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.person),
-                  title: const Text('Account'),
-                  subtitle: Text(authState.user?.email ?? 'Not signed in'),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Sound for alert and escalation pushes. If notifications are muted at the OS level, change system settings.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.logout),
-                  title: const Text('Sign Out'),
-                  onTap: () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Sign Out'),
-                        content:
-                            const Text('Are you sure you want to sign out?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('Cancel'),
-                          ),
-                          FilledButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('Sign Out'),
-                          ),
-                        ],
-                      ),
-                    );
-
-                    if (confirmed == true) {
-                      await ref.read(authProvider.notifier).logout();
-                      if (context.mounted) {
-                        context.go('/login');
-                      }
-                    }
+              ),
+              ...NotificationToneNotifier.tones.map((t) {
+                return RadioListTile<String>(
+                  title: Text(t[0].toUpperCase() + t.substring(1)),
+                  value: t,
+                  groupValue: tone,
+                  onChanged: (value) async {
+                    if (value == null) return;
+                    await ref
+                        .read(notificationToneProvider.notifier)
+                        .setTone(value);
+                    await NotificationService.instance
+                        .applyToneChannel(value);
                   },
-                ),
-              ],
-            ),
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
           ),
-          const SizedBox(height: 16),
-          const PushDebugCard(),
-          const SizedBox(height: 16),
+        ),
+        const SizedBox(height: 16),
+        if (_biometricAvailable == true)
           Card(
-            child: Column(
-              children: const [
-                ListTile(
-                  leading: Icon(Icons.info),
-                  title: Text('About'),
-                  subtitle: Text('LogStack v1.0.0'),
-                ),
-              ],
+            child: SwitchListTile(
+              secondary: const Icon(Icons.fingerprint),
+              title: const Text('Biometric unlock'),
+              subtitle: const Text(
+                'Require Face ID or fingerprint when opening the app',
+              ),
+              value: _biometricEnabled,
+              onChanged: (value) async {
+                final biometric = ref.read(biometricServiceProvider);
+                if (value) {
+                  final ok = await biometric.authenticate(
+                    reason: 'Confirm to enable biometric unlock',
+                  );
+                  if (!ok) return;
+                }
+                await biometric.setEnabled(value);
+                if (mounted) setState(() => _biometricEnabled = value);
+              },
             ),
           ),
-        ],
-      ),
+        if (_biometricAvailable == true) const SizedBox(height: 16),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: const Text('Account'),
+                subtitle: Text(authState.user?.email ?? 'Not signed in'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.open_in_new),
+                title: const Text('Manage account on web'),
+                subtitle: const Text('Billing, alerts, API keys — logstack.tech'),
+                onTap: () => launchUrl(
+                  Uri.parse('https://logstack.tech'),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Sign out'),
+                onTap: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Sign out?'),
+                      content: const Text(
+                        'Your session and cached logs on this device will be cleared.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Sign out'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await ref.read(authProvider.notifier).logout();
+                    if (context.mounted) context.go('/login');
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

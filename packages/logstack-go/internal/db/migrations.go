@@ -160,6 +160,29 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 `,
 	},
+	{
+		Version: "024_backfill_alert_channels_from_legacy_channel",
+		Up: `
+UPDATE alert_rules
+SET channels = jsonb_build_array(channel)
+WHERE channel <> ''
+  AND (channels IS NULL OR channels = '[]'::jsonb);
+`,
+	},
+	{
+		Version: "025_create_log_escalations",
+		Up: `
+CREATE TABLE IF NOT EXISTS log_escalations (
+    id          SERIAL PRIMARY KEY,
+    log_id      BIGINT NOT NULL REFERENCES logs(id) ON DELETE CASCADE,
+    project_id  UUID NOT NULL,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uni_log_escalations_log_user UNIQUE (log_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_log_escalations_project ON log_escalations(project_id);
+`,
+	},
 }
 
 func ensureEnumType(db *gorm.DB, name, values string) error {

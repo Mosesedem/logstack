@@ -20,7 +20,12 @@ class BiometricService {
     }
   }
 
+  Future<bool> isEnabled() => _storage.isBiometricEnabled();
+
+  Future<void> setEnabled(bool enabled) => _storage.setBiometricEnabled(enabled);
+
   Future<bool> authenticate({String reason = 'Unlock Logstack'}) async {
+    if (!await isEnabled()) return true;
     if (!await isAvailable()) return true;
     try {
       return await _auth.authenticate(
@@ -36,7 +41,8 @@ class BiometricService {
   }
 
   Future<bool> shouldLock() async {
-    final token = await _storage.getToken();
-    return token != null;
+    if (!await isEnabled()) return false;
+    final refreshToken = await _storage.getRefreshToken();
+    return refreshToken != null;
   }
 }

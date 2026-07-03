@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/providers/project_provider.dart';
 import 'package:logstack_mobile/screens/logs/logs_screen.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
-
+/// Shell: logs viewer + minimal settings. No dashboard-style tabs.
 class HomeScreen extends ConsumerWidget {
   final Widget child;
 
@@ -13,9 +14,10 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final projectState = ref.watch(projectProvider);
-    final currentIndex = _calculateSelectedIndex(context);
+    final authState = ref.watch(authProvider);
     final location = GoRouterState.of(context).uri.path;
     final isLogsTab = location == '/' || location.startsWith('/logs');
+    final isSettings = location.startsWith('/settings');
 
     return Scaffold(
       appBar: AppBar(
@@ -36,61 +38,44 @@ class HomeScreen extends ConsumerWidget {
                 },
               )
             : const Text('Logstack'),
-        actions: isLogsTab ? LogsScreenActions.buildActions(context, ref) : null,
-      ),
-      body: child,
-      bottomNavigationBar: NavigationBar(
-        backgroundColor: LogstackColors.surface,
-        selectedIndex: currentIndex,
-        onDestinationSelected: (index) => _onItemTapped(index, context),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.article_outlined),
-            selectedIcon: Icon(Icons.article),
-            label: 'Logs',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.notifications_outlined),
-            selectedIcon: Icon(Icons.notifications),
-            label: 'Alerts',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.folder_outlined),
-            selectedIcon: Icon(Icons.folder),
-            label: 'Projects',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
+        actions: [
+          if (isLogsTab) ...LogsScreenActions.buildActions(context, ref),
+          IconButton(
+            icon: Icon(
+              Icons.settings_outlined,
+              color: isSettings
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            tooltip: 'Settings',
+            onPressed: () => context.go('/settings'),
           ),
         ],
       ),
+      body: Column(
+        children: [
+          if (authState.isOfflineAuth)
+            MaterialBanner(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              backgroundColor: LogstackColors.warnAmber.withValues(alpha: 0.12),
+              leading: const Icon(
+                Icons.cloud_off_outlined,
+                color: LogstackColors.warnAmber,
+              ),
+              content: const Text(
+                'No connection — your account stays signed in. Logs will sync when you\'re back online.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () =>
+                      ref.read(authProvider.notifier).refreshSession(),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          Expanded(child: child),
+        ],
+      ),
     );
-  }
-
-  int _calculateSelectedIndex(BuildContext context) {
-    final location = GoRouterState.of(context).uri.path;
-    if (location.startsWith('/alerts')) return 1;
-    if (location.startsWith('/projects')) return 2;
-    if (location.startsWith('/settings')) return 3;
-    return 0;
-  }
-
-  void _onItemTapped(int index, BuildContext context) {
-    switch (index) {
-      case 0:
-        context.go('/');
-        break;
-      case 1:
-        context.go('/alerts');
-        break;
-      case 2:
-        context.go('/projects');
-        break;
-      case 3:
-        context.go('/settings');
-        break;
-    }
   }
 }

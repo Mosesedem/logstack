@@ -54,7 +54,7 @@ class AlertsNotifier extends StateNotifier<AlertsState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final rules = await _alertService.getAlerts(_projectId!);
-      final history = await _alertService.getAlertHistory(_projectId!);
+      final history = await _alertService.getProjectAlertHistory(_projectId!);
       state = AlertsState(rules: rules, history: history);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -68,19 +68,20 @@ class AlertsNotifier extends StateNotifier<AlertsState> {
     state = state.copyWith(rules: [...state.rules, alert]);
   }
 
-  Future<void> updateAlert(String id, Map<String, dynamic> data) async {
+  Future<void> updateAlert(int id, Map<String, dynamic> data) async {
     final alert = await _alertService.updateAlert(id, data);
-    final rules = state.rules.map((r) => r.id == id ? alert : r).toList();
+    final rules =
+        state.rules.map((r) => r.id == id ? alert : r).toList();
     state = state.copyWith(rules: rules);
   }
 
-  Future<void> deleteAlert(String id) async {
+  Future<void> deleteAlert(int id) async {
     await _alertService.deleteAlert(id);
     final rules = state.rules.where((r) => r.id != id).toList();
     state = state.copyWith(rules: rules);
   }
 
-  Future<void> toggleAlert(String id, bool enabled) async {
+  Future<void> toggleAlert(int id, bool enabled) async {
     await updateAlert(id, {'enabled': enabled});
   }
 }

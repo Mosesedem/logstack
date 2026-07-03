@@ -102,9 +102,10 @@ class ProjectNotifier extends StateNotifier<ProjectState> {
       if (p.id == id) {
         return Project(
           id: p.id,
-          userId: p.userId,
+          ownerId: p.ownerId,
           name: p.name,
           apiKey: newKey,
+          environment: p.environment,
           createdAt: p.createdAt,
         );
       }

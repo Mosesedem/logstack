@@ -19,8 +19,8 @@ class LogCacheService {
   Future<void> saveLogs(String projectId, List<Log> logs) async {
     final box = await _box();
     final merged = <String, Log>{
-      for (final log in await getLogs(projectId)) log.id: log,
-      for (final log in logs) log.id: log,
+      for (final log in await getLogs(projectId)) log.id.toString(): log,
+      for (final log in logs) log.id.toString(): log,
     };
     final sorted = merged.values.toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -39,6 +39,11 @@ class LogCacheService {
     return list
         .map((e) => Log.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
+  }
+
+  Future<void> clearAll() async {
+    final box = await _box();
+    await box.clear();
   }
 
   List<Log> filterLocal({

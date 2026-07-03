@@ -553,10 +553,11 @@ func (h *AuthHandler) recordVerificationSent(ctx context.Context, email string) 
 
 // QRSession represents the Redis-persisted state for a QR login session.
 type QRSession struct {
-	Status    string `json:"status"`           // "pending" | "confirmed"
-	PIN       string `json:"pin,omitempty"`    // 6-digit PIN, omitted from status responses
-	UserID    uint   `json:"userId,omitempty"` // populated after confirmation
-	CreatedAt int64  `json:"createdAt"`
+	Status          string `json:"status"`                    // "pending" | "confirmed"
+	PIN             string `json:"pin,omitempty"`             // 6-digit PIN, omitted from status responses
+	InitiatorUserID uint   `json:"initiatorUserId,omitempty"` // web user who generated the session
+	UserID          uint   `json:"userId,omitempty"`          // populated after confirmation
+	CreatedAt       int64  `json:"createdAt"`
 }
 
 // GetQRStatus handles GET /v1/auth/qr/:token/status (JWT-protected).
@@ -598,10 +599,11 @@ func (h *AuthHandler) GetQRStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": session.Status})
 }
 
-// ConfirmQRRequest is the body expected for POST /v1/auth/qr/:token/confirm.
+// ConfirmQRRequest is an optional legacy body for POST /v1/auth/qr/:token/confirm.
+// PIN/QR pairing binds to the web user at session creation — credentials are not required.
 type ConfirmQRRequest struct {
-	Email    string `json:"email"    binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // confirmQRSession is a shared helper that finalises a QR session for a given user.
@@ -670,6 +672,68 @@ func (h *AuthHandler) confirmQRSession(ctx context.Context, sessionKey string, u
 	return tokens.AccessToken, mrt, nil
 }
 
+// issueMobileTokens creates a short-lived access token and non-expiring mobile refresh token.
+func (h *AuthHandler) issueMobileTokens(user *models.User) (string, string, error) {
+	tokenBytes := make([]byte, 64)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", "", err
+	}
+	mrt := hex.EncodeToString(tokenBytes)
+
+	mobileToken := models.MobileRefreshToken{
+		UserID: user.ID,
+		Token:  mrt,
+	}
+	if err := h.db.Create(&mobileToken).Error; err != nil {
+		return "", "", err
+	}
+
+	tokens, err := h.authService.GenerateTokens(user)
+	if err != nil {
+		return "", "", err
+	}
+
+	return tokens.AccessToken, mrt, nil
+}
+
+// resolveQRSessionUser loads the account bound to a pending QR session.
+// Legacy sessions without InitiatorUserID may still supply email/password.
+func (h *AuthHandler) resolveQRSessionUser(session *QRSession, req ConfirmQRRequest) (*models.User, int, ErrorResponse) {
+	if session.InitiatorUserID > 0 {
+		var user models.User
+		if err := h.db.First(&user, session.InitiatorUserID).Error; err != nil {
+			return nil, http.StatusInternalServerError, ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to load linked account",
+			}
+		}
+		return &user, 0, ErrorResponse{}
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if req.Email == "" || req.Password == "" {
+		return nil, http.StatusBadRequest, ErrorResponse{
+			Code:    "VALIDATION_ERROR",
+			Message: "This QR session is invalid. Generate a new code from the web dashboard.",
+		}
+	}
+
+	var user models.User
+	if err := h.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		return nil, http.StatusUnauthorized, ErrorResponse{
+			Code:    "INVALID_CREDENTIALS",
+			Message: "Invalid email or password",
+		}
+	}
+	if !user.CheckPassword(req.Password) {
+		return nil, http.StatusUnauthorized, ErrorResponse{
+			Code:    "INVALID_CREDENTIALS",
+			Message: "Invalid email or password",
+		}
+	}
+	return &user, 0, ErrorResponse{}
+}
+
 // ConfirmQR handles POST /v1/auth/qr/:token/confirm (public — mobile QR scan path).
 //
 // Flow:
@@ -714,26 +778,17 @@ func (h *AuthHandler) ConfirmQR(c *gin.Context) {
 		return
 	}
 
-	// --- 2. Validate credentials ---
+	// --- 2. Resolve the web user bound to this session ---
 	var req ConfirmQRRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: err.Error()})
-		return
-	}
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
-
-	var user models.User
-	if err := h.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "INVALID_CREDENTIALS", Message: "Invalid email or password"})
-		return
-	}
-	if !user.CheckPassword(req.Password) {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "INVALID_CREDENTIALS", Message: "Invalid email or password"})
+	_ = c.ShouldBindJSON(&req)
+	user, status, errResp := h.resolveQRSessionUser(&session, req)
+	if user == nil {
+		c.JSON(status, errResp)
 		return
 	}
 
 	// --- 3. Confirm session and issue tokens ---
-	accessToken, refreshToken, err := h.confirmQRSession(ctx, redisKey, &user)
+	accessToken, refreshToken, err := h.confirmQRSession(ctx, redisKey, user)
 	if err != nil {
 		slog.Error("ConfirmQR: failed to confirm session", "error", err, "token", token)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to confirm QR session"})
@@ -770,11 +825,15 @@ func (h *AuthHandler) GenerateQR(c *gin.Context) {
 	pinNum := binary.BigEndian.Uint32(b) % 1000000
 	pin := fmt.Sprintf("%06d", pinNum)
 
+	initiatorUserID, _ := c.Get("userID")
+	webUserID, _ := initiatorUserID.(uint)
+
 	// 3. Store pending session in Redis with 10-minute TTL
 	session := QRSession{
-		Status:    "pending",
-		PIN:       pin,
-		CreatedAt: time.Now().Unix(),
+		Status:          "pending",
+		PIN:             pin,
+		InitiatorUserID: webUserID,
+		CreatedAt:       time.Now().Unix(),
 	}
 	sessionJSON, err := json.Marshal(session)
 	if err != nil {
@@ -947,20 +1006,67 @@ func (h *AuthHandler) AcceptInvite(c *gin.Context) {
 	})
 }
 
+// MobileLogin handles POST /v1/auth/mobile-login (public — email/password on device).
+// Issues a non-expiring mobile refresh token for WhatsApp-style persistent sessions.
+func (h *AuthHandler) MobileLogin(c *gin.Context) {
+	var req LoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:    "VALIDATION_ERROR",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	var user models.User
+	if err := h.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Code:    "INVALID_CREDENTIALS",
+			Message: "Invalid email or password",
+		})
+		return
+	}
+	if !user.CheckPassword(req.Password) {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Code:    "INVALID_CREDENTIALS",
+			Message: "Invalid email or password",
+		})
+		return
+	}
+
+	accessToken, refreshToken, err := h.issueMobileTokens(&user)
+	if err != nil {
+		slog.Error("MobileLogin: failed to issue tokens", "error", err, "userID", user.ID)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to generate authentication tokens",
+		})
+		return
+	}
+
+	slog.Info("Mobile email login", "userID", user.ID)
+	c.JSON(http.StatusOK, AuthResponse{
+		User: user.ToResponse(),
+		Tokens: &services.TokenPair{
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
+		},
+	})
+}
+
 // ConfirmQRByPIN handles POST /v1/auth/qr/pin-confirm (public — mobile PIN path).
-// Body: { pin, email, password }
+// Body: { pin }
 // Looks up the token via qr:pin:<pin>, then delegates to the shared confirmQRSession helper.
 func (h *AuthHandler) ConfirmQRByPIN(c *gin.Context) {
 	var req struct {
-		PIN      string `json:"pin"      binding:"required"`
-		Email    string `json:"email"    binding:"required,email"`
-		Password string `json:"password" binding:"required"`
+		PIN string `json:"pin" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: err.Error()})
 		return
 	}
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	ctx := c.Request.Context()
 	pinKey := "qr:pin:" + req.PIN
@@ -1002,19 +1108,14 @@ func (h *AuthHandler) ConfirmQRByPIN(c *gin.Context) {
 		return
 	}
 
-	// Validate credentials
-	var user models.User
-	if err := h.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "INVALID_CREDENTIALS", Message: "Invalid email or password"})
-		return
-	}
-	if !user.CheckPassword(req.Password) {
-		c.JSON(http.StatusUnauthorized, ErrorResponse{Code: "INVALID_CREDENTIALS", Message: "Invalid email or password"})
+	user, status, errResp := h.resolveQRSessionUser(&session, ConfirmQRRequest{})
+	if user == nil {
+		c.JSON(status, errResp)
 		return
 	}
 
 	// Confirm session and issue tokens
-	accessToken, refreshToken, err := h.confirmQRSession(ctx, redisKey, &user)
+	accessToken, refreshToken, err := h.confirmQRSession(ctx, redisKey, user)
 	if err != nil {
 		slog.Error("ConfirmQRByPIN: failed to confirm session", "error", err, "token", token)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to confirm QR session"})

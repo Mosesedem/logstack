@@ -7,17 +7,17 @@ part 'alert.g.dart';
 @freezed
 class AlertRule with _$AlertRule {
   const factory AlertRule({
-    required String id,
+    required int id,
     required String projectId,
     required String name,
-    required LogLevel level,
-    required int threshold,
-    required int window,
-    required int cooldown,
-    required bool emailEnabled,
-    required bool pushEnabled,
-    required bool enabled,
+    @Default([]) List<String> triggerPatterns,
+    LogLevel? triggerLevel,
+    @Default([]) List<String> channels,
+    required String recipient,
+    @Default(15) int cooldownMinutes,
+    @Default(true) bool enabled,
     required DateTime createdAt,
+    DateTime? updatedAt,
   }) = _AlertRule;
 
   factory AlertRule.fromJson(Map<String, dynamic> json) =>
@@ -27,13 +27,13 @@ class AlertRule with _$AlertRule {
 @freezed
 class AlertHistory with _$AlertHistory {
   const factory AlertHistory({
-    required String id,
-    required String ruleId,
-    required String ruleName,
-    required LogLevel level,
-    required String message,
-    required int logCount,
-    required DateTime triggeredAt,
+    required int id,
+    required int alertRuleId,
+    int? logId,
+    required DateTime sentAt,
+    required String status,
+    String? errorMessage,
+    Log? log,
   }) = _AlertHistory;
 
   factory AlertHistory.fromJson(Map<String, dynamic> json) =>

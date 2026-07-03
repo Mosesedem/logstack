@@ -7,9 +7,10 @@ part 'project.g.dart';
 class Project with _$Project {
   const factory Project({
     required String id,
-    required String userId,
+    required int ownerId,
     required String name,
-    required String apiKey,
+    String? apiKey,
+    String? environment,
     required DateTime createdAt,
   }) = _Project;
 

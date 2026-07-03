@@ -20,17 +20,17 @@ AlertRule _$AlertRuleFromJson(Map<String, dynamic> json) {
 
 /// @nodoc
 mixin _$AlertRule {
-  String get id => throw _privateConstructorUsedError;
+  int get id => throw _privateConstructorUsedError;
   String get projectId => throw _privateConstructorUsedError;
   String get name => throw _privateConstructorUsedError;
-  LogLevel get level => throw _privateConstructorUsedError;
-  int get threshold => throw _privateConstructorUsedError;
-  int get window => throw _privateConstructorUsedError;
-  int get cooldown => throw _privateConstructorUsedError;
-  bool get emailEnabled => throw _privateConstructorUsedError;
-  bool get pushEnabled => throw _privateConstructorUsedError;
+  List<String> get triggerPatterns => throw _privateConstructorUsedError;
+  LogLevel? get triggerLevel => throw _privateConstructorUsedError;
+  List<String> get channels => throw _privateConstructorUsedError;
+  String get recipient => throw _privateConstructorUsedError;
+  int get cooldownMinutes => throw _privateConstructorUsedError;
   bool get enabled => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
+  DateTime? get updatedAt => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -44,17 +44,17 @@ abstract class $AlertRuleCopyWith<$Res> {
       _$AlertRuleCopyWithImpl<$Res, AlertRule>;
   @useResult
   $Res call(
-      {String id,
+      {int id,
       String projectId,
       String name,
-      LogLevel level,
-      int threshold,
-      int window,
-      int cooldown,
-      bool emailEnabled,
-      bool pushEnabled,
+      List<String> triggerPatterns,
+      LogLevel? triggerLevel,
+      List<String> channels,
+      String recipient,
+      int cooldownMinutes,
       bool enabled,
-      DateTime createdAt});
+      DateTime createdAt,
+      DateTime? updatedAt});
 }
 
 /// @nodoc
@@ -73,20 +73,20 @@ class _$AlertRuleCopyWithImpl<$Res, $Val extends AlertRule>
     Object? id = null,
     Object? projectId = null,
     Object? name = null,
-    Object? level = null,
-    Object? threshold = null,
-    Object? window = null,
-    Object? cooldown = null,
-    Object? emailEnabled = null,
-    Object? pushEnabled = null,
+    Object? triggerPatterns = null,
+    Object? triggerLevel = freezed,
+    Object? channels = null,
+    Object? recipient = null,
+    Object? cooldownMinutes = null,
     Object? enabled = null,
     Object? createdAt = null,
+    Object? updatedAt = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
           ? _value.id
           : id // ignore: cast_nullable_to_non_nullable
-              as String,
+              as int,
       projectId: null == projectId
           ? _value.projectId
           : projectId // ignore: cast_nullable_to_non_nullable
@@ -95,30 +95,26 @@ class _$AlertRuleCopyWithImpl<$Res, $Val extends AlertRule>
           ? _value.name
           : name // ignore: cast_nullable_to_non_nullable
               as String,
-      level: null == level
-          ? _value.level
-          : level // ignore: cast_nullable_to_non_nullable
-              as LogLevel,
-      threshold: null == threshold
-          ? _value.threshold
-          : threshold // ignore: cast_nullable_to_non_nullable
+      triggerPatterns: null == triggerPatterns
+          ? _value.triggerPatterns
+          : triggerPatterns // ignore: cast_nullable_to_non_nullable
+              as List<String>,
+      triggerLevel: freezed == triggerLevel
+          ? _value.triggerLevel
+          : triggerLevel // ignore: cast_nullable_to_non_nullable
+              as LogLevel?,
+      channels: null == channels
+          ? _value.channels
+          : channels // ignore: cast_nullable_to_non_nullable
+              as List<String>,
+      recipient: null == recipient
+          ? _value.recipient
+          : recipient // ignore: cast_nullable_to_non_nullable
+              as String,
+      cooldownMinutes: null == cooldownMinutes
+          ? _value.cooldownMinutes
+          : cooldownMinutes // ignore: cast_nullable_to_non_nullable
               as int,
-      window: null == window
-          ? _value.window
-          : window // ignore: cast_nullable_to_non_nullable
-              as int,
-      cooldown: null == cooldown
-          ? _value.cooldown
-          : cooldown // ignore: cast_nullable_to_non_nullable
-              as int,
-      emailEnabled: null == emailEnabled
-          ? _value.emailEnabled
-          : emailEnabled // ignore: cast_nullable_to_non_nullable
-              as bool,
-      pushEnabled: null == pushEnabled
-          ? _value.pushEnabled
-          : pushEnabled // ignore: cast_nullable_to_non_nullable
-              as bool,
       enabled: null == enabled
           ? _value.enabled
           : enabled // ignore: cast_nullable_to_non_nullable
@@ -127,6 +123,10 @@ class _$AlertRuleCopyWithImpl<$Res, $Val extends AlertRule>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      updatedAt: freezed == updatedAt
+          ? _value.updatedAt
+          : updatedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
     ) as $Val);
   }
 }
@@ -140,17 +140,17 @@ abstract class _$$AlertRuleImplCopyWith<$Res>
   @override
   @useResult
   $Res call(
-      {String id,
+      {int id,
       String projectId,
       String name,
-      LogLevel level,
-      int threshold,
-      int window,
-      int cooldown,
-      bool emailEnabled,
-      bool pushEnabled,
+      List<String> triggerPatterns,
+      LogLevel? triggerLevel,
+      List<String> channels,
+      String recipient,
+      int cooldownMinutes,
       bool enabled,
-      DateTime createdAt});
+      DateTime createdAt,
+      DateTime? updatedAt});
 }
 
 /// @nodoc
@@ -167,20 +167,20 @@ class __$$AlertRuleImplCopyWithImpl<$Res>
     Object? id = null,
     Object? projectId = null,
     Object? name = null,
-    Object? level = null,
-    Object? threshold = null,
-    Object? window = null,
-    Object? cooldown = null,
-    Object? emailEnabled = null,
-    Object? pushEnabled = null,
+    Object? triggerPatterns = null,
+    Object? triggerLevel = freezed,
+    Object? channels = null,
+    Object? recipient = null,
+    Object? cooldownMinutes = null,
     Object? enabled = null,
     Object? createdAt = null,
+    Object? updatedAt = freezed,
   }) {
     return _then(_$AlertRuleImpl(
       id: null == id
           ? _value.id
           : id // ignore: cast_nullable_to_non_nullable
-              as String,
+              as int,
       projectId: null == projectId
           ? _value.projectId
           : projectId // ignore: cast_nullable_to_non_nullable
@@ -189,30 +189,26 @@ class __$$AlertRuleImplCopyWithImpl<$Res>
           ? _value.name
           : name // ignore: cast_nullable_to_non_nullable
               as String,
-      level: null == level
-          ? _value.level
-          : level // ignore: cast_nullable_to_non_nullable
-              as LogLevel,
-      threshold: null == threshold
-          ? _value.threshold
-          : threshold // ignore: cast_nullable_to_non_nullable
+      triggerPatterns: null == triggerPatterns
+          ? _value._triggerPatterns
+          : triggerPatterns // ignore: cast_nullable_to_non_nullable
+              as List<String>,
+      triggerLevel: freezed == triggerLevel
+          ? _value.triggerLevel
+          : triggerLevel // ignore: cast_nullable_to_non_nullable
+              as LogLevel?,
+      channels: null == channels
+          ? _value._channels
+          : channels // ignore: cast_nullable_to_non_nullable
+              as List<String>,
+      recipient: null == recipient
+          ? _value.recipient
+          : recipient // ignore: cast_nullable_to_non_nullable
+              as String,
+      cooldownMinutes: null == cooldownMinutes
+          ? _value.cooldownMinutes
+          : cooldownMinutes // ignore: cast_nullable_to_non_nullable
               as int,
-      window: null == window
-          ? _value.window
-          : window // ignore: cast_nullable_to_non_nullable
-              as int,
-      cooldown: null == cooldown
-          ? _value.cooldown
-          : cooldown // ignore: cast_nullable_to_non_nullable
-              as int,
-      emailEnabled: null == emailEnabled
-          ? _value.emailEnabled
-          : emailEnabled // ignore: cast_nullable_to_non_nullable
-              as bool,
-      pushEnabled: null == pushEnabled
-          ? _value.pushEnabled
-          : pushEnabled // ignore: cast_nullable_to_non_nullable
-              as bool,
       enabled: null == enabled
           ? _value.enabled
           : enabled // ignore: cast_nullable_to_non_nullable
@@ -221,6 +217,10 @@ class __$$AlertRuleImplCopyWithImpl<$Res>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      updatedAt: freezed == updatedAt
+          ? _value.updatedAt
+          : updatedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
     ));
   }
 }
@@ -232,44 +232,62 @@ class _$AlertRuleImpl implements _AlertRule {
       {required this.id,
       required this.projectId,
       required this.name,
-      required this.level,
-      required this.threshold,
-      required this.window,
-      required this.cooldown,
-      required this.emailEnabled,
-      required this.pushEnabled,
-      required this.enabled,
-      required this.createdAt});
+      final List<String> triggerPatterns = const [],
+      this.triggerLevel,
+      final List<String> channels = const [],
+      required this.recipient,
+      this.cooldownMinutes = 15,
+      this.enabled = true,
+      required this.createdAt,
+      this.updatedAt})
+      : _triggerPatterns = triggerPatterns,
+        _channels = channels;
 
   factory _$AlertRuleImpl.fromJson(Map<String, dynamic> json) =>
       _$$AlertRuleImplFromJson(json);
 
   @override
-  final String id;
+  final int id;
   @override
   final String projectId;
   @override
   final String name;
+  final List<String> _triggerPatterns;
   @override
-  final LogLevel level;
+  @JsonKey()
+  List<String> get triggerPatterns {
+    if (_triggerPatterns is EqualUnmodifiableListView) return _triggerPatterns;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_triggerPatterns);
+  }
+
   @override
-  final int threshold;
+  final LogLevel? triggerLevel;
+  final List<String> _channels;
   @override
-  final int window;
+  @JsonKey()
+  List<String> get channels {
+    if (_channels is EqualUnmodifiableListView) return _channels;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_channels);
+  }
+
   @override
-  final int cooldown;
+  final String recipient;
   @override
-  final bool emailEnabled;
+  @JsonKey()
+  final int cooldownMinutes;
   @override
-  final bool pushEnabled;
-  @override
+  @JsonKey()
   final bool enabled;
   @override
   final DateTime createdAt;
+  @override
+  final DateTime? updatedAt;
 
   @override
   String toString() {
-    return 'AlertRule(id: $id, projectId: $projectId, name: $name, level: $level, threshold: $threshold, window: $window, cooldown: $cooldown, emailEnabled: $emailEnabled, pushEnabled: $pushEnabled, enabled: $enabled, createdAt: $createdAt)';
+    return 'AlertRule(id: $id, projectId: $projectId, name: $name, triggerPatterns: $triggerPatterns, triggerLevel: $triggerLevel, channels: $channels, recipient: $recipient, cooldownMinutes: $cooldownMinutes, enabled: $enabled, createdAt: $createdAt, updatedAt: $updatedAt)';
   }
 
   @override
@@ -281,19 +299,20 @@ class _$AlertRuleImpl implements _AlertRule {
             (identical(other.projectId, projectId) ||
                 other.projectId == projectId) &&
             (identical(other.name, name) || other.name == name) &&
-            (identical(other.level, level) || other.level == level) &&
-            (identical(other.threshold, threshold) ||
-                other.threshold == threshold) &&
-            (identical(other.window, window) || other.window == window) &&
-            (identical(other.cooldown, cooldown) ||
-                other.cooldown == cooldown) &&
-            (identical(other.emailEnabled, emailEnabled) ||
-                other.emailEnabled == emailEnabled) &&
-            (identical(other.pushEnabled, pushEnabled) ||
-                other.pushEnabled == pushEnabled) &&
+            const DeepCollectionEquality()
+                .equals(other._triggerPatterns, _triggerPatterns) &&
+            (identical(other.triggerLevel, triggerLevel) ||
+                other.triggerLevel == triggerLevel) &&
+            const DeepCollectionEquality().equals(other._channels, _channels) &&
+            (identical(other.recipient, recipient) ||
+                other.recipient == recipient) &&
+            (identical(other.cooldownMinutes, cooldownMinutes) ||
+                other.cooldownMinutes == cooldownMinutes) &&
             (identical(other.enabled, enabled) || other.enabled == enabled) &&
             (identical(other.createdAt, createdAt) ||
-                other.createdAt == createdAt));
+                other.createdAt == createdAt) &&
+            (identical(other.updatedAt, updatedAt) ||
+                other.updatedAt == updatedAt));
   }
 
   @JsonKey(ignore: true)
@@ -303,14 +322,14 @@ class _$AlertRuleImpl implements _AlertRule {
       id,
       projectId,
       name,
-      level,
-      threshold,
-      window,
-      cooldown,
-      emailEnabled,
-      pushEnabled,
+      const DeepCollectionEquality().hash(_triggerPatterns),
+      triggerLevel,
+      const DeepCollectionEquality().hash(_channels),
+      recipient,
+      cooldownMinutes,
       enabled,
-      createdAt);
+      createdAt,
+      updatedAt);
 
   @JsonKey(ignore: true)
   @override
@@ -328,43 +347,43 @@ class _$AlertRuleImpl implements _AlertRule {
 
 abstract class _AlertRule implements AlertRule {
   const factory _AlertRule(
-      {required final String id,
+      {required final int id,
       required final String projectId,
       required final String name,
-      required final LogLevel level,
-      required final int threshold,
-      required final int window,
-      required final int cooldown,
-      required final bool emailEnabled,
-      required final bool pushEnabled,
-      required final bool enabled,
-      required final DateTime createdAt}) = _$AlertRuleImpl;
+      final List<String> triggerPatterns,
+      final LogLevel? triggerLevel,
+      final List<String> channels,
+      required final String recipient,
+      final int cooldownMinutes,
+      final bool enabled,
+      required final DateTime createdAt,
+      final DateTime? updatedAt}) = _$AlertRuleImpl;
 
   factory _AlertRule.fromJson(Map<String, dynamic> json) =
       _$AlertRuleImpl.fromJson;
 
   @override
-  String get id;
+  int get id;
   @override
   String get projectId;
   @override
   String get name;
   @override
-  LogLevel get level;
+  List<String> get triggerPatterns;
   @override
-  int get threshold;
+  LogLevel? get triggerLevel;
   @override
-  int get window;
+  List<String> get channels;
   @override
-  int get cooldown;
+  String get recipient;
   @override
-  bool get emailEnabled;
-  @override
-  bool get pushEnabled;
+  int get cooldownMinutes;
   @override
   bool get enabled;
   @override
   DateTime get createdAt;
+  @override
+  DateTime? get updatedAt;
   @override
   @JsonKey(ignore: true)
   _$$AlertRuleImplCopyWith<_$AlertRuleImpl> get copyWith =>
@@ -377,13 +396,13 @@ AlertHistory _$AlertHistoryFromJson(Map<String, dynamic> json) {
 
 /// @nodoc
 mixin _$AlertHistory {
-  String get id => throw _privateConstructorUsedError;
-  String get ruleId => throw _privateConstructorUsedError;
-  String get ruleName => throw _privateConstructorUsedError;
-  LogLevel get level => throw _privateConstructorUsedError;
-  String get message => throw _privateConstructorUsedError;
-  int get logCount => throw _privateConstructorUsedError;
-  DateTime get triggeredAt => throw _privateConstructorUsedError;
+  int get id => throw _privateConstructorUsedError;
+  int get alertRuleId => throw _privateConstructorUsedError;
+  int? get logId => throw _privateConstructorUsedError;
+  DateTime get sentAt => throw _privateConstructorUsedError;
+  String get status => throw _privateConstructorUsedError;
+  String? get errorMessage => throw _privateConstructorUsedError;
+  Log? get log => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -398,13 +417,15 @@ abstract class $AlertHistoryCopyWith<$Res> {
       _$AlertHistoryCopyWithImpl<$Res, AlertHistory>;
   @useResult
   $Res call(
-      {String id,
-      String ruleId,
-      String ruleName,
-      LogLevel level,
-      String message,
-      int logCount,
-      DateTime triggeredAt});
+      {int id,
+      int alertRuleId,
+      int? logId,
+      DateTime sentAt,
+      String status,
+      String? errorMessage,
+      Log? log});
+
+  $LogCopyWith<$Res>? get log;
 }
 
 /// @nodoc
@@ -421,43 +442,55 @@ class _$AlertHistoryCopyWithImpl<$Res, $Val extends AlertHistory>
   @override
   $Res call({
     Object? id = null,
-    Object? ruleId = null,
-    Object? ruleName = null,
-    Object? level = null,
-    Object? message = null,
-    Object? logCount = null,
-    Object? triggeredAt = null,
+    Object? alertRuleId = null,
+    Object? logId = freezed,
+    Object? sentAt = null,
+    Object? status = null,
+    Object? errorMessage = freezed,
+    Object? log = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
           ? _value.id
           : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      ruleId: null == ruleId
-          ? _value.ruleId
-          : ruleId // ignore: cast_nullable_to_non_nullable
-              as String,
-      ruleName: null == ruleName
-          ? _value.ruleName
-          : ruleName // ignore: cast_nullable_to_non_nullable
-              as String,
-      level: null == level
-          ? _value.level
-          : level // ignore: cast_nullable_to_non_nullable
-              as LogLevel,
-      message: null == message
-          ? _value.message
-          : message // ignore: cast_nullable_to_non_nullable
-              as String,
-      logCount: null == logCount
-          ? _value.logCount
-          : logCount // ignore: cast_nullable_to_non_nullable
               as int,
-      triggeredAt: null == triggeredAt
-          ? _value.triggeredAt
-          : triggeredAt // ignore: cast_nullable_to_non_nullable
+      alertRuleId: null == alertRuleId
+          ? _value.alertRuleId
+          : alertRuleId // ignore: cast_nullable_to_non_nullable
+              as int,
+      logId: freezed == logId
+          ? _value.logId
+          : logId // ignore: cast_nullable_to_non_nullable
+              as int?,
+      sentAt: null == sentAt
+          ? _value.sentAt
+          : sentAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      status: null == status
+          ? _value.status
+          : status // ignore: cast_nullable_to_non_nullable
+              as String,
+      errorMessage: freezed == errorMessage
+          ? _value.errorMessage
+          : errorMessage // ignore: cast_nullable_to_non_nullable
+              as String?,
+      log: freezed == log
+          ? _value.log
+          : log // ignore: cast_nullable_to_non_nullable
+              as Log?,
     ) as $Val);
+  }
+
+  @override
+  @pragma('vm:prefer-inline')
+  $LogCopyWith<$Res>? get log {
+    if (_value.log == null) {
+      return null;
+    }
+
+    return $LogCopyWith<$Res>(_value.log!, (value) {
+      return _then(_value.copyWith(log: value) as $Val);
+    });
   }
 }
 
@@ -470,13 +503,16 @@ abstract class _$$AlertHistoryImplCopyWith<$Res>
   @override
   @useResult
   $Res call(
-      {String id,
-      String ruleId,
-      String ruleName,
-      LogLevel level,
-      String message,
-      int logCount,
-      DateTime triggeredAt});
+      {int id,
+      int alertRuleId,
+      int? logId,
+      DateTime sentAt,
+      String status,
+      String? errorMessage,
+      Log? log});
+
+  @override
+  $LogCopyWith<$Res>? get log;
 }
 
 /// @nodoc
@@ -491,42 +527,42 @@ class __$$AlertHistoryImplCopyWithImpl<$Res>
   @override
   $Res call({
     Object? id = null,
-    Object? ruleId = null,
-    Object? ruleName = null,
-    Object? level = null,
-    Object? message = null,
-    Object? logCount = null,
-    Object? triggeredAt = null,
+    Object? alertRuleId = null,
+    Object? logId = freezed,
+    Object? sentAt = null,
+    Object? status = null,
+    Object? errorMessage = freezed,
+    Object? log = freezed,
   }) {
     return _then(_$AlertHistoryImpl(
       id: null == id
           ? _value.id
           : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      ruleId: null == ruleId
-          ? _value.ruleId
-          : ruleId // ignore: cast_nullable_to_non_nullable
-              as String,
-      ruleName: null == ruleName
-          ? _value.ruleName
-          : ruleName // ignore: cast_nullable_to_non_nullable
-              as String,
-      level: null == level
-          ? _value.level
-          : level // ignore: cast_nullable_to_non_nullable
-              as LogLevel,
-      message: null == message
-          ? _value.message
-          : message // ignore: cast_nullable_to_non_nullable
-              as String,
-      logCount: null == logCount
-          ? _value.logCount
-          : logCount // ignore: cast_nullable_to_non_nullable
               as int,
-      triggeredAt: null == triggeredAt
-          ? _value.triggeredAt
-          : triggeredAt // ignore: cast_nullable_to_non_nullable
+      alertRuleId: null == alertRuleId
+          ? _value.alertRuleId
+          : alertRuleId // ignore: cast_nullable_to_non_nullable
+              as int,
+      logId: freezed == logId
+          ? _value.logId
+          : logId // ignore: cast_nullable_to_non_nullable
+              as int?,
+      sentAt: null == sentAt
+          ? _value.sentAt
+          : sentAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      status: null == status
+          ? _value.status
+          : status // ignore: cast_nullable_to_non_nullable
+              as String,
+      errorMessage: freezed == errorMessage
+          ? _value.errorMessage
+          : errorMessage // ignore: cast_nullable_to_non_nullable
+              as String?,
+      log: freezed == log
+          ? _value.log
+          : log // ignore: cast_nullable_to_non_nullable
+              as Log?,
     ));
   }
 }
@@ -536,34 +572,34 @@ class __$$AlertHistoryImplCopyWithImpl<$Res>
 class _$AlertHistoryImpl implements _AlertHistory {
   const _$AlertHistoryImpl(
       {required this.id,
-      required this.ruleId,
-      required this.ruleName,
-      required this.level,
-      required this.message,
-      required this.logCount,
-      required this.triggeredAt});
+      required this.alertRuleId,
+      this.logId,
+      required this.sentAt,
+      required this.status,
+      this.errorMessage,
+      this.log});
 
   factory _$AlertHistoryImpl.fromJson(Map<String, dynamic> json) =>
       _$$AlertHistoryImplFromJson(json);
 
   @override
-  final String id;
+  final int id;
   @override
-  final String ruleId;
+  final int alertRuleId;
   @override
-  final String ruleName;
+  final int? logId;
   @override
-  final LogLevel level;
+  final DateTime sentAt;
   @override
-  final String message;
+  final String status;
   @override
-  final int logCount;
+  final String? errorMessage;
   @override
-  final DateTime triggeredAt;
+  final Log? log;
 
   @override
   String toString() {
-    return 'AlertHistory(id: $id, ruleId: $ruleId, ruleName: $ruleName, level: $level, message: $message, logCount: $logCount, triggeredAt: $triggeredAt)';
+    return 'AlertHistory(id: $id, alertRuleId: $alertRuleId, logId: $logId, sentAt: $sentAt, status: $status, errorMessage: $errorMessage, log: $log)';
   }
 
   @override
@@ -572,21 +608,20 @@ class _$AlertHistoryImpl implements _AlertHistory {
         (other.runtimeType == runtimeType &&
             other is _$AlertHistoryImpl &&
             (identical(other.id, id) || other.id == id) &&
-            (identical(other.ruleId, ruleId) || other.ruleId == ruleId) &&
-            (identical(other.ruleName, ruleName) ||
-                other.ruleName == ruleName) &&
-            (identical(other.level, level) || other.level == level) &&
-            (identical(other.message, message) || other.message == message) &&
-            (identical(other.logCount, logCount) ||
-                other.logCount == logCount) &&
-            (identical(other.triggeredAt, triggeredAt) ||
-                other.triggeredAt == triggeredAt));
+            (identical(other.alertRuleId, alertRuleId) ||
+                other.alertRuleId == alertRuleId) &&
+            (identical(other.logId, logId) || other.logId == logId) &&
+            (identical(other.sentAt, sentAt) || other.sentAt == sentAt) &&
+            (identical(other.status, status) || other.status == status) &&
+            (identical(other.errorMessage, errorMessage) ||
+                other.errorMessage == errorMessage) &&
+            (identical(other.log, log) || other.log == log));
   }
 
   @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(
-      runtimeType, id, ruleId, ruleName, level, message, logCount, triggeredAt);
+      runtimeType, id, alertRuleId, logId, sentAt, status, errorMessage, log);
 
   @JsonKey(ignore: true)
   @override
@@ -604,31 +639,31 @@ class _$AlertHistoryImpl implements _AlertHistory {
 
 abstract class _AlertHistory implements AlertHistory {
   const factory _AlertHistory(
-      {required final String id,
-      required final String ruleId,
-      required final String ruleName,
-      required final LogLevel level,
-      required final String message,
-      required final int logCount,
-      required final DateTime triggeredAt}) = _$AlertHistoryImpl;
+      {required final int id,
+      required final int alertRuleId,
+      final int? logId,
+      required final DateTime sentAt,
+      required final String status,
+      final String? errorMessage,
+      final Log? log}) = _$AlertHistoryImpl;
 
   factory _AlertHistory.fromJson(Map<String, dynamic> json) =
       _$AlertHistoryImpl.fromJson;
 
   @override
-  String get id;
+  int get id;
   @override
-  String get ruleId;
+  int get alertRuleId;
   @override
-  String get ruleName;
+  int? get logId;
   @override
-  LogLevel get level;
+  DateTime get sentAt;
   @override
-  String get message;
+  String get status;
   @override
-  int get logCount;
+  String? get errorMessage;
   @override
-  DateTime get triggeredAt;
+  Log? get log;
   @override
   @JsonKey(ignore: true)
   _$$AlertHistoryImplCopyWith<_$AlertHistoryImpl> get copyWith =>

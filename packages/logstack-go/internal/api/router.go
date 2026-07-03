@@ -73,6 +73,7 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		{
 			auth.POST("/signup", authHandler.Signup)
 			auth.POST("/login", authHandler.Login)
+			auth.POST("/mobile-login", authHandler.MobileLogin)
 			auth.POST("/refresh", authHandler.RefreshToken)
 			auth.POST("/mobile-refresh", authHandler.RefreshMobileToken)
 			auth.POST("/forgot-password", authHandler.ForgotPassword)
@@ -142,9 +143,15 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 					projectRoutes.POST("/rotate-key", projectsHandler.RotateAPIKey)
 					
 					// Project logs (for dashboard viewing)
-					projectLogsHandler := handlers.NewProjectLogsHandler(cfg.QueryBuilder)
+					projectLogsHandler := handlers.NewProjectLogsHandler(
+						cfg.QueryBuilder,
+						cfg.DB,
+						cfg.NotificationService,
+					)
 					projectRoutes.GET("/logs", projectLogsHandler.Query)
 					projectRoutes.GET("/logs/analytics", projectLogsHandler.Analytics)
+					projectRoutes.GET("/logs/:logId", projectLogsHandler.GetByID)
+					projectRoutes.POST("/logs/:logId/escalate", projectLogsHandler.Escalate)
 					projectRoutes.PATCH("/archive", projectsHandler.Archive)
 				}
 			}

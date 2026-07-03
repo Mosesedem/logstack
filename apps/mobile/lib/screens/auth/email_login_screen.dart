@@ -2,25 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
-import 'package:logstack_mobile/services/auth_service.dart';
 import 'package:logstack_mobile/services/biometric_service.dart';
 
-class PINLoginScreen extends ConsumerStatefulWidget {
-  const PINLoginScreen({super.key});
+/// Third login path: email + password directly on device (no web pairing).
+class EmailLoginScreen extends ConsumerStatefulWidget {
+  const EmailLoginScreen({super.key});
 
   @override
-  ConsumerState<PINLoginScreen> createState() => _PINLoginScreenState();
+  ConsumerState<EmailLoginScreen> createState() => _EmailLoginScreenState();
 }
 
-class _PINLoginScreenState extends ConsumerState<PINLoginScreen> {
+class _EmailLoginScreenState extends ConsumerState<EmailLoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _pinController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _error;
 
   @override
   void dispose() {
-    _pinController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -31,10 +33,10 @@ class _PINLoginScreenState extends ConsumerState<PINLoginScreen> {
       _error = null;
     });
     try {
-      final authService = ref.read(authServiceProvider);
-      final tokenPair =
-          await authService.confirmQRByPIN(_pinController.text.trim());
-      await ref.read(authProvider.notifier).setTokensFromPair(tokenPair);
+      await ref.read(authProvider.notifier).loginWithEmail(
+            _emailController.text.trim(),
+            _passwordController.text,
+          );
       if (!mounted) return;
       await _maybeOfferBiometric();
       if (mounted) context.go('/');
@@ -82,7 +84,7 @@ class _PINLoginScreenState extends ConsumerState<PINLoginScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Enter PIN'),
+        title: const Text('Sign in with email'),
         leading: BackButton(
           onPressed: () =>
               context.canPop() ? context.pop() : context.go('/login'),
@@ -96,17 +98,17 @@ class _PINLoginScreenState extends ConsumerState<PINLoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 32),
-                Icon(Icons.pin_outlined,
-                    size: 64, color: theme.colorScheme.primary),
                 const SizedBox(height: 16),
                 Text(
-                  'Enter the PIN from your web dashboard',
+                  'Sign in with your Logstack account credentials.',
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
+                const SizedBox(height: 8),
                 Text(
-                  'Open Logstack on the web, click your avatar → "Link Mobile App" to get a 6-digit PIN.',
+                  'Prefer linking from the web? Use Scan QR or Enter PIN on the previous screen.',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
@@ -122,29 +124,43 @@ class _PINLoginScreenState extends ConsumerState<PINLoginScreen> {
                     ),
                     child: Text(
                       _error!,
-                      style:
-                          TextStyle(color: theme.colorScheme.onErrorContainer),
+                      style: TextStyle(color: theme.colorScheme.onErrorContainer),
                     ),
                   ),
                   const SizedBox(height: 16),
                 ],
                 TextFormField(
-                  controller: _pinController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 8,
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.email_outlined),
                   ),
-                  decoration:
-                      const InputDecoration(labelText: 'PIN', counterText: ''),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Enter the 6-digit PIN';
-                    if (v.length != 6) return 'PIN must be exactly 6 digits';
-                    if (!RegExp(r'^\d{6}$').hasMatch(v)) {
-                      return 'PIN must be digits only';
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Enter your email';
+                    }
+                    if (!value.contains('@')) return 'Enter a valid email';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _handleSubmit(),
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: Icon(Icons.lock_outlined),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Enter your password';
+                    }
+                    if (value.length < 8) {
+                      return 'Password must be at least 8 characters';
                     }
                     return null;
                   },
@@ -158,7 +174,7 @@ class _PINLoginScreenState extends ConsumerState<PINLoginScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Link device'),
+                      : const Text('Sign in'),
                 ),
               ],
             ),

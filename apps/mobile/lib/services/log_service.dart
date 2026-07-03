@@ -20,7 +20,6 @@ class LogService {
     int limit = 50,
   }) async {
     final queryParams = <String, dynamic>{
-      'projectId': projectId,
       'offset': offset,
       'limit': limit,
     };
@@ -33,16 +32,19 @@ class LogService {
     }
 
     return await _api.get(
-      '/logs',
+      '/projects/$projectId/logs',
       queryParameters: queryParams,
-      fromJson: (data) => LogsResponse.fromJson(data),
+      fromJson: (data) => LogsResponse.fromJson(data as Map<String, dynamic>),
     );
   }
 
-  Future<Log> getLog(String id) async {
+  Future<Log> getLog({
+    required String projectId,
+    required int id,
+  }) async {
     return await _api.get(
-      '/logs/$id',
-      fromJson: (data) => Log.fromJson(data),
+      '/projects/$projectId/logs/$id',
+      fromJson: (data) => Log.fromJson(data as Map<String, dynamic>),
     );
   }
 }

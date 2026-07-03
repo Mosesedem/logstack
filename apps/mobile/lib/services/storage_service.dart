@@ -11,6 +11,7 @@ class StorageService {
   static const String _userKey = 'user_data';
   static const String _projectKey = 'current_project';
   static const String _refreshTokenKey = 'refresh_token';
+  static const String _biometricEnabledKey = 'biometric_enabled';
 
   static const _secureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -78,5 +79,15 @@ class StorageService {
 
   Future<void> clearRefreshToken() async {
     await _secureStorage.delete(key: _refreshTokenKey);
+  }
+
+  Future<void> setBiometricEnabled(bool enabled) async {
+    final prefs = await _prefs;
+    await prefs.setBool(_biometricEnabledKey, enabled);
+  }
+
+  Future<bool> isBiometricEnabled() async {
+    final prefs = await _prefs;
+    return prefs.getBool(_biometricEnabledKey) ?? false;
   }
 }

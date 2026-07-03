@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -11,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/mosesedem/logstack/internal/models"
 	"github.com/mosesedem/logstack/internal/services"
+	"github.com/mosesedem/logstack/internal/services/notification"
+	"gorm.io/gorm"
 )
 
 type LogsHandler struct {
@@ -125,6 +129,7 @@ func (h *LogsHandler) Query(c *gin.Context) {
 		Offset:    offset,
 		Limit:     limit,
 		Level:     c.Query("level"),
+		Source:    c.Query("source"),
 		Search:    c.Query("search"),
 	}
 
@@ -199,11 +204,19 @@ func (h *LogsHandler) GetByID(c *gin.Context) {
 // ProjectLogsHandler handles log queries from the dashboard (with JWT auth)
 type ProjectLogsHandler struct {
 	queryBuilder *services.QueryBuilder
+	db           *gorm.DB
+	notifier     *notification.Service
 }
 
-func NewProjectLogsHandler(queryBuilder *services.QueryBuilder) *ProjectLogsHandler {
+func NewProjectLogsHandler(
+	queryBuilder *services.QueryBuilder,
+	db *gorm.DB,
+	notifier *notification.Service,
+) *ProjectLogsHandler {
 	return &ProjectLogsHandler{
 		queryBuilder: queryBuilder,
+		db:           db,
+		notifier:     notifier,
 	}
 }
 
@@ -247,6 +260,7 @@ func (h *ProjectLogsHandler) Query(c *gin.Context) {
 		Offset:    offset,
 		Limit:     limit,
 		Level:     c.Query("level"),
+		Source:    c.Query("source"),
 		Search:    c.Query("search"),
 	}
 
@@ -275,4 +289,132 @@ func (h *ProjectLogsHandler) Query(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+// GetByID handles GET /v1/projects/:id/logs/:logId (JWT + project ownership).
+func (h *ProjectLogsHandler) GetByID(c *gin.Context) {
+	projectID := c.MustGet("projectID").(uuid.UUID)
+
+	logID, err := strconv.ParseInt(c.Param("logId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:    "INVALID_ID",
+			Message: "Invalid log ID",
+		})
+		return
+	}
+
+	log, err := h.queryBuilder.GetByID(logID, projectID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Code:    "NOT_FOUND",
+			Message: "Log not found",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, log)
+}
+
+// Escalate handles POST /v1/projects/:id/logs/:logId/escalate
+func (h *ProjectLogsHandler) Escalate(c *gin.Context) {
+	projectID := c.MustGet("projectID").(uuid.UUID)
+	userID := c.MustGet("userID").(uint)
+
+	logID, err := strconv.ParseInt(c.Param("logId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:    "INVALID_ID",
+			Message: "Invalid log ID",
+		})
+		return
+	}
+
+	log, err := h.queryBuilder.GetByID(logID, projectID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Code:    "NOT_FOUND",
+			Message: "Log not found",
+		})
+		return
+	}
+
+	var existing models.LogEscalation
+	findErr := h.db.Where("log_id = ? AND user_id = ?", logID, userID).First(&existing).Error
+	if findErr == nil {
+		c.JSON(http.StatusOK, models.LogEscalationResponse{
+			Escalated:   true,
+			AlreadyDone: true,
+			Message:     "This log was already escalated by you",
+		})
+		return
+	}
+	if findErr != nil && !errors.Is(findErr, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to check escalation status",
+		})
+		return
+	}
+
+	escalation := models.LogEscalation{
+		LogID:     logID,
+		ProjectID: projectID,
+		UserID:    userID,
+	}
+	if err := h.db.Create(&escalation).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to record escalation",
+		})
+		return
+	}
+
+	var project models.Project
+	if err := h.db.Select("owner_id").First(&project, "id = ?", projectID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to resolve project owner",
+		})
+		return
+	}
+
+	notified := []string{}
+	if h.notifier != nil && h.notifier.GetPushNotifier() != nil {
+		title := "Logstack: log escalated"
+		body := fmt.Sprintf("[%s] %s", log.Level, truncateEscalationMessage(log.Message))
+		data := map[string]string{
+			"logId":     fmt.Sprintf("%d", log.ID),
+			"projectId": log.ProjectID.String(),
+			"level":     string(log.Level),
+			"type":      "escalation",
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+		defer cancel()
+		if err := h.notifier.GetPushNotifier().SendDirect(ctx, project.OwnerID, title, body, data); err == nil {
+			notified = append(notified, "push")
+		} else {
+			slog.Warn("escalation push failed", "error", err, "ownerId", project.OwnerID)
+		}
+	}
+
+	c.JSON(http.StatusOK, models.LogEscalationResponse{
+		Escalated: true,
+		Notified:  notified,
+		Message:   escalationSuccessMessage(notified),
+	})
+}
+
+func truncateEscalationMessage(msg string) string {
+	if len(msg) <= 120 {
+		return msg
+	}
+	return msg[:117] + "..."
+}
+
+func escalationSuccessMessage(notified []string) string {
+	if len(notified) == 0 {
+		return "Log escalated. Install the mobile app and enable push on the project owner account for instant alerts."
+	}
+	return fmt.Sprintf("Log escalated. Notified via %s.", notified[0])
 }

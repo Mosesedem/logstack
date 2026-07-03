@@ -7,7 +7,7 @@ part of 'log.dart';
 // **************************************************************************
 
 _$LogImpl _$$LogImplFromJson(Map<String, dynamic> json) => _$LogImpl(
-      id: json['id'] as String,
+      id: (json['id'] as num).toInt(),
       projectId: json['projectId'] as String,
       level: $enumDecode(_$LogLevelEnumMap, json['level']),
       message: json['message'] as String,
@@ -27,10 +27,12 @@ Map<String, dynamic> _$$LogImplToJson(_$LogImpl instance) => <String, dynamic>{
     };
 
 const _$LogLevelEnumMap = {
+  LogLevel.debug: 'debug',
   LogLevel.info: 'info',
   LogLevel.warn: 'warn',
   LogLevel.error: 'error',
   LogLevel.critical: 'critical',
+  LogLevel.fatal: 'fatal',
 };
 
 _$LogsResponseImpl _$$LogsResponseImplFromJson(Map<String, dynamic> json) =>
@@ -40,6 +42,7 @@ _$LogsResponseImpl _$$LogsResponseImplFromJson(Map<String, dynamic> json) =>
           .toList(),
       hasMore: json['hasMore'] as bool,
       offset: (json['offset'] as num).toInt(),
+      total: (json['total'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$$LogsResponseImplToJson(_$LogsResponseImpl instance) =>
@@ -47,4 +50,5 @@ Map<String, dynamic> _$$LogsResponseImplToJson(_$LogsResponseImpl instance) =>
       'logs': instance.logs,
       'hasMore': instance.hasMore,
       'offset': instance.offset,
+      'total': instance.total,
     };

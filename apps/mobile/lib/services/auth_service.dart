@@ -16,78 +16,96 @@ class AuthService {
 
   AuthService(this._api, this._storage);
 
+  /// Email/password login — uses mobile-login for persistent refresh tokens.
   Future<AuthResponse> login({
     required String email,
     required String password,
   }) async {
     final response = await _api.post<Map<String, dynamic>>(
-      '/auth/login',
+      '/auth/mobile-login',
       data: {'email': email, 'password': password},
     );
 
     final authResponse = AuthResponse.fromJson(response);
-    await _storage.setToken(authResponse.token);
-    await _storage.setUserData(jsonEncode(authResponse.user.toJson()));
-
+    await _persistSession(authResponse);
     return authResponse;
   }
 
-  /// Confirms a QR login session.
-  ///
-  /// Calls `POST /auth/qr/:token/confirm` with [email] and [password] credentials.
-  /// Returns a [TokenPair] containing the access and refresh tokens issued to
-  /// the mobile caller.
-  Future<TokenPair> confirmQR(
-    String token,
-    String email,
-    String password,
-  ) async {
+  Future<User> fetchCurrentUser() async {
+    final response = await _api.get<Map<String, dynamic>>('/users/me');
+    final user = User.fromJson(response);
+    await _storage.setUserData(jsonEncode(user.toJson()));
+    return user;
+  }
+
+  Future<void> _persistSession(AuthResponse authResponse) async {
+    await _storage.setToken(authResponse.accessToken);
+    if (authResponse.refreshToken.isNotEmpty) {
+      await _storage.setRefreshToken(authResponse.refreshToken);
+    }
+    await _storage.setUserData(jsonEncode(authResponse.user.toJson()));
+  }
+
+  /// Confirms a QR login session — no credentials; web user is pre-bound.
+  Future<TokenPair> confirmQR(String token) async {
     final response = await _api.post<Map<String, dynamic>>(
       '/auth/qr/$token/confirm',
-      data: {'email': email, 'password': password},
+      data: <String, dynamic>{},
     );
     return TokenPair.fromJson(response);
   }
 
-  /// Confirms a QR link session using a 6-digit PIN instead of scanning.
-  ///
-  /// Calls `POST /auth/qr/pin-confirm` with [pin], [email] and [password].
-  /// Returns a [TokenPair] containing the access and refresh tokens.
-  Future<TokenPair> confirmQRByPIN(
-    String pin,
-    String email,
-    String password,
-  ) async {
+  /// Confirms a QR link session using a 6-digit PIN only.
+  Future<TokenPair> confirmQRByPIN(String pin) async {
     final response = await _api.post<Map<String, dynamic>>(
       '/auth/qr/pin-confirm',
-      data: {'pin': pin, 'email': email, 'password': password},
+      data: {'pin': pin},
     );
     return TokenPair.fromJson(response);
   }
 
-  /// Silently refreshes the access token using the stored [refreshToken].
-  ///
-  /// Calls `POST /auth/mobile-refresh` and returns the new access token string.
   Future<String> refreshAccessToken(String refreshToken) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/auth/refresh',
+      data: {'refreshToken': refreshToken},
+      skipAuthRetry: true,
+    );
+    return (response['accessToken'] ?? response['access_token'] ?? '') as String;
+  }
+
+  Future<String> refreshMobileAccessToken(String refreshToken) async {
     final response = await _api.post<Map<String, dynamic>>(
       '/auth/mobile-refresh',
       data: {'refreshToken': refreshToken},
+      skipAuthRetry: true,
     );
-    return response['accessToken'] as String;
+    return (response['accessToken'] ?? response['access_token'] ?? '') as String;
   }
 
-  /// Revokes the given [refreshToken] on the server (fire-and-forget).
-  ///
-  /// Calls `POST /auth/mobile-logout`. Errors are silently swallowed.
+  Future<String> refreshStoredAccessToken() async {
+    final refreshToken = await _storage.getRefreshToken();
+    if (refreshToken == null) {
+      throw Exception('No refresh token stored');
+    }
+    try {
+      return await refreshMobileAccessToken(refreshToken);
+    } catch (_) {
+      final pair = await _api.post<Map<String, dynamic>>(
+        '/auth/refresh',
+        data: {'refreshToken': refreshToken},
+        skipAuthRetry: true,
+      );
+      return (pair['accessToken'] ?? pair['access_token'] ?? '') as String;
+    }
+  }
+
   Future<void> revokeRefreshToken(String refreshToken) async {
     try {
       await _api.post<void>(
         '/auth/mobile-logout',
         data: {'refreshToken': refreshToken},
       );
-    } catch (_) {
-      // Fire-and-forget — swallow errors
-    }
+    } catch (_) {}
   }
 
   Future<void> logout() async {
@@ -102,6 +120,7 @@ class AuthService {
 
   Future<bool> isAuthenticated() async {
     final token = await _storage.getToken();
-    return token != null;
+    final refresh = await _storage.getRefreshToken();
+    return token != null || refresh != null;
   }
 }

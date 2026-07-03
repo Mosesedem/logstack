@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -105,9 +106,49 @@ func (h *AlertsHandler) Create(c *gin.Context) {
 		return
 	}
 
+	channels := req.Channels
+	if len(channels) == 0 && req.Channel != "" {
+		channels = []string{string(req.Channel)}
+	}
+	if len(channels) == 0 {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:    "VALIDATION_ERROR",
+			Message: "At least one notification channel is required",
+		})
+		return
+	}
+
+	recipient := strings.TrimSpace(req.Recipient)
+	if recipient == "" {
+		for _, ch := range channels {
+			if ch == string(models.AlertChannelEmail) || ch == string(models.AlertChannelWebhook) {
+				c.JSON(http.StatusBadRequest, ErrorResponse{
+					Code:    "VALIDATION_ERROR",
+					Message: "recipient is required for email and webhook channels",
+				})
+				return
+			}
+		}
+		userID := c.MustGet("userID").(uint)
+		var user models.User
+		if err := h.db.Select("email").First(&user, userID).Error; err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Code:    "VALIDATION_ERROR",
+				Message: "recipient is required",
+			})
+			return
+		}
+		recipient = user.Email
+	}
+
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
+	}
+
+	cooldownMinutes := req.CooldownMinutes
+	if cooldownMinutes <= 0 {
+		cooldownMinutes = 15
 	}
 
 	rule := models.AlertRule{
@@ -115,10 +156,11 @@ func (h *AlertsHandler) Create(c *gin.Context) {
 		Name:            req.Name,
 		TriggerPattern:  req.TriggerPattern,
 		TriggerLevel:    req.TriggerLevel,
-		Channel:         req.Channel,
-		Recipient:       req.Recipient,
-		CooldownMinutes: req.CooldownMinutes,
+		Channel:         models.AlertChannel(channels[0]),
+		Recipient:       recipient,
+		CooldownMinutes: cooldownMinutes,
 		Enabled:         enabled,
+		Channels:        datatypes.JSONSlice[string](channels),
 	}
 
 	// Set multi-value fields from request
@@ -126,12 +168,6 @@ func (h *AlertsHandler) Create(c *gin.Context) {
 		rule.TriggerPatterns = datatypes.JSONSlice[string](req.TriggerPatterns)
 		if rule.TriggerPattern == "" {
 			rule.TriggerPattern = req.TriggerPatterns[0]
-		}
-	}
-	if len(req.Channels) > 0 {
-		rule.Channels = datatypes.JSONSlice[string](req.Channels)
-		if rule.Channel == "" {
-			rule.Channel = models.AlertChannel(req.Channels[0])
 		}
 	}
 

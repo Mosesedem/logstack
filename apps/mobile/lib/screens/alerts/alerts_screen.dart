@@ -41,6 +41,22 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen>
       );
     }
 
+    if (alertsState.error != null && alertsState.rules.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(alertsState.error!),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () => ref.read(alertsProvider.notifier).loadAlerts(),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
       children: [
         TabBar(
@@ -97,13 +113,25 @@ class _RulesTab extends ConsumerWidget {
             margin: const EdgeInsets.only(bottom: 12),
             child: ListTile(
               title: Text(rule.name),
-              subtitle: Row(
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  LevelBadge(level: rule.level),
-                  const SizedBox(width: 8),
-                  Text('${rule.threshold}/${rule.window}s'),
+                  if (rule.triggerLevel != null)
+                    Row(
+                      children: [
+                        LevelBadge(level: rule.triggerLevel!),
+                        const SizedBox(width: 8),
+                        Text('${rule.cooldownMinutes}m cooldown'),
+                      ],
+                    ),
+                  if (rule.channels.isNotEmpty)
+                    Text(
+                      rule.channels.join(' · '),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                 ],
               ),
+              isThreeLine: true,
               trailing: Switch(
                 value: rule.enabled,
                 onChanged: (enabled) {
@@ -134,7 +162,7 @@ class _HistoryTab extends ConsumerWidget {
     }
 
     if (history.isEmpty) {
-      return const Center(child: Text('No alerts triggered yet'));
+      return const Center(child: Text('No alert deliveries yet'));
     }
 
     return RefreshIndicator(
@@ -144,21 +172,32 @@ class _HistoryTab extends ConsumerWidget {
         itemCount: history.length,
         itemBuilder: (context, index) {
           final item = history[index];
+          final level = item.log?.level;
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
             child: ListTile(
               leading: Icon(
                 Icons.notifications,
-                color: _getColorForLevel(item.level),
+                color: level != null
+                    ? _getColorForLevel(level)
+                    : Theme.of(context).colorScheme.primary,
               ),
-              title: Text(item.ruleName),
+              title: Text('Rule #${item.alertRuleId}'),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.message),
+                  Text(item.status),
+                  if (item.log?.message != null) Text(item.log!.message),
+                  if (item.errorMessage != null)
+                    Text(
+                      item.errorMessage!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                   const SizedBox(height: 4),
                   Text(
-                    DateFormat('MMM d, yyyy HH:mm').format(item.triggeredAt),
+                    DateFormat('MMM d, yyyy HH:mm').format(item.sentAt),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -173,6 +212,8 @@ class _HistoryTab extends ConsumerWidget {
 
   Color _getColorForLevel(LogLevel level) {
     switch (level) {
+      case LogLevel.debug:
+        return Colors.grey;
       case LogLevel.info:
         return Colors.blue;
       case LogLevel.warn:
@@ -180,6 +221,7 @@ class _HistoryTab extends ConsumerWidget {
       case LogLevel.error:
         return Colors.red;
       case LogLevel.critical:
+      case LogLevel.fatal:
         return Colors.red.shade900;
     }
   }

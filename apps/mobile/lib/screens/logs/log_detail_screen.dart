@@ -1,12 +1,17 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logstack_mobile/models/log.dart';
+import 'package:logstack_mobile/providers/project_provider.dart';
+import 'package:logstack_mobile/services/log_escalation_service.dart';
 import 'package:logstack_mobile/services/log_service.dart';
 import 'package:logstack_mobile/theme/app_theme.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
+import 'package:logstack_mobile/utils/log_share.dart';
 import 'package:logstack_mobile/widgets/level_badge.dart';
+import 'package:share_plus/share_plus.dart';
 
 class LogDetailScreen extends ConsumerStatefulWidget {
   const LogDetailScreen({super.key, required this.logId, this.initialLog});
@@ -22,6 +27,9 @@ class _LogDetailScreenState extends ConsumerState<LogDetailScreen> {
   Log? _log;
   bool _loading = false;
   String? _error;
+  bool _escalating = false;
+  bool _escalated = false;
+  String? _escalationMessage;
 
   @override
   void initState() {
@@ -36,7 +44,14 @@ class _LogDetailScreenState extends ConsumerState<LogDetailScreen> {
       _error = null;
     });
     try {
-      final log = await ref.read(logServiceProvider).getLog(widget.logId);
+      final projectId = ref.read(projectProvider).currentProject?.id;
+      if (projectId == null) {
+        throw Exception('No project selected');
+      }
+      final log = await ref.read(logServiceProvider).getLog(
+            projectId: projectId,
+            id: int.parse(widget.logId),
+          );
       if (mounted) setState(() => _log = log);
     } catch (e) {
       if (mounted) {
@@ -47,11 +62,102 @@ class _LogDetailScreenState extends ConsumerState<LogDetailScreen> {
     }
   }
 
+  Future<void> _shareLog(Log log) async {
+    await Share.share(formatLogForShare(log), subject: 'Logstack log #${log.id}');
+  }
+
+  Future<void> _copyRawJson(Log log) async {
+    await Clipboard.setData(ClipboardData(text: formatLogRawJson(log)));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Raw JSON copied')),
+      );
+    }
+  }
+
+  Future<void> _escalate(Log log) async {
+    if (_escalating || _escalated) return;
+
+    final projectId = ref.read(projectProvider).currentProject?.id;
+    if (projectId == null) return;
+
+    setState(() {
+      _escalating = true;
+      _escalationMessage = null;
+    });
+
+    try {
+      final result = await ref.read(logEscalationServiceProvider).escalate(
+            projectId: projectId,
+            logId: log.id,
+          );
+      if (!mounted) return;
+      setState(() {
+        _escalated = true;
+        _escalationMessage = result.message;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.alreadyDone ? result.message : result.message,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _escalating = false;
+        _escalationMessage = e.toString().replaceAll('Exception: ', '');
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Escalation failed: $_escalationMessage'),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => _escalate(log),
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (mounted) setState(() => _escalating = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Log detail')),
+      appBar: AppBar(
+        title: const Text('Log detail'),
+        actions: [
+          if (_log != null) ...[
+            IconButton(
+              icon: const Icon(Icons.share_outlined),
+              tooltip: 'Share',
+              onPressed: () => _shareLog(_log!),
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy_outlined),
+              tooltip: 'Copy raw JSON',
+              onPressed: () => _copyRawJson(_log!),
+            ),
+          ],
+        ],
+      ),
       body: _buildBody(context),
+      floatingActionButton: _log != null && !_escalated
+          ? FloatingActionButton.extended(
+              onPressed: _escalating ? null : () => _escalate(_log!),
+              icon: _escalating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.priority_high),
+              label: Text(_escalating ? 'Escalating…' : 'Escalate'),
+            )
+          : null,
     );
   }
 
@@ -77,12 +183,48 @@ class _LogDetailScreenState extends ConsumerState<LogDetailScreen> {
     }
 
     final mono = context.logMono;
-    final metadata = log.metadata;
+    final metadata = redactMetadata(log.metadata);
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       children: [
-        LevelBadge(level: log.level),
+        Row(
+          children: [
+            LevelBadge(level: log.level),
+            if (log.source != null && log.source!.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: LogstackColors.surfaceElevated,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: LogstackColors.borderSubtle),
+                ),
+                child: Text(
+                  log.source!,
+                  style: mono.labelSmall?.copyWith(
+                    color: LogstackColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (_escalated) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: LogstackColors.warnAmberBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: LogstackColors.warnAmber.withValues(alpha: 0.4)),
+            ),
+            child: Text(
+              _escalationMessage ?? 'Escalated',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         Text('Message', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 8),
@@ -101,7 +243,6 @@ class _LogDetailScreenState extends ConsumerState<LogDetailScreen> {
         ),
         const SizedBox(height: 16),
         _MetaRow(label: 'Time', value: log.createdAt.toIso8601String()),
-        if (log.source != null) _MetaRow(label: 'Source', value: log.source!),
         const SizedBox(height: 16),
         Text('Metadata', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 8),
@@ -114,7 +255,7 @@ class _LogDetailScreenState extends ConsumerState<LogDetailScreen> {
             border: Border.all(color: LogstackColors.borderSubtle),
           ),
           child: Text(
-            metadata == null || metadata.isEmpty
+            metadata.isEmpty
                 ? '{}'
                 : const JsonEncoder.withIndent('  ').convert(metadata),
             style: mono.bodySmall?.copyWith(color: LogstackColors.textSecondary),

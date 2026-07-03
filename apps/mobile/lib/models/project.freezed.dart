@@ -21,9 +21,10 @@ Project _$ProjectFromJson(Map<String, dynamic> json) {
 /// @nodoc
 mixin _$Project {
   String get id => throw _privateConstructorUsedError;
-  String get userId => throw _privateConstructorUsedError;
+  int get ownerId => throw _privateConstructorUsedError;
   String get name => throw _privateConstructorUsedError;
-  String get apiKey => throw _privateConstructorUsedError;
+  String? get apiKey => throw _privateConstructorUsedError;
+  String? get environment => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -38,9 +39,10 @@ abstract class $ProjectCopyWith<$Res> {
   @useResult
   $Res call(
       {String id,
-      String userId,
+      int ownerId,
       String name,
-      String apiKey,
+      String? apiKey,
+      String? environment,
       DateTime createdAt});
 }
 
@@ -58,9 +60,10 @@ class _$ProjectCopyWithImpl<$Res, $Val extends Project>
   @override
   $Res call({
     Object? id = null,
-    Object? userId = null,
+    Object? ownerId = null,
     Object? name = null,
-    Object? apiKey = null,
+    Object? apiKey = freezed,
+    Object? environment = freezed,
     Object? createdAt = null,
   }) {
     return _then(_value.copyWith(
@@ -68,18 +71,22 @@ class _$ProjectCopyWithImpl<$Res, $Val extends Project>
           ? _value.id
           : id // ignore: cast_nullable_to_non_nullable
               as String,
-      userId: null == userId
-          ? _value.userId
-          : userId // ignore: cast_nullable_to_non_nullable
-              as String,
+      ownerId: null == ownerId
+          ? _value.ownerId
+          : ownerId // ignore: cast_nullable_to_non_nullable
+              as int,
       name: null == name
           ? _value.name
           : name // ignore: cast_nullable_to_non_nullable
               as String,
-      apiKey: null == apiKey
+      apiKey: freezed == apiKey
           ? _value.apiKey
           : apiKey // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
+      environment: freezed == environment
+          ? _value.environment
+          : environment // ignore: cast_nullable_to_non_nullable
+              as String?,
       createdAt: null == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -97,9 +104,10 @@ abstract class _$$ProjectImplCopyWith<$Res> implements $ProjectCopyWith<$Res> {
   @useResult
   $Res call(
       {String id,
-      String userId,
+      int ownerId,
       String name,
-      String apiKey,
+      String? apiKey,
+      String? environment,
       DateTime createdAt});
 }
 
@@ -115,9 +123,10 @@ class __$$ProjectImplCopyWithImpl<$Res>
   @override
   $Res call({
     Object? id = null,
-    Object? userId = null,
+    Object? ownerId = null,
     Object? name = null,
-    Object? apiKey = null,
+    Object? apiKey = freezed,
+    Object? environment = freezed,
     Object? createdAt = null,
   }) {
     return _then(_$ProjectImpl(
@@ -125,18 +134,22 @@ class __$$ProjectImplCopyWithImpl<$Res>
           ? _value.id
           : id // ignore: cast_nullable_to_non_nullable
               as String,
-      userId: null == userId
-          ? _value.userId
-          : userId // ignore: cast_nullable_to_non_nullable
-              as String,
+      ownerId: null == ownerId
+          ? _value.ownerId
+          : ownerId // ignore: cast_nullable_to_non_nullable
+              as int,
       name: null == name
           ? _value.name
           : name // ignore: cast_nullable_to_non_nullable
               as String,
-      apiKey: null == apiKey
+      apiKey: freezed == apiKey
           ? _value.apiKey
           : apiKey // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
+      environment: freezed == environment
+          ? _value.environment
+          : environment // ignore: cast_nullable_to_non_nullable
+              as String?,
       createdAt: null == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -150,9 +163,10 @@ class __$$ProjectImplCopyWithImpl<$Res>
 class _$ProjectImpl implements _Project {
   const _$ProjectImpl(
       {required this.id,
-      required this.userId,
+      required this.ownerId,
       required this.name,
-      required this.apiKey,
+      this.apiKey,
+      this.environment,
       required this.createdAt});
 
   factory _$ProjectImpl.fromJson(Map<String, dynamic> json) =>
@@ -161,17 +175,19 @@ class _$ProjectImpl implements _Project {
   @override
   final String id;
   @override
-  final String userId;
+  final int ownerId;
   @override
   final String name;
   @override
-  final String apiKey;
+  final String? apiKey;
+  @override
+  final String? environment;
   @override
   final DateTime createdAt;
 
   @override
   String toString() {
-    return 'Project(id: $id, userId: $userId, name: $name, apiKey: $apiKey, createdAt: $createdAt)';
+    return 'Project(id: $id, ownerId: $ownerId, name: $name, apiKey: $apiKey, environment: $environment, createdAt: $createdAt)';
   }
 
   @override
@@ -180,17 +196,19 @@ class _$ProjectImpl implements _Project {
         (other.runtimeType == runtimeType &&
             other is _$ProjectImpl &&
             (identical(other.id, id) || other.id == id) &&
-            (identical(other.userId, userId) || other.userId == userId) &&
+            (identical(other.ownerId, ownerId) || other.ownerId == ownerId) &&
             (identical(other.name, name) || other.name == name) &&
             (identical(other.apiKey, apiKey) || other.apiKey == apiKey) &&
+            (identical(other.environment, environment) ||
+                other.environment == environment) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode =>
-      Object.hash(runtimeType, id, userId, name, apiKey, createdAt);
+  int get hashCode => Object.hash(
+      runtimeType, id, ownerId, name, apiKey, environment, createdAt);
 
   @JsonKey(ignore: true)
   @override
@@ -209,9 +227,10 @@ class _$ProjectImpl implements _Project {
 abstract class _Project implements Project {
   const factory _Project(
       {required final String id,
-      required final String userId,
+      required final int ownerId,
       required final String name,
-      required final String apiKey,
+      final String? apiKey,
+      final String? environment,
       required final DateTime createdAt}) = _$ProjectImpl;
 
   factory _Project.fromJson(Map<String, dynamic> json) = _$ProjectImpl.fromJson;
@@ -219,11 +238,13 @@ abstract class _Project implements Project {
   @override
   String get id;
   @override
-  String get userId;
+  int get ownerId;
   @override
   String get name;
   @override
-  String get apiKey;
+  String? get apiKey;
+  @override
+  String? get environment;
   @override
   DateTime get createdAt;
   @override

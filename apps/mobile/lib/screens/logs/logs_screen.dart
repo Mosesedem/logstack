@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -17,11 +19,22 @@ class LogsScreen extends ConsumerStatefulWidget {
 
 class _LogsScreenState extends ConsumerState<LogsScreen> {
   final _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+      ref.read(logsProvider.notifier).setSearchQuery(
+            query.trim().isEmpty ? null : query.trim(),
+          );
+    });
   }
 
   @override
@@ -42,7 +55,10 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
               hintText: 'Search logs…',
               prefixIcon: Icon(Icons.search, size: 20),
             ),
-            onSubmitted: (q) => ref.read(logsProvider.notifier).setSearchQuery(q),
+            onChanged: _onSearchChanged,
+            onSubmitted: (q) => ref.read(logsProvider.notifier).setSearchQuery(
+                  q.trim().isEmpty ? null : q.trim(),
+                ),
           ),
         ),
         Expanded(child: _buildBody(logsState)),
@@ -68,10 +84,13 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
     }
 
     if (logsState.logs.isEmpty) {
-      return const EmptyState(
-        icon: Icons.terminal,
-        title: 'No logs yet',
-        subtitle: 'Send logs from your SDK or wait for the live stream.',
+      final searching = logsState.searchQuery?.isNotEmpty == true;
+      return EmptyState(
+        icon: searching ? Icons.search_off : Icons.terminal,
+        title: searching ? 'No matching logs' : 'No logs yet',
+        subtitle: searching
+            ? 'Try a different search or clear filters.'
+            : 'Send logs from your SDK or wait for the live stream.',
       );
     }
 
