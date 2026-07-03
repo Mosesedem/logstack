@@ -1,11 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:logstack_mobile/services/app_lock_service.dart';
+import 'package:logstack_mobile/services/storage_service.dart';
 
-/// Tracks whether the signed-in user must configure app PIN before using the shell.
+/// Post-login security gate — PIN/biometrics only after the user signs in.
 final securityProvider =
     StateNotifierProvider<SecurityNotifier, SecurityState>((ref) {
-  final lock = ref.watch(appLockServiceProvider);
-  return SecurityNotifier(lock);
+  final storage = ref.watch(storageServiceProvider);
+  return SecurityNotifier(storage);
 });
 
 class SecurityState {
@@ -26,21 +26,27 @@ class SecurityState {
 }
 
 class SecurityNotifier extends StateNotifier<SecurityState> {
-  SecurityNotifier(this._lock) : super(const SecurityState()) {
-    refresh();
-  }
+  SecurityNotifier(this._storage) : super(const SecurityState());
 
-  final AppLockService _lock;
+  final StorageService _storage;
 
-  Future<void> refresh() async {
+  Future<void> refresh({required bool isAuthenticated}) async {
     state = state.copyWith(isLoading: true);
-    final mode = await _lock.getLockMode();
-    final hasPin = await _lock.hasPin();
-    final needsSetup = mode == AppLockMode.immediate && !hasPin;
-    state = SecurityState(isLoading: false, needsSetup: needsSetup);
+    if (!isAuthenticated) {
+      state = const SecurityState(isLoading: false, needsSetup: false);
+      return;
+    }
+    final complete = await _storage.isSessionSecurityComplete();
+    state = SecurityState(isLoading: false, needsSetup: !complete);
   }
 
   Future<void> markConfigured() async {
+    await _storage.setSessionSecurityComplete(true);
     state = const SecurityState(isLoading: false, needsSetup: false);
+  }
+
+  Future<void> resetForNewLogin() async {
+    await _storage.setSessionSecurityComplete(false);
+    state = const SecurityState(isLoading: false, needsSetup: true);
   }
 }

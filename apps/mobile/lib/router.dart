@@ -52,8 +52,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final isAuthenticated = authState.isAuthenticated;
 
-      if (!isAuthenticated && !isAuthRoute && !isSecurityRoute) {
-        return '/login';
+      if (!isAuthenticated) {
+        if (isSecurityRoute) return '/login';
+        if (!isAuthRoute) return '/login';
       }
 
       if (isAuthenticated && security.needsSetup && !isSecurityRoute) {
@@ -123,7 +124,14 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 
   ref.listen(onboardingProvider, (_, __) => router.refresh());
-  ref.listen(authProvider, (_, __) => router.refresh());
+  ref.listen(authProvider, (prev, next) {
+    if (!next.isLoading) {
+      ref
+          .read(securityProvider.notifier)
+          .refresh(isAuthenticated: next.isAuthenticated);
+    }
+    router.refresh();
+  });
   ref.listen(securityProvider, (_, __) => router.refresh());
   ref.onDispose(router.dispose);
   return router;

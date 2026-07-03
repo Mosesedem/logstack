@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:logstack_mobile/models/log.dart';
 import 'package:logstack_mobile/providers/logs_provider.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/connection_banner.dart';
 import 'package:logstack_mobile/widgets/empty_state.dart';
 import 'package:logstack_mobile/widgets/loading_states.dart';
 import 'package:logstack_mobile/widgets/log_card.dart';
+import 'package:logstack_mobile/widgets/log_level_filter_bar.dart';
 
 class LogsScreen extends ConsumerStatefulWidget {
   const LogsScreen({super.key});
@@ -63,6 +63,13 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
                 ),
           ),
         ),
+        const SizedBox(height: 10),
+        LogLevelFilterBar(
+          selected: logsState.levelFilter,
+          onSelected: (level) =>
+              ref.read(logsProvider.notifier).setLevelFilter(level),
+        ),
+        const SizedBox(height: 8),
         Expanded(child: _buildBody(logsState)),
       ],
     );
@@ -132,18 +139,8 @@ class LogsScreenActions {
     return [
       IconButton(
         icon: const Icon(Icons.refresh),
+        tooltip: 'Refresh logs',
         onPressed: () => ref.read(logsProvider.notifier).loadLogs(),
-      ),
-      PopupMenuButton<LogLevel?>(
-        icon: const Icon(Icons.filter_list),
-        onSelected: (level) => ref.read(logsProvider.notifier).setLevelFilter(level),
-        itemBuilder: (context) => const [
-          PopupMenuItem(value: null, child: Text('All levels')),
-          PopupMenuItem(value: LogLevel.info, child: Text('Info')),
-          PopupMenuItem(value: LogLevel.warn, child: Text('Warn')),
-          PopupMenuItem(value: LogLevel.error, child: Text('Error')),
-          PopupMenuItem(value: LogLevel.critical, child: Text('Critical')),
-        ],
       ),
     ];
   }

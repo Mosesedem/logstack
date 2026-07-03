@@ -15,6 +15,7 @@ class StorageService {
   static const String _appLockModeKey = 'app_lock_mode';
   static const String _appPinHashKey = 'app_pin_hash';
   static const String _onboardingCompleteKey = 'onboarding_complete';
+  static const String _sessionSecurityCompleteKey = 'session_security_complete';
 
   static const _secureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -77,6 +78,7 @@ class StorageService {
     if (lockMode != null) {
       await prefs.setString(_appLockModeKey, lockMode);
     }
+    // session_security_complete intentionally not restored — re-prompt after next login
 
     await _secureStorage.delete(key: _refreshTokenKey);
     await _secureStorage.delete(key: _tokenKey);
@@ -145,5 +147,16 @@ class StorageService {
   Future<void> setOnboardingComplete(bool complete) async {
     final prefs = await _prefs;
     await prefs.setBool(_onboardingCompleteKey, complete);
+  }
+
+  /// True once the user has completed the post-login security gate this session.
+  Future<bool> isSessionSecurityComplete() async {
+    final prefs = await _prefs;
+    return prefs.getBool(_sessionSecurityCompleteKey) ?? false;
+  }
+
+  Future<void> setSessionSecurityComplete(bool complete) async {
+    final prefs = await _prefs;
+    await prefs.setBool(_sessionSecurityCompleteKey, complete);
   }
 }

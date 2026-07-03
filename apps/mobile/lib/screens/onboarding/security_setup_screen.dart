@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:logstack_mobile/providers/auth_provider.dart';
-import 'package:logstack_mobile/providers/onboarding_provider.dart';
 import 'package:logstack_mobile/providers/security_provider.dart';
 import 'package:logstack_mobile/services/app_lock_service.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
@@ -38,7 +36,6 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
   String? _pinHint;
   bool _biometricAvailable = false;
   bool _saving = false;
-  bool _skipLockChoice = false;
 
   @override
   void initState() {
@@ -55,22 +52,13 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
     ]).animate(CurvedAnimation(parent: _shakeController, curve: Curves.easeOut));
 
     _step = _SecurityStep.chooseProtection;
-    _bootstrap();
+    _loadBiometrics();
   }
 
-  Future<void> _bootstrap() async {
+  Future<void> _loadBiometrics() async {
     final lock = ref.read(appLockServiceProvider);
-    final signedIn = ref.read(authProvider).isAuthenticated;
-    final biometrics = await lock.isBiometricAvailable();
-    final savedMode = await lock.getLockMode();
-
-    if (!mounted) return;
-    setState(() {
-      _biometricAvailable = biometrics;
-      _lockMode = savedMode;
-      _skipLockChoice = signedIn;
-      _step = signedIn ? _SecurityStep.createPin : _SecurityStep.chooseProtection;
-    });
+    final available = await lock.isBiometricAvailable();
+    if (mounted) setState(() => _biometricAvailable = available);
   }
 
   @override
@@ -84,17 +72,16 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
       case _SecurityStep.chooseProtection:
         return 0;
       case _SecurityStep.createPin:
-        return _skipLockChoice ? 0 : 1;
+        return 1;
       case _SecurityStep.confirmPin:
-        return _skipLockChoice ? 1 : 2;
+        return 2;
       case _SecurityStep.biometrics:
-        return _skipLockChoice ? 2 : 3;
       case _SecurityStep.done:
-        return _skipLockChoice ? 2 : 3;
+        return 3;
     }
   }
 
-  int get _progressTotal => _skipLockChoice ? 3 : 4;
+  static const _progressTotal = 4;
 
   void _goTo(_SecurityStep step) {
     setState(() {
@@ -194,10 +181,33 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
   }
 
   Future<void> _chooseNoLock() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Skip app lock?'),
+        content: const Text(
+          'Without a PIN, anyone with access to this device can view your '
+          'logs until you sign out.\n\nYou can enable protection later in Settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Go back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Stay open'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
     setState(() => _saving = true);
     final lock = ref.read(appLockServiceProvider);
     await lock.setLockMode(AppLockMode.never);
     await lock.clearPin();
+    await lock.setBiometricEnabled(false);
     if (!mounted) return;
     setState(() => _saving = false);
     await _completeFlow();
@@ -215,15 +225,9 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
     await Future.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
 
-    final onboarding = ref.read(onboardingProvider);
-    if (!onboarding.isComplete) {
-      await ref.read(onboardingProvider.notifier).markComplete();
-    }
     await ref.read(securityProvider.notifier).markConfigured();
-
     if (!mounted) return;
-    final signedIn = ref.read(authProvider).isAuthenticated;
-    context.go(signedIn ? '/' : '/login');
+    context.go('/');
   }
 
   void _back() {
@@ -232,10 +236,8 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
         _pin = '';
         _goTo(_SecurityStep.createPin);
       case _SecurityStep.createPin:
-        if (!_skipLockChoice) {
-          _draftPin = '';
-          _goTo(_SecurityStep.chooseProtection);
-        }
+        _draftPin = '';
+        _goTo(_SecurityStep.chooseProtection);
       default:
         break;
     }
@@ -249,8 +251,6 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
 
   @override
   Widget build(BuildContext context) {
-    final signedIn = ref.watch(authProvider).isAuthenticated;
-
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -282,7 +282,7 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
                   },
                   child: KeyedSubtree(
                     key: ValueKey(_step),
-                    child: _buildStep(context, signedIn),
+                    child: _buildStep(context),
                   ),
                 ),
               ),
@@ -293,7 +293,7 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
     );
   }
 
-  Widget _buildStep(BuildContext context, bool signedIn) {
+  Widget _buildStep(BuildContext context) {
     switch (_step) {
       case _SecurityStep.chooseProtection:
         return _ChooseProtectionStep(
@@ -305,7 +305,6 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
       case _SecurityStep.confirmPin:
         return _PinStep(
           isConfirm: _step == _SecurityStep.confirmPin,
-          signedIn: signedIn,
           filledCount: _filledCount,
           error: _error,
           hint: _pinHint,
@@ -327,8 +326,7 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen>
   }
 
   bool get _canGoBack =>
-      _step == _SecurityStep.confirmPin ||
-      (_step == _SecurityStep.createPin && !_skipLockChoice);
+      _step == _SecurityStep.confirmPin || _step == _SecurityStep.createPin;
 }
 
 // ── Step widgets ─────────────────────────────────────────────────────────────
@@ -535,7 +533,6 @@ class _ProtectionCard extends StatelessWidget {
 class _PinStep extends StatelessWidget {
   const _PinStep({
     required this.isConfirm,
-    required this.signedIn,
     required this.filledCount,
     required this.error,
     required this.hint,
@@ -547,7 +544,6 @@ class _PinStep extends StatelessWidget {
   });
 
   final bool isConfirm;
-  final bool signedIn;
   final int filledCount;
   final String? error;
   final String? hint;
@@ -581,7 +577,7 @@ class _PinStep extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Text(
-          isConfirm ? 'Confirm your PIN' : _pinTitle(signedIn),
+          isConfirm ? 'Confirm your PIN' : 'Choose a 4-digit PIN',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w600,
@@ -631,10 +627,6 @@ class _PinStep extends StatelessWidget {
     );
   }
 
-  String _pinTitle(bool signedIn) {
-    if (signedIn) return 'Create a new PIN';
-    return 'Choose a 4-digit PIN';
-  }
 }
 
 class _HintBanner extends StatelessWidget {

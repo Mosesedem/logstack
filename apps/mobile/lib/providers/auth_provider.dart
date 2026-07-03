@@ -35,7 +35,7 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
     apiClient,
     cacheService,
     appLock,
-    () => ref.read(securityProvider.notifier).refresh(),
+    () => ref.read(securityProvider.notifier).resetForNewLogin(),
   );
 });
 
@@ -142,7 +142,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
           await _appLock.setBiometricEnabled(false);
           await _storage.clearSession();
           state = AuthState(pushStatus: _initialPushStatus());
-          await _onSecurityChanged();
           return;
         }
         if (refreshed == _RefreshResult.offline) {
@@ -249,9 +248,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       email: email,
       password: password,
     );
+    await _onSecurityChanged();
     state = AuthState(user: response.user, hasPersistedSession: true);
     _listenForFcmToken();
-    await _onSecurityChanged();
   }
 
   Future<void> logout() async {
@@ -275,7 +274,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _appLock.setBiometricEnabled(false);
     await _authService.logout();
     state = AuthState(pushStatus: _initialPushStatus());
-    await _onSecurityChanged();
   }
 
   void _listenForFcmToken() {
@@ -384,9 +382,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (_) {
       user = await _authService.getCurrentUser();
     }
+    await _onSecurityChanged();
     state = AuthState(user: user, hasPersistedSession: true);
     _listenForFcmToken();
-    await _onSecurityChanged();
   }
 
   @visibleForTesting

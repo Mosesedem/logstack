@@ -1,27 +1,35 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logstack_mobile/firebase_options.dart';
+import 'package:logstack_mobile/providers/onboarding_provider.dart';
 import 'package:logstack_mobile/services/notification_service.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/app_logo.dart';
 import 'package:logstack_mobile/widgets/loading_states.dart';
 
-class PushPermissionScreen extends StatefulWidget {
+class PushPermissionScreen extends ConsumerStatefulWidget {
   const PushPermissionScreen({super.key});
 
   @override
-  State<PushPermissionScreen> createState() => _PushPermissionScreenState();
+  ConsumerState<PushPermissionScreen> createState() =>
+      _PushPermissionScreenState();
 }
 
-class _PushPermissionScreenState extends State<PushPermissionScreen> {
+class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
   bool _requesting = false;
   bool _declined = false;
   String? _statusMessage;
 
+  Future<void> _finishOnboarding() async {
+    await ref.read(onboardingProvider.notifier).markComplete();
+    if (mounted) context.go('/login');
+  }
+
   Future<void> _requestPermission() async {
     if (!DefaultFirebaseOptions.isConfigured) {
-      if (mounted) context.go('/onboarding/security');
+      await _finishOnboarding();
       return;
     }
 
@@ -38,7 +46,7 @@ class _PushPermissionScreenState extends State<PushPermissionScreen> {
     if (settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional) {
       await NotificationService.instance.completeSetupAfterPermission();
-      if (mounted) context.go('/onboarding/security');
+      await _finishOnboarding();
       return;
     }
 
