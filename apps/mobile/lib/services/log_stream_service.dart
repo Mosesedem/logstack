@@ -23,6 +23,8 @@ class LogStreamService {
   Timer? _reconnectTimer;
   String? _projectId;
   int _attempt = 0;
+  bool _connecting = false;
+  int _connectGeneration = 0;
 
   final _connectionController = StreamController<bool>.broadcast();
   final _logController = StreamController<Log>.broadcast();
@@ -31,42 +33,65 @@ class LogStreamService {
   Stream<Log> get logStream => _logController.stream;
 
   Future<void> connect(String projectId) async {
-    if (_projectId == projectId && _channel != null) return;
+    if (_projectId == projectId && (_connecting || _channel != null)) return;
     await disconnect();
     _projectId = projectId;
     await _open();
   }
 
   Future<void> disconnect() async {
+    _connectGeneration++;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     await _subscription?.cancel();
     _subscription = null;
-    await _channel?.sink.close();
+    try {
+      await _channel?.sink.close();
+    } catch (_) {}
     _channel = null;
+    _connecting = false;
     _connectionController.add(false);
   }
 
   Future<void> _open() async {
     final projectId = _projectId;
-    if (projectId == null) return;
+    if (projectId == null || _connecting) return;
 
     final token = await _storage.getToken();
-    if (token == null) return;
+    if (token == null) {
+      _connectionController.add(false);
+      return;
+    }
+
+    final generation = ++_connectGeneration;
+    _connecting = true;
+    _connectionController.add(false);
 
     final url = AppConfig.logStreamUrl(projectId: projectId, token: token);
     try {
-      _channel = WebSocketChannel.connect(Uri.parse(url));
-      _subscription = _channel!.stream.listen(
+      final channel = WebSocketChannel.connect(Uri.parse(url));
+      _subscription = channel.stream.listen(
         _onMessage,
         onError: (_) => _scheduleReconnect(),
         onDone: _scheduleReconnect,
         cancelOnError: true,
       );
+
+      await channel.ready.timeout(const Duration(seconds: 12));
+      if (generation != _connectGeneration || _projectId != projectId) {
+        await _subscription?.cancel();
+        return;
+      }
+
+      _channel = channel;
+      _connecting = false;
       _attempt = 0;
       _connectionController.add(true);
     } catch (_) {
-      _scheduleReconnect();
+      _connecting = false;
+      if (generation == _connectGeneration) {
+        _scheduleReconnect();
+      }
     }
   }
 
@@ -80,6 +105,7 @@ class LogStreamService {
   }
 
   void _scheduleReconnect() {
+    if (_connecting) return;
     _connectionController.add(false);
     _subscription?.cancel();
     _subscription = null;

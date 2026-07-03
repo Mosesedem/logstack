@@ -5,15 +5,17 @@ class ConnectionBanner extends StatelessWidget {
   const ConnectionBanner({
     super.key,
     required this.isLive,
-    required this.isOfflineMode,
+    required this.isShowingCachedLogs,
+    this.isDeviceOffline = false,
   });
 
   final bool isLive;
-  final bool isOfflineMode;
+  final bool isShowingCachedLogs;
+  final bool isDeviceOffline;
 
   @override
   Widget build(BuildContext context) {
-    if (isLive && !isOfflineMode) {
+    if (isLive) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -51,7 +53,7 @@ class ConnectionBanner extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              isOfflineMode
+              isShowingCachedLogs || isDeviceOffline
                   ? 'Offline — showing cached logs'
                   : 'Reconnecting to live stream…',
               style: Theme.of(context).textTheme.labelMedium?.copyWith(

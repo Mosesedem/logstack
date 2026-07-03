@@ -11,15 +11,14 @@ class LogstackApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
 
-    return AppLockGate(
-      child: MaterialApp.router(
-        title: 'Logstack',
-        theme: AppTheme.dark,
-        darkTheme: AppTheme.dark,
-        themeMode: ThemeMode.dark,
-        routerConfig: router,
-        debugShowCheckedModeBanner: false,
-      ),
+    return MaterialApp.router(
+      title: 'Logstack',
+      theme: AppTheme.dark,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.dark,
+      routerConfig: router,
+      debugShowCheckedModeBanner: false,
+      builder: (context, child) => AppLockGate(child: child ?? const SizedBox()),
     );
   }
 }

@@ -46,7 +46,8 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
       children: [
         ConnectionBanner(
           isLive: logsState.isLive,
-          isOfflineMode: logsState.isOfflineData,
+          isShowingCachedLogs: logsState.isShowingCachedLogs,
+          isDeviceOffline: logsState.isDeviceOffline,
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),

@@ -109,7 +109,7 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    await _storage.clearAll();
+    await _storage.clearSession();
   }
 
   Future<User?> getCurrentUser() async {

@@ -63,12 +63,33 @@ class StorageService {
     return prefs.getString(_projectKey);
   }
 
-  // Clear all
+  /// Clears auth session and security credentials. Preserves device-level prefs
+  /// (onboarding complete, lock mode, notification tone).
+  Future<void> clearSession() async {
+    final prefs = await _prefs;
+    final onboardingComplete = prefs.getBool(_onboardingCompleteKey);
+    final lockMode = prefs.getString(_appLockModeKey);
+
+    await prefs.clear();
+    if (onboardingComplete != null) {
+      await prefs.setBool(_onboardingCompleteKey, onboardingComplete);
+    }
+    if (lockMode != null) {
+      await prefs.setString(_appLockModeKey, lockMode);
+    }
+
+    await _secureStorage.delete(key: _refreshTokenKey);
+    await _secureStorage.delete(key: _tokenKey);
+    await _secureStorage.delete(key: _appPinHashKey);
+  }
+
+  // Full wipe — tests or "reset app" only.
   Future<void> clearAll() async {
     final prefs = await _prefs;
     await prefs.clear();
     await _secureStorage.delete(key: _refreshTokenKey);
     await _secureStorage.delete(key: _tokenKey);
+    await _secureStorage.delete(key: _appPinHashKey);
   }
 
   // Refresh token (stored in secure storage)

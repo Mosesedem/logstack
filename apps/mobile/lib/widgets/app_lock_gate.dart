@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logstack_mobile/services/app_lock_service.dart';
+import 'package:logstack_mobile/theme/app_theme.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/app_logo.dart';
 import 'package:logstack_mobile/widgets/loading_states.dart';
@@ -142,13 +143,18 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   @override
   Widget build(BuildContext context) {
     if (_checking) {
-      return const Material(
-        color: LogstackColors.background,
-        child: LogstackLoading(message: 'Checking security…'),
+      return Theme(
+        data: AppTheme.dark,
+        child: const Material(
+          color: LogstackColors.background,
+          child: LogstackLoading(message: 'Checking security…'),
+        ),
       );
     }
     if (!_unlocked) {
-      return Material(
+      return Theme(
+        data: AppTheme.dark,
+        child: Material(
         color: LogstackColors.background,
         child: SafeArea(
           child: Padding(
@@ -190,6 +196,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
             ),
           ),
         ),
+      ),
       );
     }
     return widget.child;

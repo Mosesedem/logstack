@@ -32,6 +32,8 @@ abstract final class AppConfig {
       'projectId': projectId,
       'token': token,
     });
+    // Use /stream (WSAuth, query token) — same as the web dashboard.
+    // /mobile/stream requires Authorization header which WebSocketChannel cannot set.
     return '$webSocketBaseUrl/stream?${params.query}';
   }
 }

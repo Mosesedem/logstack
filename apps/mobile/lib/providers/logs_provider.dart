@@ -30,8 +30,12 @@ class LogsState {
   final String? error;
   final LogLevel? levelFilter;
   final String? searchQuery;
+  /// WebSocket is open and passing the handshake (see [LogStreamService]).
   final bool isLive;
-  final bool isOfflineData;
+  /// Device has no network connectivity.
+  final bool isDeviceOffline;
+  /// REST fetch failed or device offline — list may be stale cache.
+  final bool isShowingCachedLogs;
 
   const LogsState({
     this.logs = const [],
@@ -42,7 +46,8 @@ class LogsState {
     this.levelFilter,
     this.searchQuery,
     this.isLive = false,
-    this.isOfflineData = false,
+    this.isDeviceOffline = false,
+    this.isShowingCachedLogs = false,
   });
 
   LogsState copyWith({
@@ -54,7 +59,8 @@ class LogsState {
     LogLevel? levelFilter,
     String? searchQuery,
     bool? isLive,
-    bool? isOfflineData,
+    bool? isDeviceOffline,
+    bool? isShowingCachedLogs,
     bool clearError = false,
   }) {
     return LogsState(
@@ -66,7 +72,8 @@ class LogsState {
       levelFilter: levelFilter ?? this.levelFilter,
       searchQuery: searchQuery ?? this.searchQuery,
       isLive: isLive ?? this.isLive,
-      isOfflineData: isOfflineData ?? this.isOfflineData,
+      isDeviceOffline: isDeviceOffline ?? this.isDeviceOffline,
+      isShowingCachedLogs: isShowingCachedLogs ?? this.isShowingCachedLogs,
     );
   }
 }
@@ -94,6 +101,7 @@ class LogsNotifier extends StateNotifier<LogsState> {
   StreamSubscription<Log>? _logSub;
   StreamSubscription<bool>? _connSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  Timer? _connectivityDebounce;
 
   void _setState(LogsState newState) {
     if (_disposed) return;
@@ -108,13 +116,19 @@ class LogsNotifier extends StateNotifier<LogsState> {
   Future<void> _init() async {
     _logSub = _streamService.logStream.listen(_onRealtimeLog);
     _connSub = _streamService.connectionStream.listen((live) {
-      _patchState((s) => s.copyWith(
-            isLive: live,
-            isOfflineData: !live && s.logs.isNotEmpty,
-          ));
+      _patchState((s) => s.copyWith(isLive: live));
     });
-    _connectivitySub = Connectivity().onConnectivityChanged.listen((_) {
-      loadLogs();
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      final online = !results.contains(ConnectivityResult.none);
+      _patchState((s) => s.copyWith(isDeviceOffline: !online));
+      _connectivityDebounce?.cancel();
+      _connectivityDebounce = Timer(const Duration(milliseconds: 800), () {
+        if (_disposed) return;
+        if (online && _projectId != null) {
+          unawaited(_streamService.connect(_projectId!));
+        }
+        loadLogs();
+      });
     });
     if (_projectId != null) {
       await _startForProject(_projectId!);
@@ -133,6 +147,9 @@ class LogsNotifier extends StateNotifier<LogsState> {
   }
 
   Future<void> _startForProject(String projectId) async {
+    final connectivity = await Connectivity().checkConnectivity();
+    final online = !connectivity.contains(ConnectivityResult.none);
+
     final cached = await _cacheService.getLogs(projectId);
     final filtered = _cacheService.filterLocal(
       logs: cached,
@@ -143,10 +160,14 @@ class LogsNotifier extends StateNotifier<LogsState> {
       logs: filtered,
       levelFilter: state.levelFilter,
       searchQuery: state.searchQuery,
-      isOfflineData: filtered.isNotEmpty,
+      isDeviceOffline: !online,
+      isShowingCachedLogs: !online && filtered.isNotEmpty,
+      isLive: false,
     ));
     if (_disposed) return;
-    await _streamService.connect(projectId);
+    if (online) {
+      await _streamService.connect(projectId);
+    }
     if (_disposed) return;
     await loadLogs();
   }
@@ -166,14 +187,18 @@ class LogsNotifier extends StateNotifier<LogsState> {
               search: s.searchQuery,
             ),
             isLoading: false,
-            isOfflineData: true,
-            isLive: false,
+            isDeviceOffline: true,
+            isShowingCachedLogs: cached.isNotEmpty,
             clearError: true,
           ));
       return;
     }
 
-    _patchState((s) => s.copyWith(isLoading: true, clearError: true));
+    _patchState((s) => s.copyWith(
+          isLoading: true,
+          isDeviceOffline: false,
+          clearError: true,
+        ));
     try {
       final response = await _logService.getLogs(
         projectId: _projectId!,
@@ -183,15 +208,13 @@ class LogsNotifier extends StateNotifier<LogsState> {
       );
       if (_disposed) return;
       await _cacheService.saveLogs(_projectId!, response.logs);
-      _setState(LogsState(
-        logs: response.logs,
-        hasMore: response.hasMore,
-        offset: response.offset,
-        levelFilter: state.levelFilter,
-        searchQuery: state.searchQuery,
-        isLive: state.isLive,
-        isOfflineData: false,
-      ));
+      _patchState((s) => s.copyWith(
+            logs: response.logs,
+            hasMore: response.hasMore,
+            offset: response.offset,
+            isLoading: false,
+            isShowingCachedLogs: false,
+          ));
     } catch (e) {
       if (_disposed) return;
       final cached = await _cacheService.getLogs(_projectId!);
@@ -203,13 +226,17 @@ class LogsNotifier extends StateNotifier<LogsState> {
               level: s.levelFilter,
               search: s.searchQuery,
             ),
-            isOfflineData: cached.isNotEmpty,
+            isShowingCachedLogs: cached.isNotEmpty,
           ));
     }
   }
 
   Future<void> loadMore() async {
-    if (_projectId == null || !state.hasMore || state.isLoading || state.isOfflineData) {
+    if (_projectId == null ||
+        !state.hasMore ||
+        state.isLoading ||
+        state.isShowingCachedLogs ||
+        state.isDeviceOffline) {
       return;
     }
 
@@ -256,12 +283,16 @@ class LogsNotifier extends StateNotifier<LogsState> {
     final exists = state.logs.any((l) => l.id == log.id);
     if (exists) return;
     final updated = [log, ...state.logs].take(200).toList();
-    _patchState((s) => s.copyWith(logs: updated, isOfflineData: false));
+    _patchState((s) => s.copyWith(
+          logs: updated,
+          isShowingCachedLogs: false,
+        ));
     _cacheService.saveLogs(_projectId!, updated);
   }
 
   void cleanup() {
     _disposed = true;
+    _connectivityDebounce?.cancel();
     _logSub?.cancel();
     _connSub?.cancel();
     _connectivitySub?.cancel();

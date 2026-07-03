@@ -9,6 +9,8 @@ import 'package:logstack_mobile/services/api_client.dart';
 import 'package:logstack_mobile/services/auth_service.dart';
 import 'package:logstack_mobile/services/log_cache_service.dart';
 import 'package:logstack_mobile/services/notification_service.dart';
+import 'package:logstack_mobile/providers/security_provider.dart';
+import 'package:logstack_mobile/services/app_lock_service.dart';
 import 'package:logstack_mobile/services/storage_service.dart';
 import 'package:logstack_mobile/utils/auth_errors.dart';
 
@@ -26,7 +28,15 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final storage = ref.watch(storageServiceProvider);
   final apiClient = ref.watch(apiClientProvider);
   final cacheService = ref.watch(logCacheServiceProvider);
-  return AuthNotifier(authService, storage, apiClient, cacheService);
+  final appLock = ref.watch(appLockServiceProvider);
+  return AuthNotifier(
+    authService,
+    storage,
+    apiClient,
+    cacheService,
+    appLock,
+    () => ref.read(securityProvider.notifier).refresh(),
+  );
 });
 
 class AuthState {
@@ -77,6 +87,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final StorageService _storage;
   final ApiClient _apiClient;
   final LogCacheService _cacheService;
+  final AppLockService _appLock;
+  final Future<void> Function() _onSecurityChanged;
 
   StreamSubscription<String>? _tokenSubscription;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
@@ -87,6 +99,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     this._storage,
     this._apiClient,
     this._cacheService,
+    this._appLock,
+    this._onSecurityChanged,
   ) : super(AuthState(isLoading: true, pushStatus: _initialPushStatus())) {
     _checkAuth();
     _listenConnectivity();
@@ -124,8 +138,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (refreshToken != null) {
         final refreshed = await _tryRefreshAccessToken(refreshToken);
         if (refreshed == _RefreshResult.revoked) {
-          await _storage.clearAll();
+          await _appLock.clearPin();
+          await _appLock.setBiometricEnabled(false);
+          await _storage.clearSession();
           state = AuthState(pushStatus: _initialPushStatus());
+          await _onSecurityChanged();
           return;
         }
         if (refreshed == _RefreshResult.offline) {
@@ -234,6 +251,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
     state = AuthState(user: response.user, hasPersistedSession: true);
     _listenForFcmToken();
+    await _onSecurityChanged();
   }
 
   Future<void> logout() async {
@@ -253,8 +271,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _tokenSubscription = null;
     _currentFcmToken = null;
     await _cacheService.clearAll();
+    await _appLock.clearPin();
+    await _appLock.setBiometricEnabled(false);
     await _authService.logout();
     state = AuthState(pushStatus: _initialPushStatus());
+    await _onSecurityChanged();
   }
 
   void _listenForFcmToken() {
@@ -365,6 +386,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
     state = AuthState(user: user, hasPersistedSession: true);
     _listenForFcmToken();
+    await _onSecurityChanged();
   }
 
   @visibleForTesting

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/services/app_lock_service.dart';
+import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/providers/onboarding_provider.dart';
+import 'package:logstack_mobile/providers/security_provider.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/pin_pad.dart';
 
@@ -97,9 +99,20 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen> {
       }
     }
 
-    await ref.read(onboardingProvider.notifier).markComplete();
-    if (mounted) context.go('/login');
-    setState(() => _saving = false);
+    await _finishSecuritySetup();
+    if (mounted) setState(() => _saving = false);
+  }
+
+  Future<void> _finishSecuritySetup() async {
+    final onboarding = ref.read(onboardingProvider);
+    if (!onboarding.isComplete) {
+      await ref.read(onboardingProvider.notifier).markComplete();
+    }
+    await ref.read(securityProvider.notifier).markConfigured();
+
+    if (!mounted) return;
+    final signedIn = ref.read(authProvider).isAuthenticated;
+    context.go(signedIn ? '/' : '/login');
   }
 
   int get _filledCount =>
@@ -107,6 +120,8 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final signedIn = ref.watch(authProvider).isAuthenticated;
+
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -115,14 +130,16 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Secure your app',
+                signedIn ? 'Set up your PIN' : 'Secure your app',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Choose how Logstack locks and set a PIN to protect your logs.',
+                signedIn
+                    ? 'Create a new PIN for this session. Your previous PIN was cleared when you signed out.'
+                    : 'Choose how Logstack locks and set a PIN to protect your logs.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: LogstackColors.textSecondary,
                     ),
@@ -198,10 +215,7 @@ class _SecuritySetupScreenState extends ConsumerState<SecuritySetupScreen> {
                           setState(() => _saving = true);
                           final lock = ref.read(appLockServiceProvider);
                           await lock.setLockMode(AppLockMode.never);
-                          await ref
-                              .read(onboardingProvider.notifier)
-                              .markComplete();
-                          if (mounted) context.go('/login');
+                          await _finishSecuritySetup();
                         },
                   child: _saving
                       ? const SizedBox(

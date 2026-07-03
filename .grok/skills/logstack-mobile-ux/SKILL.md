@@ -1,11 +1,13 @@
 ---
 name: logstack-mobile-ux
 description: >
-  End-to-end guide for Logstack Flutter mobile companion app UX: onboarding splash,
-  push permission gate, app security (PIN, biometrics, lock modes), project picker,
+  End-to-end guide for Logstack Flutter mobile companion app UX: live stream
+  connection status, session security (PIN reset on logout), onboarding splash,
+  push permission gate, app lock (PIN, biometrics, lock modes), project picker,
   settings navigation, loading states, and store builds. Use when working on
-  apps/mobile design polish, iOS back navigation, splash/onboarding, app lock,
-  or when the user runs /logstack-mobile-ux.
+  apps/mobile connection banner flicker, offline/cached log states, PIN lifecycle,
+  design polish, iOS back navigation, splash/onboarding, app lock, or when the
+  user runs /logstack-mobile-ux.
 ---
 
 # Logstack Mobile UX
@@ -14,83 +16,121 @@ Companion app only — PIN/QR/email link, view logs, escalate, settings. No acco
 
 ## Architecture
 
-- Entry: `lib/main.dart` → `LogstackApp` → `AppLockGate` → `MaterialApp.router`
-- Router: `lib/router.dart` — auth routes, onboarding routes, `ShellRoute` with `HomeScreen`
-- Security: `lib/services/app_lock_service.dart` + `storage_service.dart` (PIN hash, lock mode, biometrics)
-- Onboarding: splash → push permission (must grant) → security setup (PIN + optional biometrics) → main shell
+- Entry: `lib/main.dart` → `LogstackApp` → `AppLockGate` (inside `MaterialApp.router` builder) → router
+- Router: `lib/router.dart` — onboarding, auth, post-login security gate, `ShellRoute` with `HomeScreen`
+- Security: `app_lock_service.dart` + `security_provider.dart` + `storage_service.dart`
+- Live logs: `log_stream_service.dart` + `logs_provider.dart` + `connection_banner.dart`
+
+## Live stream status (do not conflate signals)
+
+Three **independent** signals — never tie "offline" to WebSocket alone:
+
+| Signal | Meaning | Set by |
+|--------|---------|--------|
+| `isLive` | WebSocket handshake succeeded (`channel.ready`) | `LogStreamService` |
+| `isDeviceOffline` | No network (`ConnectivityResult.none`) | `LogsNotifier` |
+| `isShowingCachedLogs` | REST failed or device offline; list may be stale | `LogsNotifier` |
+
+### Banner copy (realistic UX)
+
+```
+isLive                          → "Live stream connected" (green)
+!isLive && cached/offline       → "Offline — showing cached logs" (amber)
+!isLive && online && REST OK    → "Reconnecting to live stream…" (amber)
+```
+
+### WebSocket rules
+
+- Endpoint: `wss://…/v1/stream?projectId=&token=` (WSAuth, same as web dashboard)
+- **Never** use `/mobile/stream` from Flutter — it requires `Authorization` header
+- Emit `isLive: true` only after `await channel.ready` — not on `connect()` call
+- On disconnect: emit `false` immediately; backoff reconnect (1→16 s)
+- Debounce connectivity-driven `loadLogs()` (~800 ms) to avoid status flicker
+- Do **not** set `isShowingCachedLogs` when WebSocket drops but REST still works
+
+### Anti-patterns
+
+- ❌ `isOfflineData: !live && logs.isNotEmpty` on every WS event
+- ❌ Showing "Live" before socket handshake completes
+- ❌ Calling `loadLogs()` on every connectivity blip without debounce
+- ❌ Treating cached logs as "offline" when only the stream is reconnecting
+
+## Session security lifecycle
+
+### Device prefs (survive logout)
+
+- `onboarding_complete`
+- `app_lock_mode` (`immediate` | `never`)
+- Notification tone
+
+### Session data (cleared on logout)
+
+- Access/refresh tokens, user profile, selected project
+- App PIN hash (secure storage)
+- Biometric unlock flag
+- Log cache (Hive)
+
+Use `StorageService.clearSession()` — **not** `prefs.clear()` bare — on sign-out.
+
+### Post-logout → re-login flow
+
+1. `logout()` → `clearSession()` + `clearPin()` + `setBiometricEnabled(false)`
+2. `securityProvider.refresh()` → `needsSetup = lockMode==immediate && !hasPin`
+3. Router: authenticated + `needsSetup` → `/onboarding/security` (skip splash/push)
+4. `SecuritySetupScreen`: if already signed in, title "Set up your PIN" → `context.go('/')`
+5. `markConfigured()` after PIN saved — do not re-run first-run onboarding
+
+### Lock mode semantics
+
+- `immediate` + no PIN → **must** complete security setup before shell
+- `never` → skip PIN; go straight to shell after login
+
+## Onboarding (first install only)
+
+splash → push permission (must grant) → security setup → login → shell
+
+Push step: `NotificationService.requestPermission()`. Decline → stay on push screen with retry + Settings hint.
 
 ## Audit checklist (verify before shipping)
 
 ### Navigation
 - [ ] Settings shows back affordance on iOS (`leading: BackButton` when on `/settings`)
-- [ ] Log detail has back via system gesture / `context.pop()`
-- [ ] Onboarding cannot skip push if product requires alerts (decline → stay on push screen)
+- [ ] Post-logout login routes to security when lock mode is immediate
+- [ ] Onboarding cannot skip push if product requires alerts
 
 ### Security
-- [ ] Lock modes: `immediate` (lock on resume) vs `never`
-- [ ] App PIN stored as SHA-256 hash in secure storage, never plaintext
-- [ ] Biometric toggle prompts `LocalAuthentication` before enabling
-- [ ] Unlock screen offers biometrics when enabled, PIN fallback always available
-- [ ] `NSFaceIDUsageDescription` present in `ios/Runner/Info.plist`
+- [ ] PIN hash cleared on logout (`clearSession` deletes `_appPinHashKey`)
+- [ ] Biometrics disabled on logout
+- [ ] App PIN stored as SHA-256 hash, never plaintext
+- [ ] `NSFaceIDUsageDescription` in `ios/Runner/Info.plist`
 
-### Project picker
-- [ ] Bottom sheet with search field, not raw `DropdownButton`
-- [ ] Shows current project name + env badge; filters client-side
-- [ ] Loading shimmer while `projectProvider.isLoading`
+### Connection banner
+- [ ] No rapid Live ↔ Offline flicker when stream reconnects
+- [ ] "Reconnecting…" shown when REST works but WS is down
+- [ ] "Offline — cached" only when device offline or REST failed
 
 ### Loading states
-- [ ] Use `LogstackLoading` / `LogListSkeleton` — no bare `CircularProgressIndicator` on empty lists
-- [ ] Pull-to-refresh retains list with inline indicator
-
-### Logo
-- [ ] `AppLogo` uses square marketing asset with `BoxFit.contain` inside rounded container
-- [ ] Asset path: `assets/icons/web/icon-512.png` (not play_store strip artifact)
-
-### Push notifications
-- [ ] `NotificationService.initialize()` does NOT auto-request permission — onboarding calls `requestPermission()`
-- [ ] After auth, FCM token registers via `authProvider`
-
-### Known bugs to guard
-- [ ] `LogsNotifier._startForProject` checks `mounted` before `state =` after async gaps
-- [ ] WebSocket URL: `app_config.dart` must not produce `:0` port in wss URLs
+- [ ] `LogstackLoading` / `LogListSkeleton` on empty lists
+- [ ] `LogsNotifier` guards `state =` after async with `_disposed`
 
 ## File map
 
 | Concern | Files |
 |---------|-------|
+| Stream status | `services/log_stream_service.dart`, `providers/logs_provider.dart`, `widgets/connection_banner.dart` |
+| Session security | `providers/security_provider.dart`, `services/storage_service.dart`, `providers/auth_provider.dart` |
 | Onboarding | `screens/onboarding/splash_screen.dart`, `push_permission_screen.dart`, `security_setup_screen.dart` |
-| Security | `services/app_lock_service.dart`, `widgets/app_lock_gate.dart`, `widgets/pin_pad.dart` |
-| Picker | `widgets/project_picker.dart` |
-| Loading | `widgets/loading_states.dart` |
-| Settings | `screens/settings/settings_screen.dart` |
-| Router | `router.dart` — onboarding redirect before auth shell |
-
-## Onboarding redirect logic
-
-```dart
-if (!onboardingComplete && !isOnboardingRoute) return '/splash';
-if (onboardingComplete && isOnboardingRoute) return '/';
-```
-
-Push step: call `NotificationService.instance.requestPermission()`. If not `authorized`/`provisional`, show rationale + retry + open Settings — do not advance.
-
-Security step: require 4–6 digit PIN confirmation; offer biometric enable if `LocalAuthentication` available.
+| Router gates | `router.dart` |
+| Config | `config/app_config.dart` |
 
 ## Store build (iOS)
 
 ```bash
 cd apps/mobile
-flutter pub get
-(cd ios && pod install)
-# Simulator workaround (dev):
-./scripts/run_ios.sh -d "iPhone 16 Pro"
-# Release archive:
-flutter build ipa --release
-# Or Xcode: Product → Archive with Runner scheme, automatic signing
+./scripts/run_ios.sh -d "iPhone 16 Pro"   # simulator — not plain flutter run
+./scripts/run_device.sh                    # physical device
 ```
-
-Bump `version` in `pubspec.yaml` (`name+build`) before each store upload.
 
 ## Design tokens
 
-Match `lib/theme/logstack_colors.dart` and `app_theme.dart` — dark zinc surfaces, Inter + JetBrains Mono, 10px radius cards.
+Match `lib/theme/logstack_colors.dart` — dark zinc surfaces, Inter + JetBrains Mono.
