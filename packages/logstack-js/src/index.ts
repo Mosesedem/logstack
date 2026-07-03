@@ -152,6 +152,19 @@ class LogStack implements LogStackClient {
   private offlineQueue: LogEntry[] = [];
   private offlineRetryTimer: ReturnType<typeof setInterval> | null = null;
 
+  // For captureConsole support (auto-forwarding of native console.* by default)
+  private originalConsole: {
+    log: typeof console.log;
+    info: typeof console.info;
+    warn: typeof console.warn;
+    error: typeof console.error;
+    debug: typeof console.debug;
+    trace: typeof console.trace;
+    assert: typeof console.assert;
+  } | null = null;
+  private consoleCaptureInstalled = false;
+  private isCapturingConsole = false; // re-entrancy guard
+
   constructor(config: LogStackConfig) {
     this.isBrowser = isBrowserEnvironment();
 
@@ -171,6 +184,7 @@ class LogStack implements LogStackClient {
       maxOfflineQueueSize:
         config.maxOfflineQueueSize ?? DEFAULT_MAX_OFFLINE_QUEUE,
       captureContext: config.captureContext !== false,
+      captureConsole: config.captureConsole !== false,
       onError: config.onError,
       projectId: config.projectId,
     };
@@ -189,6 +203,11 @@ class LogStack implements LogStackClient {
     if (this.isBrowser && !this.config.disabled) {
       this.setupOfflineDetection();
       this.restoreOfflineQueue();
+    }
+
+    // Opt-in: capture native console calls and forward them (in addition to SDK calls)
+    if (this.config.captureConsole) {
+      this.installConsoleCapture();
     }
   }
 
@@ -340,11 +359,15 @@ class LogStack implements LogStackClient {
     );
     const level = entry.level.toUpperCase().padEnd(8);
 
+    // Use saved originals (if we are capturing console) so that SDK pretty-printing
+    // never re-enters the capture wrappers and avoids double output / recursion.
+    const c = this.originalConsole || console;
+
     if (this.isBrowser) {
       // Browser console with styling
       const style = BROWSER_STYLES[entry.level];
       const contextStr = entry.context?.url ? ` [${entry.context.url}]` : "";
-      console.log(
+      c.log(
         `%c${level}%c ${timestamp}${contextStr} - ${entry.message}`,
         style,
         "color: inherit",
@@ -361,7 +384,7 @@ class LogStack implements LogStackClient {
       const metaStr = entry.metadata
         ? ` ${JSON.stringify(entry.metadata)}`
         : "";
-      console.log(
+      c.log(
         `${color}${level}${RESET_COLOR} ${timestamp}${contextStr} - ${entry.message}${metaStr}`,
       );
     }
@@ -393,6 +416,120 @@ class LogStack implements LogStackClient {
     }
   }
 
+  /**
+   * Install wrappers around global console methods so that calls like
+   * console.log("foo") are also sent to Logstack (with source: "console").
+   * Safe: ALWAYS calls the original first (output is never lost).
+   * Re-entrancy guard prevents recursion. Uses originals for SDK pretty prints.
+   */
+  private installConsoleCapture(): void {
+    if (typeof console === "undefined" || this.consoleCaptureInstalled) return;
+
+    // Snapshot the real methods *before* we override anything. Store raw refs for clean restore + identity.
+    this.originalConsole = {
+      log: console.log,
+      info: console.info || console.log,
+      warn: console.warn,
+      error: console.error,
+      debug: console.debug || console.log,
+      trace: console.trace || console.log,
+      assert: (console.assert || console.log) as typeof console.assert,
+    };
+
+    const self = this;
+
+    const formatArgs = (args: unknown[]) => {
+      if (args.length === 0) return { message: "" };
+      const [head, ...rest] = args;
+      let message: string;
+      const metadata: Record<string, unknown> = {};
+
+      if (typeof head === "string") {
+        message = head;
+      } else {
+        try {
+          message = JSON.stringify(head);
+        } catch {
+          message = String(head);
+        }
+      }
+
+      rest.forEach((arg, idx) => {
+        if (arg != null && typeof arg === "object" && !Array.isArray(arg)) {
+          Object.assign(metadata, arg as Record<string, unknown>);
+        } else if (arg !== undefined) {
+          metadata[`arg${idx + 1}`] = arg;
+        }
+      });
+
+      return {
+        message: message || "",
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+      };
+    };
+
+    const capture = (
+      level: LogLevel,
+      args: unknown[],
+      isAssertFail = false
+    ) => {
+      if (self.isCapturingConsole) return;
+      self.isCapturingConsole = true;
+      try {
+        const { message, metadata } = formatArgs(args);
+        const finalMessage = isAssertFail ? `Assertion failed: ${message}` : message;
+        self.ingest(
+          { level, message: finalMessage || message || "", metadata, source: "console" },
+          true
+        );
+      } finally {
+        self.isCapturingConsole = false;
+      }
+    };
+
+    // Always call original FIRST, then capture. Guarded.
+    console.log = function (...args: unknown[]) {
+      self.originalConsole!.log.apply(console, args);
+      capture("info", args);
+    };
+
+    console.info = function (...args: unknown[]) {
+      self.originalConsole!.info.apply(console, args);
+      capture("info", args);
+    };
+
+    console.warn = function (...args: unknown[]) {
+      self.originalConsole!.warn.apply(console, args);
+      capture("warn", args);
+    };
+
+    console.error = function (...args: unknown[]) {
+      self.originalConsole!.error.apply(console, args);
+      capture("error", args);
+    };
+
+    console.debug = function (...args: unknown[]) {
+      self.originalConsole!.debug.apply(console, args);
+      capture("debug", args);
+    };
+
+    console.trace = function (...args: unknown[]) {
+      self.originalConsole!.trace.apply(console, args);
+      // trace typically includes stack; forward as debug with source console
+      capture("debug", args);
+    };
+
+    console.assert = function (condition?: unknown, ...args: unknown[]) {
+      // Call original (which does nothing if true, prints if false in most envs)
+      (self.originalConsole!.assert as any).apply(console, [condition, ...args]);
+      if (!condition) {
+        capture("error", args.length ? args : ["Assertion failed"], true);
+      }
+    };
+
+    this.consoleCaptureInstalled = true;
+  }
+
   debug(message: string, metadata?: Record<string, unknown>): void {
     this.log({ level: "debug", message, metadata });
   }
@@ -418,8 +555,19 @@ class LogStack implements LogStackClient {
   }
 
   log(entry: LogEntry): void {
+    this.ingest(entry, false);
+  }
+
+  /**
+   * Core ingest path. `fromConsoleCapture=true` means this came from a hijacked
+   * console.* call: we still ship it, but skip our pretty-printer (the original
+   * console call already produced output) to avoid duplicate lines.
+   */
+  private ingest(entry: LogEntry, fromConsoleCapture: boolean): void {
     if (this.isClosing) {
-      console.warn("Logstack: Cannot log after close() has been called");
+      // Use original if available to avoid any wrapper during shutdown
+      const c = this.originalConsole || console;
+      c.warn("Logstack: Cannot log after close() has been called");
       return;
     }
 
@@ -437,9 +585,9 @@ class LogStack implements LogStackClient {
       context: Object.keys(context).length > 0 ? context : undefined,
     };
 
-    // Console output (gated by environment / silent / consoleInProduction),
-    // independent of whether we ship the log to the server.
-    if (this.shouldLogToConsole()) {
+    // For normal SDK calls: optionally pretty-print to console (gated).
+    // For captured console calls we skip this — the original call already showed it.
+    if (!fromConsoleCapture && this.shouldLogToConsole()) {
       this.logToConsole(logEntry);
     }
 
@@ -646,6 +794,19 @@ class LogStack implements LogStackClient {
     if (this.offlineRetryTimer) {
       clearInterval(this.offlineRetryTimer);
       this.offlineRetryTimer = null;
+    }
+
+    // Restore any captured console methods so the app returns to pristine state.
+    if (this.consoleCaptureInstalled && this.originalConsole) {
+      console.log = this.originalConsole.log;
+      console.info = this.originalConsole.info;
+      console.warn = this.originalConsole.warn;
+      console.error = this.originalConsole.error;
+      console.debug = this.originalConsole.debug;
+      console.trace = this.originalConsole.trace;
+      console.assert = this.originalConsole.assert;
+      this.consoleCaptureInstalled = false;
+      this.isCapturingConsole = false;
     }
 
     // Final flush of any buffered logs (no-op in console-only mode).

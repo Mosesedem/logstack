@@ -74,6 +74,11 @@ const logstack = createLogStack({
   // dropped past this. Default: 1000.
   maxOfflineQueueSize: 1000,
 
+  // Automatically forward ALL native console.* calls (log/info/warn/error/debug/trace/assert)
+  // to Logstack as structured logs (source: "console"). Original console behavior is preserved.
+  // This is the key feature for zero-effort full log collection. Default: true.
+  captureConsole: true,
+
   // Optional: Error callback
   onError: (error, logs) => {
     console.error("Failed to send logs:", error);
@@ -82,10 +87,10 @@ const logstack = createLogStack({
 });
 ```
 
-> **Console vs. server are independent.** Every log is written to the console
-> (per the rules above) regardless of whether it is also shipped to the server.
-> A missing API key degrades the client to console-only (`disabled`) — it never
-> becomes a silent no-op.
+> **Automatic capture + independence.** With the default `captureConsole: true`, any `console.*`
+> call in your codebase is captured + shipped automatically (great for legacy code and quick wins).
+> Explicit `logstack.info(...)` etc. still work for structured metadata. Console pretty-printing and
+> server shipping are independent. Missing API key → console-only mode (`disabled`), never silent.
 
 ---
 

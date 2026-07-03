@@ -7,14 +7,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
 )
 
 // Version is the SDK release version (matches git tag packages/logstack-go-sdk/vX.Y.Z).
-const Version = "1.0.2"
+const Version = "1.0.3"
 
 const (
 	defaultAPIURL        = "https://api.logstack.tech"
@@ -32,18 +34,33 @@ type Config struct {
 	Environment   string
 	// OnError is called when a flush fails after the batch has been re-queued.
 	OnError func(err error, logs []LogEntry)
+
+	// CaptureStdLog enables automatic capture of logs written to the Go
+	// standard library "log" package (log.Print*, log.Printf etc).
+	// When enabled (default), we redirect log.SetOutput to forward entries
+	// with source="go-log". Original output is also preserved.
+	// Use CaptureStdLog: Bool(false) to disable.
+	CaptureStdLog *bool
 }
+
+// Bool returns a pointer to a bool (convenience for Config fields that default to true).
+func Bool(v bool) *bool { return &v }
 
 // Client is the main Logstack client.
 type Client struct {
-	config      Config
-	httpClient  *http.Client
-	batch       []LogEntry
-	mu          sync.Mutex
-	flushTicker *time.Ticker
-	done        chan struct{}
-	closeOnce   sync.Once
-	closed      bool
+	config        Config
+	httpClient    *http.Client
+	batch         []LogEntry
+	mu            sync.Mutex
+	flushTicker   *time.Ticker
+	done          chan struct{}
+	closeOnce     sync.Once
+	closed        bool
+
+	// For stdlib log capture (if enabled)
+	origLogWriter         io.Writer
+	captureWriter         *stdLogCaptureWriter
+	stdLogCaptureInstalled bool
 }
 
 // LogEntry represents a single log entry.
@@ -79,6 +96,15 @@ func NewClient(config Config) *Client {
 
 	c.flushTicker = time.NewTicker(config.FlushInterval)
 	go c.backgroundFlush()
+
+	// Auto-capture stdlib log package (default true for broad collection like JS captureConsole)
+	capture := true
+	if config.CaptureStdLog != nil {
+		capture = *config.CaptureStdLog
+	}
+	if capture {
+		c.installStdLogCapture()
+	}
 
 	return c
 }
@@ -139,11 +165,16 @@ func (c *Client) Fatal(ctx context.Context, message string, metadata ...map[stri
 }
 
 func (c *Client) log(ctx context.Context, level, message string, metadata ...map[string]interface{}) error {
+	return c.logWithSource(ctx, level, message, "go-sdk", metadata...)
+}
+
+// logWithSource is internal; source distinguishes explicit ("go-sdk") vs auto-captured ("go-log")
+func (c *Client) logWithSource(ctx context.Context, level, message, source string, metadata ...map[string]interface{}) error {
 	entry := LogEntry{
 		Level:    level,
 		Message:  message,
 		Metadata: map[string]interface{}{},
-		Source:   "go-sdk",
+		Source:   source,
 	}
 
 	if len(metadata) > 0 && metadata[0] != nil {
@@ -237,6 +268,7 @@ func (c *Client) send(ctx context.Context, batch []LogEntry) error {
 func (c *Client) Close() error {
 	var err error
 	c.closeOnce.Do(func() {
+		c.restoreStdLogCapture()
 		c.mu.Lock()
 		c.closed = true
 		c.mu.Unlock()
@@ -244,4 +276,78 @@ func (c *Client) Close() error {
 		close(c.done)
 	})
 	return err
+}
+
+// stdLogCaptureWriter forwards Go stdlib log package output to Logstack while
+// preserving the original writer (passthrough). Re-entrancy guard prevents loops
+// if user code logs from within OnError while capture is active.
+type stdLogCaptureWriter struct {
+	client    *Client
+	orig      io.Writer
+	mu        sync.Mutex
+	capturing bool
+}
+
+func (w *stdLogCaptureWriter) Write(p []byte) (n int, err error) {
+	if w.orig != nil {
+		n, err = w.orig.Write(p)
+		if err != nil {
+			return n, err
+		}
+	} else {
+		n = len(p)
+	}
+
+	msg := strings.TrimSpace(string(p))
+	if msg == "" {
+		return n, nil
+	}
+
+	w.mu.Lock()
+	if w.capturing {
+		w.mu.Unlock()
+		return n, nil
+	}
+	w.capturing = true
+	w.mu.Unlock()
+
+	func() {
+		defer func() {
+			w.mu.Lock()
+			w.capturing = false
+			w.mu.Unlock()
+		}()
+		_ = w.client.logWithSource(context.Background(), "info", msg, "go-log")
+	}()
+
+	return n, nil
+}
+
+func (c *Client) installStdLogCapture() {
+	if c.stdLogCaptureInstalled {
+		return
+	}
+
+	orig := log.Writer()
+	if orig == nil {
+		orig = os.Stderr
+	}
+
+	c.origLogWriter = orig
+	c.captureWriter = &stdLogCaptureWriter{
+		client: c,
+		orig:   orig,
+	}
+	log.SetOutput(c.captureWriter)
+	c.stdLogCaptureInstalled = true
+}
+
+func (c *Client) restoreStdLogCapture() {
+	if !c.stdLogCaptureInstalled {
+		return
+	}
+	if c.origLogWriter != nil {
+		log.SetOutput(c.origLogWriter)
+	}
+	c.stdLogCaptureInstalled = false
 }

@@ -33,8 +33,11 @@ export function LogList({ logs, onLoadMore, hasMore, isLoading }: LogListProps) 
 
   if (logs.length === 0 && !isLoading) {
     return (
-      <div className="flex items-center justify-center py-12 text-muted-foreground">
-        No logs found
+      <div className="flex items-center justify-center py-12 text-center text-muted-foreground">
+        <div>
+          No logs match current filters.<br />
+          <span className="text-xs">Clear filters or send logs with the SDK (console.* are auto-captured).</span>
+        </div>
       </div>
     )
   }

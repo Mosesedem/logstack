@@ -192,6 +192,8 @@ export default function DemoPage() {
       environment: "production",
       consoleInProduction: true,
       captureContext: true,
+      // captureConsole: true (default) means native console.* from the demo or
+      // your own app code will automatically appear in the dashboard too.
     });
   }, [apiKey]);
 

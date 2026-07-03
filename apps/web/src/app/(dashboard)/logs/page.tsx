@@ -27,6 +27,7 @@ interface LogsPage {
 interface FilterState {
   level: string;
   search: string;
+  source?: string;
 }
 
 function matchesFilters(log: Log, filters: FilterState): boolean {
@@ -39,6 +40,12 @@ function matchesFilters(log: Log, filters: FilterState): boolean {
   ) {
     return false;
   }
+  if (filters.source) {
+    // "console" source or anything else treated as "sdk/explicit"
+    const logSource = (log.source || '').toLowerCase();
+    if (filters.source === 'console' && logSource !== 'console') return false;
+    if (filters.source === 'sdk' && logSource === 'console') return false;
+  }
   return true;
 }
 
@@ -46,7 +53,7 @@ export default function LogsPage() {
   const { currentProject } = useProject();
   const router = useRouter();
   const projectId = currentProject?.id;
-  const [filters, setFilters] = useState<FilterState>({ level: "", search: "" });
+  const [filters, setFilters] = useState<FilterState>({ level: "", search: "", source: "" });
 
   const {
     data,
@@ -58,7 +65,7 @@ export default function LogsPage() {
     error,
     refetch,
   } = useInfiniteQuery({
-    queryKey: ["project-logs", projectId, filters.level, filters.search],
+    queryKey: ["project-logs", projectId, filters.level, filters.search, filters.source],
     enabled: !!projectId,
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
@@ -68,6 +75,7 @@ export default function LogsPage() {
       });
       if (filters.level) params.set("level", filters.level);
       if (filters.search) params.set("search", filters.search);
+      if (filters.source) params.set("source", filters.source);
       return api.get<LogsPage>(
         `/projects/${projectId}/logs?${params.toString()}`,
       );
@@ -100,35 +108,69 @@ export default function LogsPage() {
 
   if (!currentProject) {
     return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4">
-        <div className="text-center space-y-2">
+      <div className="flex flex-col items-center justify-center h-full space-y-4 py-12">
+        <div className="text-center space-y-3 max-w-md">
           <h1 className="text-2xl font-bold">Logs</h1>
           <p className="text-muted-foreground">
-            Select or create a project to view its logs
+            Create a project to start collecting logs. Once you integrate the SDK, 
+            both your explicit calls and all native <code>console.*</code> output are captured automatically.
           </p>
         </div>
-        <Button onClick={() => router.push("/create")}>Create Project</Button>
+        <div className="flex gap-3">
+          <Button onClick={() => router.push("/create")}>Create Project</Button>
+          <Button variant="outline" onClick={() => router.push("/demo")}>Open Demo</Button>
+        </div>
       </div>
     );
   }
 
+  const hasLogs = logs.length > 0
+
+  // Quick test: use the shared logger (it will console + ship if the dashboard key is configured)
+  const sendTestLog = () => {
+    // Dynamic import to avoid circular / top level issues
+    import("@/lib/logger").then(({ logstack }) => {
+      logstack.info("Test log from dashboard", {
+        source: "dashboard-test",
+        timestamp: new Date().toISOString(),
+        tip: "This was sent via explicit API. Try console.error('hello from console') too!",
+      });
+    }).catch(() => {
+      // fallback: just log locally
+      console.log("[Logstack test] Hello from dashboard (explicit + captured if enabled)");
+    });
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Logs</h1>
-          <p className="text-muted-foreground">{currentProject.name}</p>
+          <h1 className="text-2xl font-bold tracking-tight">Logs</h1>
+          <p className="text-muted-foreground flex items-center gap-2">
+            {currentProject.name}
+            <span className="text-xs px-2 py-0.5 rounded bg-muted">captureConsole on by default</span>
+          </p>
         </div>
-        <div
-          className="flex items-center gap-2 text-sm text-muted-foreground"
-          title={isConnected ? "Live stream connected" : "Reconnecting…"}
-        >
-          {isConnected ? (
-            <Wifi className="h-4 w-4 text-green-500" />
-          ) : (
-            <WifiOff className="h-4 w-4 text-muted-foreground" />
-          )}
-          {isConnected ? "Live" : "Offline"}
+
+        <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+            title={isConnected ? "Live stream connected" : "Reconnecting…"}
+          >
+            {isConnected ? (
+              <Wifi className="h-4 w-4 text-green-500" />
+            ) : (
+              <WifiOff className="h-4 w-4 text-muted-foreground" />
+            )}
+            {isConnected ? "Live" : "Reconnecting"}
+          </div>
+
+          <Button variant="outline" size="sm" onClick={sendTestLog}>
+            Send test log
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => router.push("/demo")}>
+            Open full demo
+          </Button>
         </div>
       </div>
 
@@ -151,14 +193,43 @@ export default function LogsPage() {
           </Button>
         </div>
       ) : (
-        <LogList
-          logs={logs}
-          onLoadMore={() => {
-            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-          }}
-          hasMore={!!hasNextPage}
-          isLoading={isFetching}
-        />
+        <>
+          {!hasLogs && !isFetching && (
+            <div className="rounded-xl border bg-card p-8 text-center space-y-4">
+              <div>
+                <p className="font-medium">No logs yet for this project.</p>
+                <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+                  Once you add the SDK to your app, <strong>every console.log / error / warn</strong> (and explicit calls) will automatically appear here, trigger alerts, and be visible on mobile.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap justify-center gap-3 pt-2">
+                <Button onClick={() => router.push("/demo")}>Try the interactive demo</Button>
+                <Button variant="outline" onClick={() => router.push("/projects")}>View API key &amp; snippets</Button>
+                <Button variant="ghost" onClick={sendTestLog}>Send a test log now</Button>
+              </div>
+
+              <div className="text-[11px] text-muted-foreground pt-2">
+                Tip: In your own code, just <code>console.error("boom")</code> after installing logstack-js — it gets captured for free.
+              </div>
+            </div>
+          )}
+
+          <LogList
+            logs={logs}
+            onLoadMore={() => {
+              if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+            }}
+            hasMore={!!hasNextPage}
+            isLoading={isFetching}
+          />
+
+          {hasLogs && (
+            <div className="text-center text-xs text-muted-foreground pt-2">
+              Showing up to {MAX_RENDERED} recent logs. Use filters or the demo for more.
+            </div>
+          )}
+        </>
       )}
     </div>
   );

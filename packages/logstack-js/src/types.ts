@@ -105,6 +105,16 @@ export interface LogStackConfig {
    */
   captureContext?: boolean;
   /**
+   * Automatically capture calls to the global console (console.log, console.info,
+   * console.warn, console.error, console.debug, console.trace, and console.assert)
+   * and forward them to Logstack as structured logs (with source: "console").
+   *
+   * Original console output/behavior is always preserved first.
+   * This is the recommended way to get "all my logs" with zero code changes.
+   * Defaults to true. Set to false to disable auto-capture.
+   */
+  captureConsole?: boolean;
+  /**
    * Project ID for query operations. Required for getLogs/getLogById.
    */
   projectId?: string;

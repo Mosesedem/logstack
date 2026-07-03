@@ -127,6 +127,19 @@ and which to publish, and I'll run them.
 | `xcodebuild` iOS build                     | ✅     | build now succeeds on the device/simulator path                                                                                            |
 | `flutter run` launch handoff to Xcode      | ⏸      | still waits on Xcode automation / debugger startup prompt after a successful build                                                         |
 | Root workspace dir on disk (local clone)   | ✅     | Renamed to `logstack` (checkout dir name aligned; git remote always was `logstack`)                                                        |
+
+## Phase 8 — Complete console auto-capture + dashboard UX overhaul (2026-07)
+
+| Item                                                                 | Status | Notes |
+| -------------------------------------------------------------------- | ------ | ----- |
+| JS SDK: `captureConsole` hardened + default `true` (opt-out)         | ✅     | Re-entrancy guard, trace + assert support, always call original first, source:"console" |
+| Web logger + demo + onboarding wizard snippet use/enable capture     | ✅     | Prominent messaging that "it just works" for legacy console calls |
+| SDK tests for console capture + restore                              | ✅     | New test coverage |
+| All docs (README, SDK.md, quickstart, content mdx) updated           | ✅     | Capture as the hero feature for full log collection |
+| Dashboard Logs UX: richer cards (copy, source badges, full time, context), advanced filters (source + all levels + clear) | ✅ | |
+| Logs page: excellent empty states + "Send test log", strong guidance about auto-capture | ✅ | |
+| Project create flow SDK step improved with capture explanation       | ✅     | Matches onboarding-ux playbook |
+| End-to-end story: users get local+dev+prod logs in dashboard/mobile/email with almost zero work | ✅ | |
 | Update "naming rule" guidance in CLAUDE.md | ✅     | Removed "do not sweep rename" language; now fully aligned                                                                                  |
 
 ## Phase 7 — Current build & integration status (as of 2026-06-15)

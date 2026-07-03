@@ -195,10 +195,12 @@ export function ProjectCreateFlow() {
 const logstack = createLogStack({
   apiKey: "${apiKey ?? "YOUR_API_KEY"}",
   endpoint: "${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8082/v1").replace(/\/v1\/?$/, "")}",
-  disabled: false,
+  // captureConsole: true (default) — all your console.log / warn / error etc.
+  // are automatically captured and sent with source: "console". Zero changes needed.
 });
 
-logstack.error("Something went wrong", { source: "my-app" });`;
+logstack.info("App initialized");   // explicit structured log
+// console.error("Oh no!")           // also captured automatically!`;
 
   return (
     <div className="mx-auto w-full max-w-4xl">
@@ -413,8 +415,9 @@ logstack.error("Something went wrong", { source: "my-app" });`;
                 Connect your application
               </CardTitle>
               <CardDescription>
-                Install the SDK and send your first log. Matching errors will
-                trigger alerts{alertSkipped ? "" : " you just configured"}.
+                Install the SDK. Native <code>console.*</code> calls are captured automatically
+                (with <code>source: "console"</code>). Explicit <code>logstack.*</code> calls
+                give you rich metadata. Send logs and watch them in real time.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -425,7 +428,7 @@ logstack.error("Something went wrong", { source: "my-app" });`;
                 </code>
               </div>
               <div className="rounded-lg border bg-muted/40 p-4">
-                <p className="mb-2 text-sm font-medium">2. Initialize</p>
+                <p className="mb-2 text-sm font-medium">2. Initialize (auto-captures console.*)</p>
                 <pre className="overflow-x-auto rounded-md bg-background p-3 font-mono text-sm leading-relaxed">
                   {sdkSnippet}
                 </pre>
@@ -442,6 +445,10 @@ logstack.error("Something went wrong", { source: "my-app" });`;
                   <Copy className="mr-2 h-3 w-3" />
                   Copy snippet
                 </Button>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Drop the SDK in and <strong>every</strong> console.log/error/etc from your app is
+                  collected automatically (local + prod) and visible in dashboard, mobile &amp; email alerts.
+                </p>
               </div>
             </CardContent>
             <CardFooter className="flex-col gap-3 border-t pt-6 sm:flex-row sm:justify-between">

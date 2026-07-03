@@ -36,10 +36,13 @@ await logstack.close();
 
 ## Behavior
 
-- **Console and server are independent.** Every log is written to the console (always in
-  development/test; in production only when `consoleInProduction: true`, unless `silent`),
-  and is *also* shipped to the server whenever an `apiKey` is set and `disabled` is false —
-  in **all** environments.
+- **Automatic console capture (default on).** When `captureConsole` (default `true`), any
+  `console.log`, `console.error`, etc. in your app is captured, turned into a structured log
+  with `source: "console"`, and shipped (if not disabled). The original console output is
+  always preserved first.
+- **Console and server are independent.** SDK pretty-printing to console + shipping to server
+  are separate. Every explicit or captured log can go to console (governed by environment +
+  `consoleInProduction`/`silent`) **and** the server (when apiKey present and not disabled).
 - A missing API key should degrade the client to console-only (`disabled: true`); it must
   never become a silent no-op.
 - Browser logs are queued to `localStorage` while offline (bounded by `maxOfflineQueueSize`,
@@ -60,6 +63,7 @@ await logstack.close();
 | `disabled` | `false` | Console-only mode: never buffer, send, or queue. |
 | `maxOfflineQueueSize` | `1000` | Cap on the offline (localStorage) queue. |
 | `captureContext` | `true` | Auto-capture URL/route/user-agent in the browser. |
+| `captureConsole` | `true` | **Recommended default.** Automatically forward native `console.log/info/warn/error/debug/trace/assert(...)` calls as structured logs (source: "console"). Original output always preserved. Set `false` to disable. |
 | `onError` | — | `(error, logs) => void` callback for send failures. |
 
 ## Log levels

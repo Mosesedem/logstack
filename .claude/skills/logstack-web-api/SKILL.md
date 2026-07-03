@@ -95,9 +95,9 @@ Key rotation uses `ApiKeyRevealDialog` only — never the full wizard.
 
 | SDK | Package | Console behavior |
 |-----|---------|------------------|
-| JS/TS | `logstack-js` | Dev: console ON + ships if key set. `disabled: true` = console-only |
-| Python | `logstack-py` | Network only — no console mirror |
-| Go | `logstack-go-sdk` | Network only |
+| JS/TS | `logstack-js` | **captureConsole:true by default** — all console.* auto-captured + shipped + local console. Explicit methods also work. `disabled:true` = console only (no network). |
+| Python | `logstack-py` | Explicit client methods (recommended). Can integrate with stdlib logging. |
+| Go | `logstack-go-sdk` | Explicit client methods. Wrap std `log` package for auto if desired. |
 
 **JS SDK config pattern (always use):**
 ```typescript
@@ -190,11 +190,12 @@ docs/API.md                                # authoritative API docs
 
 ### Before claiming "SDK console.log works"
 
-- [ ] JS: `disabled: false` (or unset) with valid `apiKey` → console + network in dev
-- [ ] JS: `disabled: true` without key → console output, no network, one warning
-- [ ] Web `logger.ts` uses real client with `disabled: !apiKey`, not a no-op
-- [ ] `packages/logstack-js/test/sdk.test.ts` passes
-- [ ] Ingested log appears in dashboard `/logs` for the project
+- [ ] JS default (`captureConsole`): `console.log(...)` or `console.error(...)` → captured with source:"console", shipped if apiKey, visible in /logs + can trigger alerts
+- [ ] Explicit `logstack.*` + console.* both work and are independent
+- [ ] `captureConsole: false` disables auto-capture
+- [ ] Web `logger.ts` + wizard/demo configure or inherit captureConsole + disabled fallback
+- [ ] `packages/logstack-js/test/sdk.test.ts` (incl capture tests) passes
+- [ ] Logs (from console or explicit) stream live into dashboard and can drive email/push
 
 ### Before changing alert UX
 

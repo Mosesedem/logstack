@@ -121,6 +121,42 @@ When enabled in browser environments, Logstack automatically captures:
 - `route` — URL pathname
 - `userAgent` — Browser user agent string
 
+### `captureConsole` (recommended default: true)
+
+**This is the killer feature for effortless log collection.**
+
+When `true` (the default), Logstack **automatically intercepts** all native console calls:
+
+- `console.log`, `console.info`, `console.debug`
+- `console.warn`
+- `console.error`
+- `console.trace`
+- `console.assert` (failed assertions are captured as `error` level)
+
+The original console output **always happens first**, then a structured log entry with `source: "console"` is forwarded to Logstack (and appears in your dashboard, mobile app, and can trigger alerts).
+
+No need to replace every `console.log` in your codebase. Drop the SDK in and you get comprehensive coverage immediately for both dev and prod.
+
+```typescript
+const logstack = createLogStack({
+  apiKey: "...",
+  // captureConsole: true  ← default, you can omit this line
+});
+
+// These are now captured automatically:
+console.log("User clicked", { button: "checkout" });
+console.error("Payment failed", err);
+console.assert(user != null, "User must exist");
+```
+
+To opt out (rare):
+
+```typescript
+captureConsole: false,
+```
+
+Use explicit `logstack.info("msg", { rich: "metadata" })` when you want full control + structured fields. Both paths work great together.
+
 ### `endpoint`
 
 API endpoint URL. Use this for self-hosted instances.

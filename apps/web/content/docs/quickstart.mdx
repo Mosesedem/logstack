@@ -51,6 +51,8 @@ import { createLogStack } from "logstack-js";
 
 export const logger = createLogStack({
   apiKey: process.env.LOGSTACK_API_KEY!,
+  // captureConsole is true by default — your existing console.* calls are
+  // automatically captured with source:"console" (plus explicit logs).
 });
 ```
 

@@ -31,6 +31,9 @@ const logstack: LogStackClient = createLogStack({
   apiKey: apiKey ?? "",
   endpoint,
   disabled: !apiKey,
+  // captureConsole defaults to true: native console.* calls are automatically
+  // captured + shipped (in addition to explicit logstack.* calls).
+  captureConsole: true,
 });
 
 export { logstack };
