@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 
 abstract final class AppTheme {
+  static const _sansFamily = 'Inter';
+  static const _monoFamily = 'JetBrainsMono';
+
   static ThemeData get dark {
     final base = ThemeData(
       useMaterial3: true,
@@ -20,11 +22,12 @@ abstract final class AppTheme {
       ),
     );
 
-    final sans = GoogleFonts.interTextTheme(base.textTheme).apply(
+    final sans = base.textTheme.apply(
+      fontFamily: _sansFamily,
       bodyColor: LogstackColors.textPrimary,
       displayColor: LogstackColors.textPrimary,
     );
-    final mono = GoogleFonts.jetBrainsMonoTextTheme(sans);
+    final mono = sans.apply(fontFamily: _monoFamily);
 
     return base.copyWith(
       textTheme: sans,
@@ -56,6 +59,7 @@ abstract final class AppTheme {
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return TextStyle(
+            fontFamily: _sansFamily,
             fontSize: 12,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
             color: selected ? LogstackColors.textPrimary : LogstackColors.textMuted,
@@ -71,8 +75,14 @@ abstract final class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: LogstackColors.surface,
-        hintStyle: const TextStyle(color: LogstackColors.textMuted),
-        labelStyle: const TextStyle(color: LogstackColors.textSecondary),
+        hintStyle: const TextStyle(
+          fontFamily: _sansFamily,
+          color: LogstackColors.textMuted,
+        ),
+        labelStyle: const TextStyle(
+          fontFamily: _sansFamily,
+          color: LogstackColors.textSecondary,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: LogstackColors.border),
@@ -114,7 +124,10 @@ abstract final class AppTheme {
       ),
       snackBarTheme: const SnackBarThemeData(
         backgroundColor: LogstackColors.surfaceElevated,
-        contentTextStyle: TextStyle(color: LogstackColors.textPrimary),
+        contentTextStyle: TextStyle(
+          fontFamily: _sansFamily,
+          color: LogstackColors.textPrimary,
+        ),
       ),
       extensions: [LogstackTextStyles(mono: mono)],
     );

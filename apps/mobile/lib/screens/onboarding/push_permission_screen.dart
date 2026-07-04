@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -38,13 +39,28 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
   bool get _fromSettings => widget.flow == PushPermissionFlow.settings;
 
   Future<void> _finishOnboarding() async {
-    await ref.read(onboardingProvider.notifier).markComplete();
-    if (mounted) context.go('/login');
+    final onboarding = ref.read(onboardingProvider.notifier);
+    await onboarding.markComplete();
+    // Router redirect sends the user to /login once onboarding is complete.
+    unawaited(_completePushSetup());
   }
 
   Future<void> _finishFromSettings() async {
-    await ref.read(authProvider.notifier).registerPushAfterPermission();
+    final auth = ref.read(authProvider.notifier);
     if (mounted) context.pop();
+    unawaited(_completePushSetup(auth: auth));
+  }
+
+  Future<void> _completePushSetup({AuthNotifier? auth}) async {
+    try {
+      await NotificationService.instance.completeSetupAfterPermission();
+    } catch (_) {
+      // Simulator often lacks APNS — permission is still granted; token
+      // registration can happen later when a real token is available.
+    }
+    if (auth != null) {
+      await auth.registerPushAfterPermission();
+    }
   }
 
   Future<void> _requestPermission() async {
@@ -69,7 +85,6 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional) {
-      await NotificationService.instance.completeSetupAfterPermission();
       if (_fromSettings) {
         await _finishFromSettings();
       } else {

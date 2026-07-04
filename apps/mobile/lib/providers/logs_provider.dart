@@ -165,19 +165,25 @@ class LogsNotifier extends StateNotifier<LogsState> {
   }
 
   Future<void> _startForProject(String projectId) async {
+    if (_disposed) return;
+    final levelFilter = state.levelFilter;
+    final searchQuery = state.searchQuery;
+
     final connectivity = await Connectivity().checkConnectivity();
+    if (_disposed) return;
     final online = !connectivity.contains(ConnectivityResult.none);
 
     final cached = await _cacheService.getLogs(projectId);
+    if (_disposed) return;
     final filtered = _cacheService.filterLocal(
       logs: cached,
-      level: state.levelFilter,
-      search: state.searchQuery,
+      level: levelFilter,
+      search: searchQuery,
     );
     _setState(LogsState(
       logs: filtered,
-      levelFilter: state.levelFilter,
-      searchQuery: state.searchQuery,
+      levelFilter: levelFilter,
+      searchQuery: searchQuery,
       isDeviceOffline: !online,
       isShowingCachedLogs: !online && filtered.isNotEmpty,
       isLive: false,

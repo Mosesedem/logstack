@@ -137,18 +137,22 @@ class NotificationService {
   Future<void> _initializeFCM() async {
     if (Platform.isIOS) {
       String? apnsToken;
-      try {
-        apnsToken = await _messaging
-            .getAPNSToken()
-            .timeout(const Duration(seconds: 3));
-      } catch (_) {
-        apnsToken = null;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        try {
+          apnsToken = await _messaging
+              .getAPNSToken()
+              .timeout(const Duration(seconds: 3));
+        } catch (_) {
+          apnsToken = null;
+        }
+        if (apnsToken != null) break;
+        await Future<void>.delayed(const Duration(milliseconds: 400));
       }
 
       if (apnsToken == null) {
         _logger.w(
-          'APNS token is null — FCM token unavailable on this iOS device. '
-          'Ensure APNS is configured correctly (sandbox for TestFlight).',
+          'APNS token unavailable — FCM token skipped on this iOS build '
+          '(common on Simulator; use a physical device for push delivery).',
         );
         return;
       }
@@ -157,7 +161,11 @@ class NotificationService {
     try {
       _fcmToken = await _messaging.getToken();
     } catch (error, stackTrace) {
-      _logger.e('Failed to retrieve FCM token', error: error, stackTrace: stackTrace);
+      _logger.w(
+        'FCM token not available yet — push registration will retry later',
+        error: error,
+        stackTrace: stackTrace,
+      );
       return;
     }
 

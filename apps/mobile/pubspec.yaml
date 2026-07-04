@@ -33,7 +33,6 @@ dependencies:
   flutter_local_notifications: ^17.2.1
 
   # UI
-  google_fonts: ^6.1.0
   flutter_svg: ^2.0.9
   shimmer: ^3.0.0
 
@@ -65,3 +64,10 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icons/web/icon-512.png
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
