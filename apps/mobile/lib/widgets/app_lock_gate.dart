@@ -19,10 +19,13 @@ class AppLockGate extends ConsumerStatefulWidget {
 class _AppLockGateState extends ConsumerState<AppLockGate>
     with WidgetsBindingObserver {
   bool _unlocked = false;
-  bool _checking = true;
+  bool _checking = true; // only true during very first cold start check
+  bool _attemptingBiometric = false;
+  bool _autoBioAttempted = false;
   String _pin = '';
   String? _error;
   bool _biometricAvailable = false;
+  bool _biometricEnabled = false;
 
   static const _pinLength = 4;
 
@@ -30,7 +33,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _unlockIfNeeded();
+    _unlockIfNeeded(isInitial: true);
   }
 
   @override
@@ -42,50 +45,77 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      // Fresh lock cycle on resume — do not keep previous unlocked
       setState(() {
         _unlocked = false;
         _pin = '';
         _error = null;
+        _attemptingBiometric = false;
+        _autoBioAttempted = false;
+        _biometricEnabled = false;
+        _checking = false; // resume shows PIN UI quickly, not full checking
       });
-      _unlockIfNeeded();
+      _unlockIfNeeded(isInitial: false);
     }
   }
 
-  Future<void> _unlockIfNeeded() async {
+  Future<void> _unlockIfNeeded({bool isInitial = false}) async {
     final lock = ref.read(appLockServiceProvider);
-    if (!await lock.shouldLock()) {
-      if (mounted) {
-        setState(() {
-          _unlocked = true;
-          _checking = false;
-        });
-      }
+
+    final should = await lock.shouldLock();
+    if (!mounted) return;
+
+    if (!should) {
+      setState(() {
+        _unlocked = true;
+        _checking = false;
+        _attemptingBiometric = false;
+        _autoBioAttempted = false;
+      });
       return;
     }
 
-    final bioAvailable = await lock.isBiometricAvailable();
-    if (mounted) setState(() => _biometricAvailable = bioAvailable);
+    // Determine bio capability (once per gate lifetime is fine)
+    if (!_biometricAvailable) {
+      final bioAvailable = await lock.isBiometricAvailable();
+      if (mounted) setState(() => _biometricAvailable = bioAvailable);
+    }
 
-    if (await lock.isBiometricEnabled()) {
+    final bioEnabled = await lock.isBiometricEnabled();
+    if (mounted) {
+      setState(() => _biometricEnabled = bioEnabled);
+    }
+    if (!mounted) return;
+
+    if (bioEnabled && !_autoBioAttempted) {
+      _autoBioAttempted = true;
+      setState(() {
+        _attemptingBiometric = true;
+        if (isInitial) _checking = true;
+      });
+
       final ok = await lock.authenticateWithBiometrics();
       if (!mounted) return;
-      if (ok) {
-        setState(() {
+
+      setState(() {
+        _attemptingBiometric = false;
+        _checking = false;
+        if (ok) {
           _unlocked = true;
-          _checking = false;
           _pin = '';
           _error = null;
-        });
-        return;
-      }
+        }
+        // on fail/cancel: fall through to show stable PIN pad + manual button
+      });
+      return;
     }
 
-    if (mounted) {
-      setState(() {
-        _checking = false;
-        _unlocked = false;
-      });
-    }
+    // No auto bio (or already attempted this cycle), show PIN UI
+    setState(() {
+      _checking = false;
+      _unlocked = false;
+      _attemptingBiometric = false;
+    });
   }
 
   void _onDigit(String digit) {
@@ -126,16 +156,21 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   }
 
   Future<void> _tryBiometric() async {
-    setState(() => _checking = true);
+    setState(() {
+      _attemptingBiometric = true;
+      _error = null;
+    });
     final lock = ref.read(appLockServiceProvider);
     final ok = await lock.authenticateWithBiometrics();
     if (!mounted) return;
     setState(() {
-      _checking = false;
+      _attemptingBiometric = false;
       if (ok) {
         _unlocked = true;
         _pin = '';
         _error = null;
+      } else {
+        _error = 'Biometric failed or cancelled';
       }
     });
   }
@@ -151,54 +186,63 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
         ),
       );
     }
+
     if (!_unlocked) {
+      final bioLabel = _attemptingBiometric
+          ? 'Authenticating…'
+          : 'Use biometrics';
+
       return Theme(
         data: AppTheme.dark,
         child: Material(
-        color: LogstackColors.background,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              children: [
-                const Spacer(),
-                const AppLogo(),
-                const SizedBox(height: 24),
-                Text(
-                  'Logstack is locked',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Enter your PIN to continue',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: LogstackColors.textSecondary,
-                      ),
-                ),
-                const SizedBox(height: 32),
-                PinPad(
-                  pinLength: _pinLength,
-                  filledCount: _pin.length,
-                  onDigit: _onDigit,
-                  onBackspace: _onBackspace,
-                  errorText: _error,
-                ),
-                if (_biometricAvailable) ...[
+          color: LogstackColors.background,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  const Spacer(),
+                  const AppLogo(),
                   const SizedBox(height: 24),
-                  TextButton.icon(
-                    onPressed: _tryBiometric,
-                    icon: const Icon(Icons.fingerprint),
-                    label: const Text('Use biometrics'),
+                  Text(
+                    'Logstack is locked',
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _attemptingBiometric
+                        ? 'Unlocking with biometrics…'
+                        : 'Enter your PIN to continue',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: LogstackColors.textSecondary,
+                        ),
+                  ),
+                  const SizedBox(height: 32),
+                  PinPad(
+                    pinLength: _pinLength,
+                    filledCount: _pin.length,
+                    onDigit: _onDigit,
+                    onBackspace: _onBackspace,
+                    errorText: _error,
+                  ),
+                  if (_biometricAvailable && _biometricEnabled) ...[
+                    const SizedBox(height: 24),
+                    TextButton.icon(
+                      onPressed:
+                          _attemptingBiometric ? null : _tryBiometric,
+                      icon: const Icon(Icons.fingerprint),
+                      label: Text(bioLabel),
+                    ),
+                  ],
+                  const Spacer(),
                 ],
-                const Spacer(),
-              ],
+              ),
             ),
           ),
         ),
-      ),
       );
     }
+
     return widget.child;
   }
 }

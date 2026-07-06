@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/services/auth_service.dart';
-import 'package:logstack_mobile/utils/biometric_prompt.dart';
 
 /// QR scanner — scan the code from the web dashboard to link this device.
 /// No credentials required; the web user is bound when the QR is generated.
@@ -66,8 +65,7 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
       await ref.read(authProvider.notifier).setTokensFromPair(tokenPair);
 
       if (!mounted) return;
-      await maybeOfferBiometricUnlock(context, ref);
-      if (mounted) context.go('/');
+      context.go('/');
     } catch (e) {
       if (mounted) {
         setState(() {

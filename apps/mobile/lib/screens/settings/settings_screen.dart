@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -346,20 +348,46 @@ class _ChangePinSheet extends ConsumerStatefulWidget {
   ConsumerState<_ChangePinSheet> createState() => _ChangePinSheetState();
 }
 
-enum _ChangeStep { create, confirm }
+enum _ChangeStep { verify, create, confirm }
 
 class _ChangePinSheetState extends ConsumerState<_ChangePinSheet> {
-  _ChangeStep _step = _ChangeStep.create;
+  _ChangeStep _step = _ChangeStep.verify;
+  bool _hasExisting = false;
+  bool _loading = true;
+  String _verify = '';
   String _draft = '';
   String _confirm = '';
   String? _error;
 
   static const _pinLength = 4;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadHasPin();
+  }
+
+  Future<void> _loadHasPin() async {
+    final lock = ref.read(appLockServiceProvider);
+    final has = await lock.hasPin();
+    if (!mounted) return;
+    setState(() {
+      _hasExisting = has;
+      _step = has ? _ChangeStep.verify : _ChangeStep.create;
+      _loading = false;
+    });
+  }
+
   void _onDigit(String digit) {
+    if (_loading) return;
     setState(() {
       _error = null;
-      if (_step == _ChangeStep.create) {
+      if (_step == _ChangeStep.verify) {
+        _verify += digit;
+        if (_verify.length >= _pinLength) {
+          unawaited(_verifyCurrent());
+        }
+      } else if (_step == _ChangeStep.create) {
         _draft += digit;
         if (_draft.length >= _pinLength) _step = _ChangeStep.confirm;
       } else {
@@ -370,14 +398,35 @@ class _ChangePinSheetState extends ConsumerState<_ChangePinSheet> {
   }
 
   void _onBackspace() {
+    if (_loading) return;
     setState(() {
       _error = null;
-      if (_step == _ChangeStep.create && _draft.isNotEmpty) {
+      if (_step == _ChangeStep.verify && _verify.isNotEmpty) {
+        _verify = _verify.substring(0, _verify.length - 1);
+      } else if (_step == _ChangeStep.create && _draft.isNotEmpty) {
         _draft = _draft.substring(0, _draft.length - 1);
       } else if (_step == _ChangeStep.confirm && _confirm.isNotEmpty) {
         _confirm = _confirm.substring(0, _confirm.length - 1);
       }
     });
+  }
+
+  Future<void> _verifyCurrent() async {
+    final lock = ref.read(appLockServiceProvider);
+    final ok = await lock.verifyPin(_verify);
+    if (!mounted) return;
+    if (ok) {
+      setState(() {
+        _step = _ChangeStep.create;
+        _verify = '';
+        _error = null;
+      });
+    } else {
+      setState(() {
+        _error = 'Incorrect PIN';
+        _verify = '';
+      });
+    }
   }
 
   Future<void> _savePin() async {
@@ -394,9 +443,32 @@ class _ChangePinSheetState extends ConsumerState<_ChangePinSheet> {
     widget.onComplete();
   }
 
+  String get _title {
+    if (_loading) return 'App PIN';
+    if (_step == _ChangeStep.verify) return 'Enter current PIN';
+    if (_step == _ChangeStep.create) {
+      return _hasExisting ? 'New PIN' : 'Choose PIN';
+    }
+    return 'Confirm PIN';
+  }
+
+  int get _filled {
+    if (_step == _ChangeStep.verify) return _verify.length;
+    if (_step == _ChangeStep.create) return _draft.length;
+    return _confirm.length;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filled = _step == _ChangeStep.create ? _draft.length : _confirm.length;
+    if (_loading) {
+      return const SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(48),
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
+    }
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -404,18 +476,38 @@ class _ChangePinSheetState extends ConsumerState<_ChangePinSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              _step == _ChangeStep.create ? 'New PIN' : 'Confirm PIN',
+              _title,
               style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _step == _ChangeStep.verify
+                  ? 'Verify your current PIN before changing it.'
+                  : 'Your 4-digit app unlock PIN.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: LogstackColors.textSecondary),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             PinPad(
               pinLength: _pinLength,
-              filledCount: filled,
+              filledCount: _filled,
               onDigit: _onDigit,
               onBackspace: _onBackspace,
               errorText: _error,
             ),
             const SizedBox(height: 16),
+            if (_step == _ChangeStep.verify)
+              Text(
+                'Forgot your PIN? You can sign out and complete setup again after re-linking.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: LogstackColors.textMuted),
+                textAlign: TextAlign.center,
+              ),
           ],
         ),
       ),

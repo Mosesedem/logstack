@@ -134,3 +134,19 @@ cd apps/mobile
 ## Design tokens
 
 Match `lib/theme/logstack_colors.dart` — dark zinc surfaces, Inter + JetBrains Mono.
+
+## App lock & biometrics (2026 fixes)
+
+- `AppLockGate` lives in `MaterialApp.router` builder and **must** be keyed with a stable `GlobalKey` (see `app.dart`) so its `_unlocked` / attempt state survives router/auth/security-driven rebuilds of the root `LogstackApp`.
+- On resume (or initial), lock evaluation happens once per cycle.
+- Biometric auto-prompt happens **at most once** per resume when enabled. Cancel/failure falls back to stable PIN pad + manual "Use biometrics" button. No re-entrant or repeated system prompts.
+- On resume the PIN UI is shown promptly; "Checking…" full-screen loader is reserved for cold-start only.
+- Initial PIN + biometric choice is routed exclusively through `SecuritySetupScreen` (reached via `needsSetup`). Post-login success paths no longer call `maybeOfferBiometricUnlock` (prevents double dialogs / routing conflicts).
+- Changing PIN in Settings **requires** the current PIN first (when one exists). Direct set only for first-time / no-PIN cases.
+- After successful unlock (bio or PIN), the gate renders the router child stably until the next background/resume.
+- Logout always: `clearPin()` + `setBiometricEnabled(false)` + session clear (no PIN leak).
+
+Audit additions:
+- [ ] Stable key on AppLockGate; no repeated bio loads or "Checking security" loops on foreground resume.
+- [ ] PIN change in settings prompts for current PIN.
+- [ ] Biometric step reached only from security setup flow; dashboard reached cleanly after `markConfigured()`.

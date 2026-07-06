@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
-import 'package:logstack_mobile/utils/biometric_prompt.dart';
 
 /// Third login path: email + password directly on device (no web pairing).
 class EmailLoginScreen extends ConsumerStatefulWidget {
@@ -38,8 +37,7 @@ class _EmailLoginScreenState extends ConsumerState<EmailLoginScreen> {
             _passwordController.text,
           );
       if (!mounted) return;
-      await maybeOfferBiometricUnlock(context, ref);
-      if (mounted) context.go('/');
+      context.go('/');
     } catch (e) {
       setState(() {
         _error = e.toString().replaceAll('Exception: ', '');

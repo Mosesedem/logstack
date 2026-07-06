@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/services/auth_service.dart';
-import 'package:logstack_mobile/utils/biometric_prompt.dart';
 
 class PINLoginScreen extends ConsumerStatefulWidget {
   const PINLoginScreen({super.key});
@@ -36,8 +35,7 @@ class _PINLoginScreenState extends ConsumerState<PINLoginScreen> {
           await authService.confirmQRByPIN(_pinController.text.trim());
       await ref.read(authProvider.notifier).setTokensFromPair(tokenPair);
       if (!mounted) return;
-      await maybeOfferBiometricUnlock(context, ref);
-      if (mounted) context.go('/');
+      context.go('/');
     } catch (e) {
       setState(() {
         _error = e.toString().replaceAll('Exception: ', '');
