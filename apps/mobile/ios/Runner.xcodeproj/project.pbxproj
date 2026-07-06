@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -512,14 +512,17 @@
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = 9LZKVD339M;
+				DEVELOPMENT_TEAM = K8T663XUUD;
 				ENABLE_BITCODE = NO;
 				ENABLE_EXPLICIT_MODULES = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Logstack;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -723,14 +726,17 @@
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = 9LZKVD339M;
+				DEVELOPMENT_TEAM = K8T663XUUD;
 				ENABLE_BITCODE = NO;
 				ENABLE_EXPLICIT_MODULES = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Logstack;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -755,14 +761,17 @@
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = 9LZKVD339M;
+				DEVELOPMENT_TEAM = K8T663XUUD;
 				ENABLE_BITCODE = NO;
 				ENABLE_EXPLICIT_MODULES = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Logstack;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
