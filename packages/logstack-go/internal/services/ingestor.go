@@ -133,8 +133,10 @@ func (i *Ingestor) IngestBatch(ctx context.Context, projectID uuid.UUID, logs []
 		}()
 	}
 
-	// Publish to Redis for real-time streaming
-	go i.publishLogs(ctx, projectID, logModels)
+	// Publish to Redis for real-time streaming (use background ctx so it survives request completion)
+	go func() {
+		i.publishLogs(context.Background(), projectID, logModels)
+	}()
 
 	return logModels, nil
 }

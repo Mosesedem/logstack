@@ -44,8 +44,23 @@ export function useWebSocket({ projectId, enabled = true }: UseWebSocketOptions)
 
     ws.onmessage = (event) => {
       try {
-        const log: Log = JSON.parse(event.data)
-        setLogs((prev) => [log, ...prev].slice(0, 100)) // Keep last 100 logs
+        const raw: string = event.data
+        const newLogs: Log[] = []
+        // Server may batch multiple JSON logs separated by \n in one frame.
+        for (const line of raw.split('\n')) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          try {
+            const log: Log = JSON.parse(trimmed)
+            newLogs.push(log)
+          } catch {
+            // skip bad line
+          }
+        }
+        if (newLogs.length > 0) {
+          // Prepend reversed so newest in batch appears first
+          setLogs((prev) => [...[...newLogs].reverse(), ...prev].slice(0, 100))
+        }
       } catch (e) {
         console.error('Failed to parse WebSocket message:', e)
       }
