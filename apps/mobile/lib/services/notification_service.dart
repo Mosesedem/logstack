@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:logger/logger.dart';
 import 'package:logstack_mobile/firebase_options.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -79,8 +80,9 @@ class NotificationService {
   }
 
   Future<void> _initializeLocalNotifications() async {
+    // Use the monochrome icon for notifications (looks correct when system tints it white).
     const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
+      '@drawable/ic_launcher_monochrome',
     );
     // Do not request OS permission here — only from Settings when the user opts in.
     const iosSettings = DarwinInitializationSettings(
@@ -100,13 +102,36 @@ class NotificationService {
     );
 
     if (Platform.isAndroid) {
-      await applyToneChannel('default');
+      // Create all tone channels defensively on startup so that even background
+      // or first-launch FCM notifications have a valid channel to target.
+      for (final tone in ['default', 'urgent', 'subtle']) {
+        await _createChannelForTone(tone, activate: false);
+      }
+
+      // Restore the user's last chosen tone (if any) so local notifications use it.
+      String activeTone = 'default';
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final saved = prefs.getString('notification_tone');
+        if (saved != null && ['default', 'urgent', 'subtle'].contains(saved)) {
+          activeTone = saved;
+        }
+      } catch (_) {}
+
+      await _createChannelForTone(activeTone, activate: true);
     }
   }
 
   /// Creates (or recreates) the Android notification channel for [tone].
-  /// Android 8+ cannot change sound on an existing channel — use a new ID per tone.
+  /// This also marks it as the active channel for local notifications.
+  /// Call this from Settings when the user changes tone.
   Future<void> applyToneChannel(String tone) async {
+    await _createChannelForTone(tone, activate: true);
+  }
+
+  /// Internal helper to create a channel. When [activate] is false we only
+  /// ensure the channel exists (used at startup for all tones).
+  Future<void> _createChannelForTone(String tone, {required bool activate}) async {
     if (!Platform.isAndroid) return;
 
     final channelId = 'logstack_alerts_$tone';
@@ -129,7 +154,9 @@ class NotificationService {
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
 
-    _activeAndroidChannelId = channelId;
+    if (activate) {
+      _activeAndroidChannelId = channelId;
+    }
   }
 
   String _activeAndroidChannelId = 'logstack_alerts_default';
@@ -243,6 +270,7 @@ class NotificationService {
       _activeAndroidChannelId,
       'Logstack Alerts',
       channelDescription: 'Notifications for Logstack alert triggers',
+      icon: '@drawable/ic_launcher_monochrome',
       importance: Importance.high,
       priority: Priority.high,
       playSound: true,

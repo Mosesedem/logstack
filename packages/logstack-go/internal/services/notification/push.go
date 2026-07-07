@@ -74,6 +74,8 @@ func buildFCMMessage(token string, title, body string, data map[string]string) *
 			Priority: "high",
 			Notification: &messaging.AndroidNotification{
 				ChannelID: "logstack_alerts_default",
+				Icon:      "ic_launcher_monochrome", // resolved from res/drawable (or mipmap fallback)
+				Color:     "#3B82F6",
 				Sound:     "default",
 				Priority:  messaging.PriorityHigh,
 			},
