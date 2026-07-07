@@ -76,6 +76,7 @@
 
 | Date       | Change                                                                                                                                                                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-07 | Fixed Go alert test-notification fallback to keep `channels` as `datatypes.JSONSlice[string]`; `cd packages/logstack-go && go build ./...` now passes.                                                                                       |
 | 2026-07-07 | Fixed web settings page `LinkMobileDialog` wiring to use controlled `open`/`onOpenChange` props and added a trigger button; `pnpm --filter @logstack/web type-check` + `pnpm --filter @logstack/web build` now pass.                         |
 | 2026-06-13 | Phase 0: added go-and-typescript skill, root CLAUDE.md, replaced stale tracker                                                                                                                                                               |
 | 2026-06-13 | Phase 1: fixed dashboard no-op logger; decoupled SDK console/send + silent/disabled/queue-cap; fixed SDK ingest path `/api/v1/logs`→`/v1/logs`; backend persists all-env logs; rebuilt SDK. Verified via builds/tests/type-check/Node smoke. |

@@ -454,7 +454,7 @@ func (h *AlertsHandler) SendTestNotification(c *gin.Context) {
 
 	channels := rule.Channels
 	if len(channels) == 0 && rule.Channel != "" {
-		channels = []models.AlertChannel{rule.Channel}
+		channels = datatypes.JSONSlice[string]{string(rule.Channel)}
 	}
 
 	slog.Info("Test alert notification(s) sent", "ruleId", id, "channels", channels, "recipient", rule.Recipient)
