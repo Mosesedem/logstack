@@ -23,6 +23,7 @@ import { api } from "@/lib/api-client";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { BillingContextResponse, User } from "@/types";
+import { LinkMobileDialog } from "@/components/auth/link-mobile-dialog";
 
 const COUNTRIES = [
   { code: "NG", name: "Nigeria" },
@@ -238,6 +239,23 @@ export default function SettingsPage() {
               ? "Updating..."
               : "Update Password"}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Mobile Devices Linking */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Link Mobile Device</CardTitle>
+          <CardDescription>
+            Connect the Logstack mobile app for push alerts, realtime logs, and QR login.
+            Use this to test push notifications from the /demo page or alerts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <LinkMobileDialog />
+          <p className="text-xs text-muted-foreground mt-3">
+            After linking, enable push in the mobile app (Settings) so demo bursts and alerts reach your device in realtime.
+          </p>
         </CardContent>
       </Card>
     </div>

@@ -185,6 +185,31 @@ export default function DemoPage() {
     },
   });
 
+  // Create a friendly demo alert rule (email + push) if none exists for easy testing
+  const createDemoAlertMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentProject) throw new Error("No project");
+      return api.post("/alerts", {
+        projectId: currentProject.id,
+        name: "Demo Error Alerts",
+        triggerLevel: "error",
+        triggerPatterns: ["payment|error|declined|failed"],
+        channels: ["email", "push"],
+        recipient: "you@example.com",
+        cooldownMinutes: 1, // low for demo
+        enabled: true,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["alerts", currentProject?.id] });
+      setAlertPollKey((k) => k + 1);
+      toast({ title: "Demo alert rule created", description: "Now test logs will trigger email + push." });
+    },
+    onError: (e: Error) => toast({ title: "Failed to create demo rule", description: e.message, variant: "destructive" }),
+  });
+
+
+
   const client = useMemo<LogStackClient | null>(() => {
     if (!apiKey.startsWith("ls_")) return null;
     return createLogStack({
@@ -338,9 +363,7 @@ export default function DemoPage() {
               ShopFlow Checkout
             </CardTitle>
             <CardDescription>
-              Simulates a small e-commerce app. Each button ships a log via{" "}
-              <code className="text-xs">logstack-js</code> to{" "}
-              <code className="text-xs">{endpoint}</code>.
+              Easy SDK + Alert tester. 1. Paste API key from a project. 2. Send logs (see realtime in /logs). 3. Create demo rule (email+push). 4. Trigger tests/bursts — verify email &amp; mobile push arrive. Perfect for testing your keys work end-to-end.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -381,89 +404,73 @@ export default function DemoPage() {
               <div className="flex items-start gap-2">
                 <Bell className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <div className="space-y-1">
-                  <p className="font-medium">Email alerts</p>
+                  <p className="font-medium">Test Alerts (Email + Push)</p>
                   {!currentProject ? (
                     <p className="text-muted-foreground">
-                      Select a project to check alert configuration.
+                      Select a project to test alerts.
                     </p>
                   ) : !primaryAlert ? (
-                    <p className="text-muted-foreground">
-                      No alert rules yet.{" "}
-                      <button
+                    <div>
+                      <p className="text-muted-foreground mb-2">
+                        No alert rules yet for this project.
+                      </p>
+                      <Button
                         type="button"
-                        className="underline hover:text-foreground"
-                        onClick={() => router.push("/create")}
+                        variant="default"
+                        size="sm"
+                        disabled={createDemoAlertMutation.isPending}
+                        onClick={() => createDemoAlertMutation.mutate()}
                       >
-                        Set up alerts
-                      </button>{" "}
-                      or add one on the Alerts page.
-                    </p>
-                  ) : hasEmailAlert ? (
+                        {createDemoAlertMutation.isPending ? "Creating..." : "Create Demo Alert Rule (Email + Push)"}
+                      </Button>
+                    </div>
+                  ) : (
                     <>
                       <p className="text-muted-foreground">
                         <Mail className="mr-1 inline h-3.5 w-3.5" />
-                        Sends to <strong>{primaryAlert.recipient}</strong> when a
-                        log matches your rule (level + patterns). Use{" "}
-                        <strong>Payment failed</strong> — it sends an error log
-                        that matches the default patterns.
+                        Rule: <strong>{primaryAlert.name}</strong> → sends to {primaryAlert.recipient || "you"} via configured channels (email/push).
+                        Use "Payment failed" scenario or the buttons below.
                       </p>
                       {inCooldown && (
                         <p className="text-xs text-amber-600 dark:text-amber-400">
-                          Cooldown active ({primaryAlert.cooldownMinutes} min
-                          between alerts). SDK logs won&apos;t trigger another
-                          email until it expires.
+                          Cooldown active ({primaryAlert.cooldownMinutes} min). SDK matching logs may be throttled.
                         </p>
                       )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        disabled={testEmailMutation.isPending}
-                        onClick={() => testEmailMutation.mutate()}
-                      >
-                        {testEmailMutation.isPending
-                          ? "Sending…"
-                          : "Send test alert email"}
-                      </Button>
-
-                      {hasPushAlert && (
+                      <div className="flex flex-wrap gap-2 mt-2">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="mt-2"
                           disabled={testEmailMutation.isPending}
                           onClick={() => testEmailMutation.mutate()}
                         >
-                          {testEmailMutation.isPending
-                            ? "Sending…"
-                            : "Send test push notification (to linked mobile)"}
+                          {testEmailMutation.isPending ? "Sending…" : "Send test alert (email + push)"}
                         </Button>
-                      )}
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={testEmailMutation.isPending}
+                          onClick={async () => {
+                            for (let i = 0; i < 3; i++) {
+                              try { await testEmailMutation.mutateAsync(); } catch {}
+                              await new Promise(r => setTimeout(r, 150));
+                            }
+                            toast({ title: "Burst test alerts sent (realtime)" });
+                          }}
+                        >
+                          Burst 3x test alerts (realtime)
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        SDK "Send burst" sends logs in realtime (visible in logs page). Alerts use cooldown unless using test buttons.
+                      </p>
                     </>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      Alert rules exist but none use email. Add an email channel
-                      on the Alerts page to receive notifications here.
-                    </p>
                   )}
                   {latestDelivery && (
-                    <p className="text-xs text-muted-foreground">
-                      Latest delivery:{" "}
-                      <Badge
-                        variant={
-                          latestDelivery.status === "success"
-                            ? "default"
-                            : "destructive"
-                        }
-                        className="ml-1"
-                      >
-                        {latestDelivery.status}
-                      </Badge>
-                      {latestDelivery.errorMessage
-                        ? ` — ${latestDelivery.errorMessage}`
-                        : null}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Latest: <Badge variant={latestDelivery.status === "success" ? "default" : "destructive"}>{latestDelivery.status}</Badge>
+                      {latestDelivery.errorMessage ? ` — ${latestDelivery.errorMessage}` : ""}
                     </p>
                   )}
                 </div>

@@ -157,12 +157,23 @@ export default function TeamPage() {
     data: invitesData,
     isLoading: isLoadingInvites,
     refetch: refetchInvites,
+    error: invitesError,
   } = useQuery({
     queryKey: ["org-invites", organization?.id],
-    queryFn: () =>
-      api.get<{ invites: Invite[] }>(
-        `/organizations/${organization!.id}/invites`,
-      ),
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ invites: Invite[] }>(
+          `/organizations/${organization!.id}/invites`,
+        );
+        return res;
+      } catch (err: any) {
+        if (err?.response?.status === 402) {
+          // Expected on free/low tier — handled in UI
+          return { invites: [] };
+        }
+        throw err;
+      }
+    },
     enabled: !!organization?.id && canManage,
     select: (data) => data.invites ?? [],
   });
@@ -503,7 +514,14 @@ export default function TeamPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoadingInvites ? (
+            {invitesError && (invitesError as any)?.response?.status === 402 ? (
+              <div className="text-center py-6">
+                <p className="text-sm text-muted-foreground">Team invites require a paid plan.</p>
+                <Button variant="outline" className="mt-2" onClick={() => (window.location.href = "/billing")}>
+                  Upgrade to manage team
+                </Button>
+              </div>
+            ) : isLoadingInvites ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>

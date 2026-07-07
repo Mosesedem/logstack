@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -37,13 +39,23 @@ func NewAuditHandler(auditService *services.AuditService, organizationService *s
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/audit [get]
 func (h *AuditHandler) GetAuditLogs(c *gin.Context) {
-	userID, _ := c.Get("user_id")
+	userID, _ := c.Get("userID")
 	
-	// Get user's organization
+	// Get user's organization (auto-create personal one if missing)
 	org, err := h.organizationService.GetUserOrganization(c.Request.Context(), userID.(uint))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get organization"})
-		return
+		if errors.Is(err, services.ErrOrganizationNotFound) {
+			newOrg, createErr := h.organizationService.CreatePersonalOrganization(c.Request.Context(), userID.(uint))
+			if createErr != nil {
+				slog.Error("Failed to auto-create organization for audit", "userID", userID, "error", createErr)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create organization"})
+				return
+			}
+			org = newOrg
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get organization"})
+			return
+		}
 	}
 
 	// Parse pagination
@@ -114,15 +126,25 @@ func (h *AuditHandler) GetAuditLogs(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/audit/{resource_type}/{resource_id} [get]
 func (h *AuditHandler) GetResourceAuditLogs(c *gin.Context) {
-	userID, _ := c.Get("user_id")
+	userID, _ := c.Get("userID")
 	resourceType := c.Param("resource_type")
 	resourceID := c.Param("resource_id")
 
-	// Get user's organization
+	// Get user's organization (auto-create personal one if missing)
 	org, err := h.organizationService.GetUserOrganization(c.Request.Context(), userID.(uint))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get organization"})
-		return
+		if errors.Is(err, services.ErrOrganizationNotFound) {
+			newOrg, createErr := h.organizationService.CreatePersonalOrganization(c.Request.Context(), userID.(uint))
+			if createErr != nil {
+				slog.Error("Failed to auto-create organization for audit resource", "userID", userID, "error", createErr)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create organization"})
+				return
+			}
+			org = newOrg
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get organization"})
+			return
+		}
 	}
 
 	// Parse pagination

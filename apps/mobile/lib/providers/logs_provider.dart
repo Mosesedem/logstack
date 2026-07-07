@@ -125,8 +125,15 @@ class LogsNotifier extends StateNotifier<LogsState> {
   Future<void> _init() async {
     _logSub = _streamService.logStream.listen(_onRealtimeLog);
     _connSub = _streamService.statusStream.listen((status) {
+      // Latch isLive=true once connected or realtime data seen.
+      // Only force false on unavailable (repeated failures).
+      // For transient disconnect/connecting, keep previous isLive so the
+      // "Live stream connected" banner doesn't flicker during quick recovery.
+      final newIsLive = status == StreamConnectionStatus.connected
+          ? true
+          : (status == StreamConnectionStatus.unavailable ? false : s.isLive);
       _patchState((s) => s.copyWith(
-            isLive: status == StreamConnectionStatus.connected,
+            isLive: newIsLive,
             isStreamUnavailable:
                 status == StreamConnectionStatus.unavailable,
           ));
