@@ -30,12 +30,16 @@ class LogsState {
   final String? error;
   final LogLevel? levelFilter;
   final String? searchQuery;
+
   /// WebSocket is open and passing the handshake (see [LogStreamService]).
   final bool isLive;
+
   /// Repeated connect failures — show a stable message instead of "Reconnecting…".
   final bool isStreamUnavailable;
+
   /// Device has no network connectivity.
   final bool isDeviceOffline;
+
   /// REST fetch failed or device offline — list may be stale cache.
   final bool isShowingCachedLogs;
 
@@ -75,10 +79,8 @@ class LogsState {
       hasMore: hasMore ?? this.hasMore,
       offset: offset ?? this.offset,
       error: clearError ? null : (error ?? this.error),
-      levelFilter:
-          clearLevelFilter ? null : (levelFilter ?? this.levelFilter),
-      searchQuery:
-          clearSearchQuery ? null : (searchQuery ?? this.searchQuery),
+      levelFilter: clearLevelFilter ? null : (levelFilter ?? this.levelFilter),
+      searchQuery: clearSearchQuery ? null : (searchQuery ?? this.searchQuery),
       isLive: isLive ?? this.isLive,
       isStreamUnavailable: isStreamUnavailable ?? this.isStreamUnavailable,
       isDeviceOffline: isDeviceOffline ?? this.isDeviceOffline,
@@ -129,13 +131,13 @@ class LogsNotifier extends StateNotifier<LogsState> {
       // Only force false on unavailable (repeated failures).
       // For transient disconnect/connecting, keep previous isLive so the
       // "Live stream connected" banner doesn't flicker during quick recovery.
-      final newIsLive = status == StreamConnectionStatus.connected
-          ? true
-          : (status == StreamConnectionStatus.unavailable ? false : s.isLive);
       _patchState((s) => s.copyWith(
-            isLive: newIsLive,
-            isStreamUnavailable:
-                status == StreamConnectionStatus.unavailable,
+            isLive: status == StreamConnectionStatus.connected
+                ? true
+                : (status == StreamConnectionStatus.unavailable
+                    ? false
+                    : s.isLive),
+            isStreamUnavailable: status == StreamConnectionStatus.unavailable,
           ));
     });
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
