@@ -24,6 +24,7 @@ import {
   User,
   Clock,
   Activity,
+  Loader2,
 } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
@@ -215,7 +216,7 @@ export default function AuditLogsPage() {
         <CardContent>
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Activity className="h-8 w-8 animate-spin text-muted-foreground" />
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : logs.length === 0 ? (
             <div className="text-center py-12">
