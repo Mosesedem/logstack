@@ -168,7 +168,29 @@ and which to publish, and I'll run them.
 
 **Summary of build situation:** Core pieces are complete and were building before rename. The rename was purely mechanical (dirs + strings). Stale lock/node_modules are the only expected breakage. Once `pnpm install` + clean + rebuilds pass, we are at the same (or better) readiness as the prior "Phase 1 verified" state.
 
-## 2026-07-07 — Mobile: separate onboarding from loading + live stream connected state (per logstack-mobile-ux)
+## 2026-07-07 — Mobile push notifications (iOS) + onboarding/loading separation + stream UX
+
+### Push notifications (main fix)
+- **Root causes identified** for "no push on iOS (TestFlight), Firebase console direct send, SDK demo only emailed":
+  - iOS: `getAPNSToken()` gating + missing `didRegisterForRemote...` forwarding meant valid production tokens were never obtained or never forwarded to FCM when the Firebase project lacked an uploaded APNs Authentication Key.
+  - Backend: push completely disabled (only email worked) unless `FCM_SERVICE_ACCOUNT_PATH` (and matching project) was set. `SendTestNotification` exercised channels but UI only exposed email tests.
+  - Even direct Firebase console tests fail without the APNs key because FCM cannot mint the APNS message.
+- **Fixes**:
+  - `ios/Runner/AppDelegate.swift`: Added `FirebaseApp.configure()` guard, `application.registerForRemoteNotifications()`, and critical `didRegisterForRemoteNotificationsWithDeviceToken` that does `Messaging.messaging().apnsToken = deviceToken`.
+  - `notification_service.dart`: Listeners (`onTokenRefresh`, onMessage*, getInitial) are now **always** attached. APNS probe failure only skips the first getToken attempt (with much clearer warning pointing to the Firebase Console APNs step). Recovery via refresh works.
+  - Backend: renamed/updated `/alerts/:id/test*` to `SendTestNotification` (exercises the rule's actual channels: email/push/webhook). Improved warnings when FCM is not configured.
+  - Web demo + Alerts list: test buttons now visible for push channels too and call the generic test endpoint. Toasts mention channels.
+- **What you must do**:
+  1. In Firebase Console for your project → Cloud Messaging → iOS app → add APNs Auth Key (p8 from Apple Dev account). This is **required** for any iOS push via FCM (TestFlight or otherwise).
+  2. Set `FCM_SERVICE_ACCOUNT_PATH` (and `FCM_PROJECT_ID` if needed) in backend `.env`. Use (or copy) the service account under `packages/logstack-go/secrets/`.
+  3. Rebuild iOS (after `cd ios && pod install`), re-upload TestFlight. Delete/reinstall app on device.
+  4. Grant push permission in-app, sign in. Use **Settings → Push Notifications debug card** to inspect token + re-register.
+  5. Create/edit an Alert rule that includes the **push** channel. Use the "Send test notification" button.
+  6. Direct token test: copy from debug card → Firebase Console Cloud Messaging composer.
+
+### Other
+- Onboarding welcome screen is now visually separate from general loading (see previous entry).
+- Live stream "connected" banner reliability improved (data receipt now promotes live state).
 
 - **Onboarding vs loading separation**:
   - SplashScreen now renders a minimal `_AppLoadingScreen` (logo + spinner + "Loading…") while `onboarding`/`auth`/`security` providers are loading or when `onboarding.isComplete`.

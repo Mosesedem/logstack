@@ -31,7 +31,7 @@ type PushNotifier struct {
 // projectID: Firebase project ID (optional, can be inferred from service account)
 func NewPushNotifier(serviceAccountPath string, projectID string, db *gorm.DB) (*PushNotifier, error) {
 	if serviceAccountPath == "" {
-		slog.Warn("FCM service account path not configured, push notifications will be disabled")
+		slog.Warn("FCM service account path not configured (FCM_SERVICE_ACCOUNT_PATH), push notifications will be disabled. Server-side alerts and escalations via push will not be sent.")
 		return &PushNotifier{db: db}, nil
 	}
 
@@ -73,8 +73,9 @@ func buildFCMMessage(token string, title, body string, data map[string]string) *
 		Android: &messaging.AndroidConfig{
 			Priority: "high",
 			Notification: &messaging.AndroidNotification{
-				Sound:    "default",
-				Priority: messaging.PriorityHigh,
+				ChannelID: "logstack_alerts_default",
+				Sound:     "default",
+				Priority:  messaging.PriorityHigh,
 			},
 		},
 		APNS: &messaging.APNSConfig{

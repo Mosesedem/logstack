@@ -167,7 +167,9 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 				alerts.PUT("/:id", alertsHandler.Update)
 				alerts.DELETE("/:id", alertsHandler.Delete)
 				alerts.GET("/:id/history", alertsHandler.GetHistory)
-				alerts.POST("/:id/test-email", alertsHandler.SendTestEmail)
+				alerts.POST("/:id/test", alertsHandler.SendTestNotification)
+				// Legacy alias so old clients / docs keep working
+				alerts.POST("/:id/test-email", alertsHandler.SendTestNotification)
 			}
 
 			// User settings

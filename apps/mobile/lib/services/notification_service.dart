@@ -135,6 +135,8 @@ class NotificationService {
   String _activeAndroidChannelId = 'logstack_alerts_default';
 
   Future<void> _initializeFCM() async {
+    bool apnsReady = true;
+
     if (Platform.isIOS) {
       String? apnsToken;
       for (var attempt = 0; attempt < 3; attempt++) {
@@ -150,30 +152,41 @@ class NotificationService {
       }
 
       if (apnsToken == null) {
+        apnsReady = false;
         _logger.w(
-          'APNS token unavailable — FCM token skipped on this iOS build '
-          '(common on Simulator; use a physical device for push delivery).',
+          'APNS token not yet available — will rely on getToken() + onTokenRefresh. '
+          'On physical devices + TestFlight this usually means the Firebase project '
+          'is missing an APNs Authentication Key (p8) under Project Settings > Cloud Messaging. '
+          'Push will not be deliverable until that is configured.',
         );
-        return;
+      } else {
+        _logger.i('APNS token obtained on iOS');
       }
     }
 
+    // Always attempt to fetch an FCM token. On iOS the plugin may resolve it
+    // even if the explicit getAPNSToken loop above was empty (or later via refresh).
     try {
       _fcmToken = await _messaging.getToken();
     } catch (error, stackTrace) {
       _logger.w(
-        'FCM token not available yet — push registration will retry later',
+        'FCM token not available on this attempt — registration will happen via onTokenRefresh or retry',
         error: error,
         stackTrace: stackTrace,
       );
-      return;
+      // Do NOT return. We still want listeners attached below so that a token
+      // arriving later (refresh, delayed APNS) is captured and can trigger registration.
     }
 
     if (_fcmToken != null) {
       _tokenController.add(_fcmToken!);
       _logger.i('FCM Token: $_fcmToken');
+    } else if (Platform.isIOS && !apnsReady) {
+      _logger.i('No FCM token yet on iOS (expected until APNS is ready / Firebase APNs key is configured).');
     }
 
+    // Always attach refresh + message handlers. Early return previously prevented this
+    // on iOS when the first APNS probe failed, breaking later recovery.
     _messaging.onTokenRefresh.listen((token) {
       _fcmToken = token;
       _tokenController.add(token);
@@ -187,6 +200,10 @@ class NotificationService {
     if (initialMessage != null) {
       _handleInitialMessage(initialMessage);
     }
+
+    // Listeners are attached. On iOS the native AppDelegate calls registerForRemoteNotifications()
+    // after launch + after permission grant. That + the onTokenRefresh listener give us the best
+    // chance of obtaining a usable FCM token even if the first APNS probe was slow.
   }
 
   void _handleForegroundMessage(RemoteMessage message) {

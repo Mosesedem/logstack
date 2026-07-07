@@ -139,6 +139,7 @@ export default function DemoPage() {
 
   const primaryAlert = projectAlerts?.find((rule) => rule.enabled);
   const hasEmailAlert = primaryAlert?.channels?.includes("email");
+  const hasPushAlert = primaryAlert?.channels?.includes("push");
 
   const { data: alertHistory } = useQuery({
     queryKey: ["alert-history", primaryAlert?.id, alertPollKey],
@@ -161,8 +162,8 @@ export default function DemoPage() {
 
   const testEmailMutation = useMutation({
     mutationFn: () =>
-      api.post<{ message: string; recipient: string }>(
-        `/alerts/${primaryAlert?.id}/test-email`,
+      api.post<{ message: string; recipient: string; channels?: string[] }>(
+        `/alerts/${primaryAlert?.id}/test`,
         {},
       ),
     onSuccess: (data) => {
@@ -425,6 +426,21 @@ export default function DemoPage() {
                           ? "Sending…"
                           : "Send test alert email"}
                       </Button>
+
+                      {hasPushAlert && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          disabled={testEmailMutation.isPending}
+                          onClick={() => testEmailMutation.mutate()}
+                        >
+                          {testEmailMutation.isPending
+                            ? "Sending…"
+                            : "Send test push notification (to linked mobile)"}
+                        </Button>
+                      )}
                     </>
                   ) : (
                     <p className="text-muted-foreground">

@@ -410,8 +410,10 @@ func (h *AlertsHandler) GetHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, history)
 }
 
-// SendTestEmail handles POST /v1/alerts/:id/test-email
-func (h *AlertsHandler) SendTestEmail(c *gin.Context) {
+// SendTestNotification handles POST /v1/alerts/:id/test
+// It triggers the alert rule's configured channels (email, push, webhook) with a synthetic log.
+// Previously named "test-email" for legacy reasons; now accurately tests all channels.
+func (h *AlertsHandler) SendTestNotification(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -442,7 +444,7 @@ func (h *AlertsHandler) SendTestEmail(c *gin.Context) {
 	}
 
 	if err := h.alertEngine.SendTestNotification(c.Request.Context(), uint(id)); err != nil {
-		slog.Error("Failed to send test alert email", "error", err, "ruleId", id)
+		slog.Error("Failed to send test notification(s)", "error", err, "ruleId", id, "channels", rule.Channels)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Code:    "DELIVERY_FAILED",
 			Message: err.Error(),
@@ -450,9 +452,15 @@ func (h *AlertsHandler) SendTestEmail(c *gin.Context) {
 		return
 	}
 
-	slog.Info("Test alert email sent", "ruleId", id, "recipient", rule.Recipient)
+	channels := rule.Channels
+	if len(channels) == 0 && rule.Channel != "" {
+		channels = []models.AlertChannel{rule.Channel}
+	}
+
+	slog.Info("Test alert notification(s) sent", "ruleId", id, "channels", channels, "recipient", rule.Recipient)
 	c.JSON(http.StatusOK, gin.H{
-		"message":   "Test alert email sent",
+		"message":  "Test alert sent via configured channels",
+		"channels": channels,
 		"recipient": rule.Recipient,
 	})
 }

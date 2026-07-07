@@ -38,9 +38,9 @@ func NewNotificationServiceWithDB(cfg *config.Config, db *gorm.DB) *Service {
 	}
 
 	if push != nil && push.client != nil {
-		slog.Info("push notifier enabled", "firebase_project_id", cfg.FCMProjectID)
+		slog.Info("push notifier enabled", "firebase_project_id", cfg.FCMProjectID, "path", cfg.FCMServiceAccountPath)
 	} else {
-		slog.Warn("push notifier disabled: FCM_SERVICE_ACCOUNT_PATH not set or invalid")
+		slog.Warn("push notifier disabled — set FCM_SERVICE_ACCOUNT_PATH (path to firebase service account JSON) and optionally FCM_PROJECT_ID in .env. Without this only email/webhook alerts will work. For iOS push you must ALSO upload an APNs key in the Firebase Console.")
 	}
 
 	return &Service{

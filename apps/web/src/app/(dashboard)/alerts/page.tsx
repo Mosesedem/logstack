@@ -133,15 +133,16 @@ export default function AlertsPage() {
 
   const testEmailMutation = useMutation({
     mutationFn: (alertId: number) =>
-      api.post<{ message: string; recipient: string }>(
-        `/alerts/${alertId}/test-email`,
+      api.post<{ message: string; recipient: string; channels?: string[] }>(
+        `/alerts/${alertId}/test`,
         {},
       ),
     onSuccess: (data, alertId) => {
       queryClient.invalidateQueries({ queryKey: ["alert-history", alertId] });
+      const channels = (data as any)?.channels?.join(', ') || 'email';
       toast({
         title: "Test alert sent",
-        description: `Check ${data.recipient} (and spam).`,
+        description: `Via ${channels} to ${data.recipient}. Check inbox / mobile (and spam).`,
       });
     },
     onError: (error: Error) => {
@@ -252,14 +253,14 @@ export default function AlertsPage() {
                 </SelectContent>
               </Select>
             </div>
-            {historyRule?.channels.includes("email") && historyAlertId && (
+            {(historyRule?.channels.includes("email") || historyRule?.channels.includes("push")) && historyAlertId && (
               <Button
                 variant="outline"
                 size="sm"
                 disabled={testEmailMutation.isPending}
                 onClick={() => testEmailMutation.mutate(historyAlertId)}
               >
-                Send test email
+                Send test notification (email / push)
               </Button>
             )}
           </div>
