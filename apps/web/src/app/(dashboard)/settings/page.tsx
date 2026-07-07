@@ -72,6 +72,7 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [linkMobileOpen, setLinkMobileOpen] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -134,130 +135,142 @@ export default function SettingsPage() {
   const billingContext = billingData?.context;
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile</CardTitle>
-          <CardDescription>Update your profile information</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              value={session?.user?.email ?? profile?.email ?? ""}
-              disabled
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="country">Country</Label>
-            <Select value={country} onValueChange={setCountry}>
-              <SelectTrigger id="country">
-                <SelectValue placeholder="Select country" />
-              </SelectTrigger>
-              <SelectContent>
-                {COUNTRIES.map((c) => (
-                  <SelectItem key={c.code} value={c.code}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Nigerian customers are billed in NGN via Paystack. All other
-              countries are billed in USD via Polar.
-            </p>
-          </div>
-          {billingContext && (
-            <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
-              Current billing:{" "}
-              <span className="font-medium">{billingContext.currency}</span> via{" "}
-              <span className="font-medium">{billingContext.paymentLabel}</span>
+    <>
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Profile</CardTitle>
+            <CardDescription>Update your profile information</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                value={session?.user?.email ?? profile?.email ?? ""}
+                disabled
+              />
             </div>
-          )}
-          <Button
-            onClick={() =>
-              updateProfileMutation.mutate({ name, country })
-            }
-            disabled={updateProfileMutation.isPending}
-          >
-            {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
-          </Button>
-        </CardContent>
-      </Card>
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="country">Country</Label>
+              <Select value={country} onValueChange={setCountry}>
+                <SelectTrigger id="country">
+                  <SelectValue placeholder="Select country" />
+                </SelectTrigger>
+                <SelectContent>
+                  {COUNTRIES.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Nigerian customers are billed in NGN via Paystack. All other
+                countries are billed in USD via Polar.
+              </p>
+            </div>
+            {billingContext && (
+              <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                Current billing:{" "}
+                <span className="font-medium">{billingContext.currency}</span>{" "}
+                via{" "}
+                <span className="font-medium">
+                  {billingContext.paymentLabel}
+                </span>
+              </div>
+            )}
+            <Button
+              onClick={() => updateProfileMutation.mutate({ name, country })}
+              disabled={updateProfileMutation.isPending}
+            >
+              {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Change Password</CardTitle>
-          <CardDescription>Update your password</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="currentPassword">Current Password</Label>
-            <Input
-              id="currentPassword"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="newPassword">New Password</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm New Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-          </div>
-          <Button
-            onClick={handlePasswordSubmit}
-            disabled={
-              updatePasswordMutation.isPending ||
-              !currentPassword ||
-              !newPassword
-            }
-          >
-            {updatePasswordMutation.isPending
-              ? "Updating..."
-              : "Update Password"}
-          </Button>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Change Password</CardTitle>
+            <CardDescription>Update your password</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="currentPassword">Current Password</Label>
+              <Input
+                id="currentPassword"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+            <Button
+              onClick={handlePasswordSubmit}
+              disabled={
+                updatePasswordMutation.isPending ||
+                !currentPassword ||
+                !newPassword
+              }
+            >
+              {updatePasswordMutation.isPending
+                ? "Updating..."
+                : "Update Password"}
+            </Button>
+          </CardContent>
+        </Card>
 
-      {/* Mobile Devices Linking */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Link Mobile Device</CardTitle>
-          <CardDescription>
-            Connect the Logstack mobile app for push alerts, realtime logs, and QR login.
-            Use this to test push notifications from the /demo page or alerts.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LinkMobileDialog />
-          <p className="text-xs text-muted-foreground mt-3">
-            After linking, enable push in the mobile app (Settings) so demo bursts and alerts reach your device in realtime.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
+        {/* Mobile Devices Linking */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Link Mobile Device</CardTitle>
+            <CardDescription>
+              Connect the Logstack mobile app for push alerts, realtime logs,
+              and QR login. Use this to test push notifications from the /demo
+              page or alerts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => setLinkMobileOpen(true)}>
+              Link Mobile App
+            </Button>
+            <p className="text-xs text-muted-foreground mt-3">
+              After linking, enable push in the mobile app (Settings) so demo
+              bursts and alerts reach your device in realtime.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <LinkMobileDialog
+        open={linkMobileOpen}
+        onOpenChange={setLinkMobileOpen}
+      />
+    </>
   );
 }

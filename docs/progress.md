@@ -76,6 +76,7 @@
 
 | Date       | Change                                                                                                                                                                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-07 | Fixed web settings page `LinkMobileDialog` wiring to use controlled `open`/`onOpenChange` props and added a trigger button; `pnpm --filter @logstack/web type-check` + `pnpm --filter @logstack/web build` now pass.                         |
 | 2026-06-13 | Phase 0: added go-and-typescript skill, root CLAUDE.md, replaced stale tracker                                                                                                                                                               |
 | 2026-06-13 | Phase 1: fixed dashboard no-op logger; decoupled SDK console/send + silent/disabled/queue-cap; fixed SDK ingest path `/api/v1/logs`→`/v1/logs`; backend persists all-env logs; rebuilt SDK. Verified via builds/tests/type-check/Node smoke. |
 | 2026-06-13 | Phase 2 (core): added `WSAuth` (browser WebSocket token via subprotocol/query); decoupled `/v1/stream` from `/mobile`; updated web hook; surfaced projects-query errors. Audit `/v1/v1` and post-login redirect were already correct.        |
@@ -86,7 +87,7 @@
 | 2026-06-15 | Added focused AWS EC2 Docker deploy doc for updating an already-running instance; linked it from docs index.                                                                                                                                 |
 | 2026-06-15 | Backend config now loads `.env` on startup and reads env-driven values instead of hardcoded fallback literals; CORS no longer panics on empty origins.                                                                                       |
 | 2026-06-19 | Fixed browser CORS wildcard handling in backend middleware so credentialed requests no longer emit invalid `*` origin headers; added focused middleware tests.                                                                               |
-| 2026-07-03 | SDK release wave: `logstack-js@1.0.2` (captureConsole hardened + `VERSION` export), `logstack-py@1.0.2` (capture_logging default on), `logstack-go-sdk@v1.0.3` (stdlib log capture). READMEs + publish docs updated.                        |
+| 2026-07-03 | SDK release wave: `logstack-js@1.0.2` (captureConsole hardened + `VERSION` export), `logstack-py@1.0.2` (capture_logging default on), `logstack-go-sdk@v1.0.3` (stdlib log capture). READMEs + publish docs updated.                         |
 
 ---
 
@@ -122,36 +123,36 @@ and which to publish, and I'll run them.
 
 ## Phase 7 — Mobile iOS stability
 
-| Item                                       | Status | Notes                                                                                                                                      |
-| ------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Xcode 16 module/stat cache workaround      | ✅     | added Runner scheme pre-action + local DerivedData cache overrides so `xcodebuild` no longer fails on `Darwin` / `Foundation` cache rename |
-| `xcodebuild` iOS build                     | ✅     | build now succeeds on the device/simulator path                                                                                            |
-| `flutter run` launch handoff to Xcode      | ⏸      | still waits on Xcode automation / debugger startup prompt after a successful build                                                         |
-| Root workspace dir on disk (local clone)   | ✅     | Renamed to `logstack` (checkout dir name aligned; git remote always was `logstack`)                                                        |
+| Item                                     | Status | Notes                                                                                                                                      |
+| ---------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Xcode 16 module/stat cache workaround    | ✅     | added Runner scheme pre-action + local DerivedData cache overrides so `xcodebuild` no longer fails on `Darwin` / `Foundation` cache rename |
+| `xcodebuild` iOS build                   | ✅     | build now succeeds on the device/simulator path                                                                                            |
+| `flutter run` launch handoff to Xcode    | ⏸      | still waits on Xcode automation / debugger startup prompt after a successful build                                                         |
+| Root workspace dir on disk (local clone) | ✅     | Renamed to `logstack` (checkout dir name aligned; git remote always was `logstack`)                                                        |
 
 ## Phase 8 — Complete console auto-capture + dashboard UX overhaul (2026-07)
 
-| Item                                                                 | Status | Notes |
-| -------------------------------------------------------------------- | ------ | ----- |
-| JS SDK: `captureConsole` hardened + default `true` (opt-out)         | ✅     | Re-entrancy guard, trace + assert support, always call original first, source:"console" |
-| Web logger + demo + onboarding wizard snippet use/enable capture     | ✅     | Prominent messaging that "it just works" for legacy console calls |
-| SDK tests for console capture + restore                              | ✅     | New test coverage |
-| All docs (README, SDK.md, quickstart, content mdx) updated           | ✅     | Capture as the hero feature for full log collection |
-| Dashboard Logs UX: richer cards (copy, source badges, full time, context), advanced filters (source + all levels + clear) | ✅ | |
-| Logs page: excellent empty states + "Send test log", strong guidance about auto-capture | ✅ | |
-| Project create flow SDK step improved with capture explanation       | ✅     | Matches onboarding-ux playbook |
-| End-to-end story: users get local+dev+prod logs in dashboard/mobile/email with almost zero work | ✅ | |
-| Update "naming rule" guidance in CLAUDE.md | ✅     | Removed "do not sweep rename" language; now fully aligned                                                                                  |
+| Item                                                                                                                      | Status | Notes                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------- |
+| JS SDK: `captureConsole` hardened + default `true` (opt-out)                                                              | ✅     | Re-entrancy guard, trace + assert support, always call original first, source:"console" |
+| Web logger + demo + onboarding wizard snippet use/enable capture                                                          | ✅     | Prominent messaging that "it just works" for legacy console calls                       |
+| SDK tests for console capture + restore                                                                                   | ✅     | New test coverage                                                                       |
+| All docs (README, SDK.md, quickstart, content mdx) updated                                                                | ✅     | Capture as the hero feature for full log collection                                     |
+| Dashboard Logs UX: richer cards (copy, source badges, full time, context), advanced filters (source + all levels + clear) | ✅     |                                                                                         |
+| Logs page: excellent empty states + "Send test log", strong guidance about auto-capture                                   | ✅     |                                                                                         |
+| Project create flow SDK step improved with capture explanation                                                            | ✅     | Matches onboarding-ux playbook                                                          |
+| End-to-end story: users get local+dev+prod logs in dashboard/mobile/email with almost zero work                           | ✅     |                                                                                         |
+| Update "naming rule" guidance in CLAUDE.md                                                                                | ✅     | Removed "do not sweep rename" language; now fully aligned                               |
 
 ## Phase 7 — Current build & integration status (as of 2026-06-15)
 
-| Component                     | Command / Check                                                                                                | Status                            | Notes                                                                                                                                                                                              |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Go backend (logstack-go)      | `cd packages/logstack-go && go build ./... && go vet ./... && go test ./...`                                   | 🔄 Pending full run (post-rename) | Module path stable (`github.com/mosesedem/logstack`); imports internal/\* resolve from go.mod location; openapi.yaml + migrations present; workers, WS, billing, alerts, auth all wired in main.go |
-| JS SDK (logstack-js)          | `cd packages/logstack-js && pnpm build && pnpm test`                                                           | 🔄 Pending                        | Already had dist/ from before; workspace dep in web is "logstack-js" (correct)                                                                                                                     |
-| Python SDK (logstack-py)      | `cd packages/logstack-python && python -m build` (or pip install -e .)                                         | 🔄 Pending                        | PyPI name `logstack-py`; import `from logstack import ...`; pyproject includes logstack/\*                                                                                                         |
-| Web dashboard (@logstack/web) | `cd apps/web && pnpm type-check && pnpm build`                                                                 | 🔄 Pending                        | Uses workspace:^ logstack-js; has / (home), (dashboard), (auth), admin, fumadocs content; api-client, logger, WS hook                                                                              |
-| Mobile (Flutter)              | `cd apps/mobile && flutter analyze && flutter build apk --debug` (or ios)                                      | 🔄 Pending (needs Flutter SDK)    | Full providers (auth, projects, logs, alerts, billing); api_client.dart, services; models + router + screens for complete journey; firebase_options.example present                                |
+| Component                     | Command / Check                                                              | Status                            | Notes                                                                                                                                                                                              |
+| ----------------------------- | ---------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Go backend (logstack-go)      | `cd packages/logstack-go && go build ./... && go vet ./... && go test ./...` | 🔄 Pending full run (post-rename) | Module path stable (`github.com/mosesedem/logstack`); imports internal/\* resolve from go.mod location; openapi.yaml + migrations present; workers, WS, billing, alerts, auth all wired in main.go |
+| JS SDK (logstack-js)          | `cd packages/logstack-js && pnpm build && pnpm test`                         | 🔄 Pending                        | Already had dist/ from before; workspace dep in web is "logstack-js" (correct)                                                                                                                     |
+| Python SDK (logstack-py)      | `cd packages/logstack-python && python -m build` (or pip install -e .)       | 🔄 Pending                        | PyPI name `logstack-py`; import `from logstack import ...`; pyproject includes logstack/\*                                                                                                         |
+| Web dashboard (@logstack/web) | `cd apps/web && pnpm type-check && pnpm build`                               | 🔄 Pending                        | Uses workspace:^ logstack-js; has / (home), (dashboard), (auth), admin, fumadocs content; api-client, logger, WS hook                                                                              |
+| Mobile (Flutter)              | `cd apps/mobile && flutter analyze && flutter build apk --debug` (or ios)    | 🔄 Pending (needs Flutter SDK)    | Full providers (auth, projects, logs, alerts, billing); api_client.dart, services; models + router + screens for complete journey; firebase_options.example present                                |
 
 ## 2026-07-06 — Mobile app lock / biometrics / PIN fixes (per logstack-mobile-ux skill)
 
@@ -162,22 +163,23 @@ and which to publish, and I'll run them.
 - Updated `logstack-mobile-ux` skill with the new behaviors + audit items.
 - Logout and clear paths already correct per skill.
 - `flutter analyze` clean (no errors); relevant tests pass.
-| Monorepo                      | `pnpm install` (after dir rename) then `pnpm build` / `pnpm lint` / `pnpm test`                                | 🔄 Required                       | Root package.json + turbo + pnpm-workspace (globs \*) are name-agnostic; lockfile has stale links to old logship-js paths                                                                          |
-| Docker build                  | `docker compose -f docker-compose.yml build`                                                                   | 🔄                                | docker-compose.yml already pointed at `./packages/logstack-go` (good); dev compose only infra                                                                                                      |
-| End-to-end smoke              | docker dev up; start backend; pnpm --filter @logstack/web dev; send log via SDK or curl with key; see in /logs | ⏳ Manual                         | Per Phase 1 verified previously                                                                                                                                                                    |
+  | Monorepo | `pnpm install` (after dir rename) then `pnpm build` / `pnpm lint` / `pnpm test` | 🔄 Required | Root package.json + turbo + pnpm-workspace (globs \*) are name-agnostic; lockfile has stale links to old logship-js paths |
+  | Docker build | `docker compose -f docker-compose.yml build` | 🔄 | docker-compose.yml already pointed at `./packages/logstack-go` (good); dev compose only infra |
+  | End-to-end smoke | docker dev up; start backend; pnpm --filter @logstack/web dev; send log via SDK or curl with key; see in /logs | ⏳ Manual | Per Phase 1 verified previously |
 
 **Summary of build situation:** Core pieces are complete and were building before rename. The rename was purely mechanical (dirs + strings). Stale lock/node_modules are the only expected breakage. Once `pnpm install` + clean + rebuilds pass, we are at the same (or better) readiness as the prior "Phase 1 verified" state.
 
 ## 2026-07-07 — Mobile push notifications (iOS) + onboarding/loading separation + stream UX
 
 ### Push notifications (main fix)
+
 - **Root causes identified** for "no push on iOS (TestFlight), Firebase console direct send, SDK demo only emailed":
   - iOS: `getAPNSToken()` gating + missing `didRegisterForRemote...` forwarding meant valid production tokens were never obtained or never forwarded to FCM when the Firebase project lacked an uploaded APNs Authentication Key.
   - Backend: push completely disabled (only email worked) unless `FCM_SERVICE_ACCOUNT_PATH` (and matching project) was set. `SendTestNotification` exercised channels but UI only exposed email tests.
   - Even direct Firebase console tests fail without the APNs key because FCM cannot mint the APNS message.
 - **Fixes**:
   - `ios/Runner/AppDelegate.swift`: Added `FirebaseApp.configure()` guard, `application.registerForRemoteNotifications()`, and critical `didRegisterForRemoteNotificationsWithDeviceToken` that does `Messaging.messaging().apnsToken = deviceToken`.
-  - `notification_service.dart`: Listeners (`onTokenRefresh`, onMessage*, getInitial) are now **always** attached. APNS probe failure only skips the first getToken attempt (with much clearer warning pointing to the Firebase Console APNs step). Recovery via refresh works.
+  - `notification_service.dart`: Listeners (`onTokenRefresh`, onMessage\*, getInitial) are now **always** attached. APNS probe failure only skips the first getToken attempt (with much clearer warning pointing to the Firebase Console APNs step). Recovery via refresh works.
   - Backend: renamed/updated `/alerts/:id/test*` to `SendTestNotification` (exercises the rule's actual channels: email/push/webhook). Improved warnings when FCM is not configured.
   - Web demo + Alerts list: test buttons now visible for push channels too and call the generic test endpoint. Toasts mention channels.
 - **What you must do**:
@@ -189,6 +191,7 @@ and which to publish, and I'll run them.
   6. Direct token test: copy from debug card → Firebase Console Cloud Messaging composer.
 
 ### Other
+
 - Onboarding welcome screen is now visually separate from general loading (see previous entry).
 - Live stream "connected" banner reliability improved (data receipt now promotes live state).
 
