@@ -168,6 +168,22 @@ and which to publish, and I'll run them.
 
 **Summary of build situation:** Core pieces are complete and were building before rename. The rename was purely mechanical (dirs + strings). Stale lock/node_modules are the only expected breakage. Once `pnpm install` + clean + rebuilds pass, we are at the same (or better) readiness as the prior "Phase 1 verified" state.
 
+## 2026-07-07 — Mobile: separate onboarding from loading + live stream connected state (per logstack-mobile-ux)
+
+- **Onboarding vs loading separation**:
+  - SplashScreen now renders a minimal `_AppLoadingScreen` (logo + spinner + "Loading…") while `onboarding`/`auth`/`security` providers are loading or when `onboarding.isComplete`.
+  - The distinctive first-run welcome ("Logstack", tagline, "Get started" CTA with entrance animation) is only shown when we have resolved that onboarding is **not** complete.
+  - This stops returning/logged-in users from seeing the onboarding splash visuals on cold start or after login flows. Router still uses `/splash` as initial/placeholder; visuals now match intent (loading screen ≠ onboarding screen).
+- **Live stream connection state**:
+  - "Live stream connected" (green) was never appearing; only "Reconnecting to live stream…" showed, even though realtime logs were arriving.
+  - Root: `isLive` was driven only by `StreamConnectionStatus.connected` emitted strictly after `await channel.ready`. In practice ready could time out or be slow while the listen subscription was already delivering messages.
+  - Fixes:
+    - In `LogStreamService`: track `_emittedLiveForCurrent`; promote to `connected` status as soon as first message arrives in `_onMessage` (data flowing = live). Reset flag on connect/disconnect/retry paths. Still emit on successful `ready`.
+    - In `LogsNotifier._onRealtimeLog`: also force `isLive: true` when a realtime log is processed.
+  - Banner logic (and three-signal model per skill) is unchanged. Now "Live stream connected" will appear promptly once the WS delivers logs.
+- `flutter analyze` clean (no new errors).
+- Updated `SplashScreen` + `log_stream_service.dart` + `logs_provider.dart`.
+
 ## Phase 8 — Production launch preparation (target: release today 2026-06-15)
 
 | Area                      | Items                                                                                                     | Status | Action / Blocker                                                                                                                                                                                                                                  |

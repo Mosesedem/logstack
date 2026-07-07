@@ -3,9 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:logstack_mobile/providers/auth_provider.dart';
+import 'package:logstack_mobile/providers/onboarding_provider.dart';
+import 'package:logstack_mobile/providers/security_provider.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/app_logo.dart';
+import 'package:logstack_mobile/widgets/loading_states.dart';
 
+/// SplashScreen serves two distinct purposes:
+/// - While onboarding/auth/security state is still loading: a minimal *loading* screen.
+/// - For true first-run (onboarding not complete): the *onboarding welcome* screen.
+/// This prevents the onboarding visuals from flashing for returning/logged-in users.
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
@@ -36,17 +44,20 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       begin: const Offset(0, 0.08),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-
-    _controller.forward();
-    Timer(const Duration(milliseconds: 900), () {
-      if (mounted) setState(() => _canContinue = true);
-    });
   }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  void _startWelcomeAnimation() {
+    if (_controller.isAnimating || _controller.isCompleted) return;
+    _controller.forward();
+    Timer(const Duration(milliseconds: 900), () {
+      if (mounted) setState(() => _canContinue = true);
+    });
   }
 
   Future<void> _continue() async {
@@ -56,6 +67,30 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final onboarding = ref.watch(onboardingProvider);
+    final auth = ref.watch(authProvider);
+    final security = ref.watch(securityProvider);
+
+    final isLoading = onboarding.isLoading || auth.isLoading || security.isLoading;
+
+    // General loading screen (used on cold start, auth checks, returning users).
+    // Distinct from the first-run onboarding welcome.
+    if (isLoading) {
+      return const _AppLoadingScreen();
+    }
+
+    // If we know onboarding is already complete, show neutral loading.
+    // Router will redirect to login or home.
+    if (onboarding.isComplete) {
+      return const _AppLoadingScreen();
+    }
+
+    // First-run only: show the distinctive onboarding welcome screen.
+    // Schedule animation start after this frame to avoid calling setState during build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _startWelcomeAnimation();
+    });
+
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -113,6 +148,37 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: LogstackColors.textMuted,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Minimal branded loading screen for app startup / auth resolution.
+/// Different visuals and no "Get started" CTA.
+class _AppLoadingScreen extends StatelessWidget {
+  const _AppLoadingScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const AppLogo(size: 72),
+              const SizedBox(height: 24),
+              const LogstackLoading(),
+              const SizedBox(height: 12),
+              Text(
+                'Loading…',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: LogstackColors.textSecondary,
                     ),
               ),
             ],

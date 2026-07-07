@@ -57,7 +57,7 @@ class HomeScreen extends ConsumerWidget {
                 color: LogstackColors.warnAmber,
               ),
               content: const Text(
-                'No connection — your account stays signed in. Logs will sync when you\'re back online.',
+                'No connection. Your Logs will sync when you\'re back online.',
               ),
               actions: [
                 TextButton(

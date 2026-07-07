@@ -39,6 +39,7 @@ class LogStreamService {
   int _consecutiveFailures = 0;
   bool _connecting = false;
   int _connectGeneration = 0;
+  bool _emittedLiveForCurrent = false;
 
   final _statusController =
       StreamController<StreamConnectionStatus>.broadcast();
@@ -63,6 +64,7 @@ class LogStreamService {
       _attempt = 0;
       _consecutiveFailures = 0;
     }
+    _emittedLiveForCurrent = false;
     await _open();
   }
 
@@ -77,6 +79,7 @@ class LogStreamService {
     } catch (_) {}
     _channel = null;
     _connecting = false;
+    _emittedLiveForCurrent = false;
     _statusController.add(StreamConnectionStatus.disconnected);
   }
 
@@ -86,6 +89,7 @@ class LogStreamService {
     _consecutiveFailures = 0;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _emittedLiveForCurrent = false;
     await _open();
   }
 
@@ -111,6 +115,7 @@ class LogStreamService {
 
     final generation = ++_connectGeneration;
     _connecting = true;
+    _emittedLiveForCurrent = false;
     _statusController.add(StreamConnectionStatus.connecting);
 
     final url = AppConfig.logStreamUrl(projectId: projectId, token: token);
@@ -136,6 +141,7 @@ class LogStreamService {
       _connecting = false;
       _attempt = 0;
       _consecutiveFailures = 0;
+      _emittedLiveForCurrent = true;
       _statusController.add(StreamConnectionStatus.connected);
     } catch (_) {
       _connecting = false;
@@ -147,6 +153,13 @@ class LogStreamService {
 
   void _onMessage(dynamic event) {
     try {
+      // If data is flowing over the socket, the live stream is connected.
+      // This ensures "Live stream connected" is shown even if channel.ready
+      // is slow to resolve on some platforms/networks.
+      if (!_emittedLiveForCurrent) {
+        _emittedLiveForCurrent = true;
+        _statusController.add(StreamConnectionStatus.connected);
+      }
       final map = jsonDecode(event as String) as Map<String, dynamic>;
       _logController.add(Log.fromJson(map));
     } catch (_) {
@@ -159,6 +172,7 @@ class LogStreamService {
     _subscription?.cancel();
     _subscription = null;
     _channel = null;
+    _emittedLiveForCurrent = false;
 
     if (_projectId == null) {
       _statusController.add(StreamConnectionStatus.disconnected);

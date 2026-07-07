@@ -325,6 +325,7 @@ class LogsNotifier extends StateNotifier<LogsState> {
     _patchState((s) => s.copyWith(
           logs: updated,
           isShowingCachedLogs: false,
+          isLive: true, // realtime data received ⇒ stream is live
         ));
     _cacheService.saveLogs(_projectId!, updated);
   }
