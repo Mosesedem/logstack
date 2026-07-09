@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { createLogStack, type LogStackClient, type LogLevel } from "logstack-js";
 import {
   ArrowRight,
@@ -117,6 +118,7 @@ function maskApiKey(key: string): string {
 export default function DemoPage() {
   const router = useRouter();
   const { currentProject } = useProject();
+  const { data: session } = useSession();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [apiKey, setApiKey] = useState("");
@@ -124,6 +126,7 @@ export default function DemoPage() {
   const [sending, setSending] = useState<string | null>(null);
   const [runningBurst, setRunningBurst] = useState(false);
   const [alertPollKey, setAlertPollKey] = useState(0);
+  const userEmail = session?.user?.email ?? "";
 
   useEffect(() => {
     const stored = sessionStorage.getItem(API_KEY_STORAGE_KEY);
@@ -171,14 +174,16 @@ export default function DemoPage() {
         queryKey: ["alert-history", primaryAlert?.id],
       });
       setAlertPollKey((k) => k + 1);
+      const channels =
+        data.channels?.length ? data.channels.join(", ") : "configured channels";
       toast({
         title: "Test alert sent",
-        description: `Check ${data.recipient} (and spam).`,
+        description: `Via ${channels}. Check inbox (and spam) and your signed-in mobile device.`,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Test alert failed",
+        title: "Test alert failed (or partial)",
         description: error.message,
         variant: "destructive",
       });
@@ -188,24 +193,34 @@ export default function DemoPage() {
   // Create a friendly demo alert rule (email + push) if none exists for easy testing
   const createDemoAlertMutation = useMutation({
     mutationFn: async () => {
-      if (!currentProject) throw new Error("No project");
-      return api.post("/alerts", {
-        projectId: currentProject.id,
+      if (!currentProject) throw new Error("No project selected");
+      // projectId must be a query param (not body) — Create handler reads c.Query.
+      return api.post(`/alerts?projectId=${currentProject.id}`, {
         name: "Demo Error Alerts",
+        // Level-only: any error+ log fires. Patterns optional and easy to misconfigure.
         triggerLevel: "error",
-        triggerPatterns: ["payment|error|declined|failed"],
+        triggerPatterns: [],
         channels: ["email", "push"],
-        recipient: "you@example.com",
-        cooldownMinutes: 1, // low for demo
+        recipient: userEmail || undefined,
+        cooldownMinutes: 1,
         enabled: true,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["alerts", currentProject?.id] });
       setAlertPollKey((k) => k + 1);
-      toast({ title: "Demo alert rule created", description: "Now test logs will trigger email + push." });
+      toast({
+        title: "Demo alert rule created",
+        description:
+          "Email + push on error-level logs. Ensure the mobile app is signed in with push enabled.",
+      });
     },
-    onError: (e: Error) => toast({ title: "Failed to create demo rule", description: e.message, variant: "destructive" }),
+    onError: (e: Error) =>
+      toast({
+        title: "Failed to create demo rule",
+        description: e.message,
+        variant: "destructive",
+      }),
   });
 
 
@@ -428,9 +443,27 @@ export default function DemoPage() {
                     <>
                       <p className="text-muted-foreground">
                         <Mail className="mr-1 inline h-3.5 w-3.5" />
-                        Rule: <strong>{primaryAlert.name}</strong> → sends to {primaryAlert.recipient || "you"} via configured channels (email/push).
-                        Use "Payment failed" scenario or the buttons below.
+                        Rule: <strong>{primaryAlert.name}</strong> →{" "}
+                        {primaryAlert.recipient || "you"} via{" "}
+                        {(primaryAlert.channels?.length
+                          ? primaryAlert.channels
+                          : ["legacy"]
+                        ).join(", ")}
+                        .
                       </p>
+                      {!hasPushAlert && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          This rule has no <strong>push</strong> channel — email
+                          may work while the phone stays silent. Edit the rule
+                          on Alerts and check Push, or create a demo rule with
+                          email+push.
+                        </p>
+                      )}
+                      {!hasEmailAlert && (
+                        <p className="text-xs text-muted-foreground">
+                          No email channel on this rule.
+                        </p>
+                      )}
                       {inCooldown && (
                         <p className="text-xs text-amber-600 dark:text-amber-400">
                           Cooldown active ({primaryAlert.cooldownMinutes} min). SDK matching logs may be throttled.
@@ -444,8 +477,23 @@ export default function DemoPage() {
                           disabled={testEmailMutation.isPending}
                           onClick={() => testEmailMutation.mutate()}
                         >
-                          {testEmailMutation.isPending ? "Sending…" : "Send test alert (email + push)"}
+                          {testEmailMutation.isPending
+                            ? "Sending…"
+                            : hasPushAlert
+                              ? "Send test alert (email + push)"
+                              : "Send test alert"}
                         </Button>
+                        {!hasPushAlert && (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            disabled={createDemoAlertMutation.isPending}
+                            onClick={() => createDemoAlertMutation.mutate()}
+                          >
+                            Add email+push demo rule
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="secondary"

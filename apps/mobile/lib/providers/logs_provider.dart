@@ -9,13 +9,16 @@ import 'package:logstack_mobile/services/log_stream_service.dart';
 import 'package:logstack_mobile/providers/project_provider.dart';
 
 final logsProvider = StateNotifierProvider<LogsNotifier, LogsState>((ref) {
+  // Read services once — do NOT watch projectProvider here or every project
+  // list refresh disposes this notifier, kills the WebSocket, and leaves the
+  // banner stuck on "Reconnecting…" / unavailable while logs still flicker in.
   final notifier = LogsNotifier(
-    logService: ref.watch(logServiceProvider),
-    cacheService: ref.watch(logCacheServiceProvider),
-    streamService: ref.watch(logStreamServiceProvider),
-    projectId: ref.watch(projectProvider).currentProject?.id,
+    logService: ref.read(logServiceProvider),
+    cacheService: ref.read(logCacheServiceProvider),
+    streamService: ref.read(logStreamServiceProvider),
+    projectId: ref.read(projectProvider).currentProject?.id,
   );
-  ref.listen(projectProvider, (prev, next) {
+  ref.listen<ProjectState>(projectProvider, (prev, next) {
     notifier.onProjectChanged(next.currentProject?.id);
   });
   ref.onDispose(notifier.cleanup);
@@ -31,7 +34,7 @@ class LogsState {
   final LogLevel? levelFilter;
   final String? searchQuery;
 
-  /// WebSocket is open and passing the handshake (see [LogStreamService]).
+  /// WebSocket is open / delivering frames (see [LogStreamService]).
   final bool isLive;
 
   /// Repeated connect failures — show a stable message instead of "Reconnecting…".
@@ -127,18 +130,31 @@ class LogsNotifier extends StateNotifier<LogsState> {
   Future<void> _init() async {
     _logSub = _streamService.logStream.listen(_onRealtimeLog);
     _connSub = _streamService.statusStream.listen((status) {
-      // Latch isLive=true once connected or realtime data seen.
-      // Only force false on unavailable (repeated failures).
+      // Latch isLive=true once connected. Only force false on unavailable or
+      // explicit disconnect after we were never live this session.
       // For transient disconnect/connecting, keep previous isLive so the
-      // "Live stream connected" banner doesn't flicker during quick recovery.
-      _patchState((s) => s.copyWith(
-            isLive: status == StreamConnectionStatus.connected
-                ? true
-                : (status == StreamConnectionStatus.unavailable
-                    ? false
-                    : s.isLive),
-            isStreamUnavailable: status == StreamConnectionStatus.unavailable,
-          ));
+      // banner does not flicker during quick recovery.
+      switch (status) {
+        case StreamConnectionStatus.connected:
+          _patchState((s) => s.copyWith(
+                isLive: true,
+                isStreamUnavailable: false,
+              ));
+        case StreamConnectionStatus.unavailable:
+          _patchState((s) => s.copyWith(
+                isLive: false,
+                isStreamUnavailable: true,
+              ));
+        case StreamConnectionStatus.connecting:
+          _patchState((s) => s.copyWith(
+                isStreamUnavailable: false,
+                // keep isLive if already true
+              ));
+        case StreamConnectionStatus.disconnected:
+          // Only drop live if we are not mid-reconnect with recent data.
+          // Banner will show reconnecting only when isLive is already false.
+          break;
+      }
     });
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
       final online = !results.contains(ConnectivityResult.none);
@@ -151,6 +167,7 @@ class LogsNotifier extends StateNotifier<LogsState> {
           if (wasOffline || state.isStreamUnavailable) {
             unawaited(_streamService.retry());
           } else {
+            // connect() is a no-op when already live for this project.
             unawaited(_streamService.connect(_projectId!));
           }
         }
@@ -170,7 +187,7 @@ class LogsNotifier extends StateNotifier<LogsState> {
       _setState(const LogsState());
       return;
     }
-    _startForProject(projectId);
+    unawaited(_startForProject(projectId));
   }
 
   Future<void> _startForProject(String projectId) async {
@@ -189,13 +206,19 @@ class LogsNotifier extends StateNotifier<LogsState> {
       level: levelFilter,
       search: searchQuery,
     );
+
+    // Preserve live flag if the stream is already connected for this project
+    // (avoids banner flash when restarting for the same project).
+    final alreadyLive =
+        online && _streamService.isConnected && _projectId == projectId;
+
     _setState(LogsState(
       logs: filtered,
       levelFilter: levelFilter,
       searchQuery: searchQuery,
       isDeviceOffline: !online,
       isShowingCachedLogs: !online && filtered.isNotEmpty,
-      isLive: false,
+      isLive: alreadyLive,
     ));
     if (_disposed) return;
     if (online) {
@@ -254,6 +277,7 @@ class LogsNotifier extends StateNotifier<LogsState> {
             offset: response.offset,
             isLoading: false,
             isShowingCachedLogs: false,
+            // Do not clear isLive — REST success is independent of WS.
           ));
     } catch (e) {
       if (_disposed) return;
@@ -321,7 +345,18 @@ class LogsNotifier extends StateNotifier<LogsState> {
   }
 
   void _onRealtimeLog(Log log) {
-    if (_disposed || _projectId == null || log.projectId != _projectId) return;
+    if (_disposed || _projectId == null) return;
+    // projectId compare is case-insensitive — UUIDs may differ in casing.
+    if (log.projectId.toLowerCase() != _projectId!.toLowerCase()) return;
+
+    // Any realtime frame for this project proves the stream is live — even if
+    // the log is a duplicate of one already loaded via REST.
+    _patchState((s) => s.copyWith(
+          isLive: true,
+          isStreamUnavailable: false,
+          isShowingCachedLogs: false,
+        ));
+
     if (state.levelFilter != null && log.level != state.levelFilter) return;
     if (state.searchQuery != null &&
         state.searchQuery!.isNotEmpty &&
@@ -331,11 +366,7 @@ class LogsNotifier extends StateNotifier<LogsState> {
     final exists = state.logs.any((l) => l.id == log.id);
     if (exists) return;
     final updated = [log, ...state.logs].take(200).toList();
-    _patchState((s) => s.copyWith(
-          logs: updated,
-          isShowingCachedLogs: false,
-          isLive: true, // realtime data received ⇒ stream is live
-        ));
+    _patchState((s) => s.copyWith(logs: updated));
     _cacheService.saveLogs(_projectId!, updated);
   }
 
@@ -345,6 +376,8 @@ class LogsNotifier extends StateNotifier<LogsState> {
     _logSub?.cancel();
     _connSub?.cancel();
     _connectivitySub?.cancel();
-    _streamService.disconnect();
+    // Do not disconnect the shared stream service here — other listeners or a
+    // replacement notifier may still need it. disconnect only on logout /
+    // project clear via onProjectChanged(null).
   }
 }

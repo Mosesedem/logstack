@@ -18,6 +18,28 @@ type Service struct {
 	webhook *WebhookNotifier
 }
 
+// PartialDeliveryError means at least one channel succeeded and at least one failed.
+// Alert processing keeps cooldown (email already went out) but history and test
+// endpoints can surface the push/webhook failure instead of pretending full success.
+type PartialDeliveryError struct {
+	Succeeded []string
+	Failed    []string
+	Errs      []error
+}
+
+func (e *PartialDeliveryError) Error() string {
+	return fmt.Sprintf(
+		"partial delivery: ok=[%s] failed=[%s]: %v",
+		strings.Join(e.Succeeded, ","),
+		strings.Join(e.Failed, ","),
+		errors.Join(e.Errs...),
+	)
+}
+
+func (e *PartialDeliveryError) Unwrap() error {
+	return errors.Join(e.Errs...)
+}
+
 // NewNotificationService creates a Service without a database (no push support).
 // Deprecated: prefer NewNotificationServiceWithDB.
 func NewNotificationService(cfg *config.Config) *Service {
@@ -67,13 +89,17 @@ func (s *Service) Send(ctx context.Context, rule *models.AlertRule, log *models.
 		return fmt.Errorf("no alert channels configured")
 	}
 
-	var errs []error
-	succeeded := 0
+	var (
+		errs      []error
+		succeeded []string
+		failed    []string
+	)
 	for _, channel := range channels {
 		channelRule := *rule
 		channelRule.Channel = channel
 		if err := s.sendChannel(ctx, &channelRule, log); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", channel, err))
+			failed = append(failed, string(channel))
 			slog.Error("alert channel delivery failed",
 				"channel", channel,
 				"ruleId", rule.ID,
@@ -81,11 +107,22 @@ func (s *Service) Send(ctx context.Context, rule *models.AlertRule, log *models.
 			)
 			continue
 		}
-		succeeded++
+		succeeded = append(succeeded, string(channel))
+		slog.Info("alert channel delivery ok",
+			"channel", channel,
+			"ruleId", rule.ID,
+		)
 	}
 
-	if succeeded > 0 {
+	if len(errs) == 0 {
 		return nil
+	}
+	if len(succeeded) > 0 {
+		return &PartialDeliveryError{
+			Succeeded: succeeded,
+			Failed:    failed,
+			Errs:      errs,
+		}
 	}
 	return errors.Join(errs...)
 }
@@ -93,10 +130,21 @@ func (s *Service) Send(ctx context.Context, rule *models.AlertRule, log *models.
 func channelsForRule(rule *models.AlertRule) []models.AlertChannel {
 	if len(rule.Channels) > 0 {
 		channels := make([]models.AlertChannel, 0, len(rule.Channels))
+		seen := make(map[string]struct{}, len(rule.Channels))
 		for _, ch := range rule.Channels {
-			channels = append(channels, models.AlertChannel(strings.TrimSpace(ch)))
+			name := strings.TrimSpace(ch)
+			if name == "" {
+				continue
+			}
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			seen[name] = struct{}{}
+			channels = append(channels, models.AlertChannel(name))
 		}
-		return channels
+		if len(channels) > 0 {
+			return channels
+		}
 	}
 	if rule.Channel != "" {
 		return []models.AlertChannel{rule.Channel}

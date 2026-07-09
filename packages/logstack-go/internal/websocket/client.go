@@ -55,7 +55,11 @@ func (c *Client) ReadPump() {
 			}
 			break
 		}
-		
+
+		// Reset deadline on any inbound frame (app-level pings from mobile, not only
+		// WebSocket protocol pongs). Prevents idle read timeouts while the client is alive.
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+
 		// Check token expiry on each message (simple check - in production, validate JWT)
 		if time.Since(c.createdAt) > 24*time.Hour {
 			c.conn.WriteMessage(websocket.CloseMessage, []byte(`{"type":"error","message":"Session expired"}`))

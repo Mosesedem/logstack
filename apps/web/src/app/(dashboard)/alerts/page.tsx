@@ -139,7 +139,7 @@ export default function AlertsPage() {
       ),
     onSuccess: (data, alertId) => {
       queryClient.invalidateQueries({ queryKey: ["alert-history", alertId] });
-      const channels = (data as any)?.channels?.join(', ') || 'email';
+      const channels = data.channels?.join(", ") || "configured channels";
       toast({
         title: "Test alert sent",
         description: `Via ${channels} to ${data.recipient}. Check inbox / mobile (and spam).`,
@@ -147,7 +147,7 @@ export default function AlertsPage() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Test alert failed",
+        title: "Test alert failed (or partial)",
         description: error.message,
         variant: "destructive",
       });

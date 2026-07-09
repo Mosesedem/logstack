@@ -32,14 +32,17 @@ export function buildDefaultAlertFormData(options?: {
   const { initialData, defaultRecipient, defaultName } = options ?? {};
   const hasEmailDefault = Boolean(defaultRecipient);
 
+  // Email + push by default so matching logs reach inbox and linked mobile devices.
+  // Users can uncheck either channel. Push requires the Logstack mobile app signed in.
+  const defaultChannels = hasEmailDefault ? ["email", "push"] : ["push"];
+
   return {
     name: initialData?.name || defaultName || "",
     // Level-only by default — fires on any log at/above triggerLevel.
     // Users can opt into pattern filters via the checkboxes below.
     triggerPatterns: initialData?.triggerPatterns ?? [],
     triggerLevel: initialData?.triggerLevel || "error",
-    channels:
-      initialData?.channels ?? (hasEmailDefault ? ["email"] : []),
+    channels: initialData?.channels ?? defaultChannels,
     recipient: initialData?.recipient || defaultRecipient || "",
     cooldownMinutes: initialData?.cooldownMinutes ?? 15,
     enabled: initialData?.enabled ?? true,

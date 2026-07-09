@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -82,9 +83,24 @@ func (e *AlertEngine) processRule(ctx context.Context, rule models.AlertRule, lo
 	var errorMessage string
 
 	if err := e.notifier.Send(ctx, &rule, log); err != nil {
-		e.redis.Del(ctx, cooldownKey)
-		alertStatus = models.AlertStatusFailed
-		errorMessage = err.Error()
+		var partial *notification.PartialDeliveryError
+		if errors.As(err, &partial) {
+			// Email (or another channel) already delivered — keep cooldown so we
+			// do not re-spam, but record the push/webhook failure for the UI.
+			alertStatus = models.AlertStatusSuccess
+			errorMessage = partial.Error()
+			slog.Warn("alert partial delivery",
+				"ruleId", rule.ID,
+				"logId", log.ID,
+				"ok", partial.Succeeded,
+				"failed", partial.Failed,
+				"error", err,
+			)
+		} else {
+			e.redis.Del(ctx, cooldownKey)
+			alertStatus = models.AlertStatusFailed
+			errorMessage = err.Error()
+		}
 	} else {
 		alertStatus = models.AlertStatusSuccess
 	}
@@ -105,7 +121,8 @@ func (e *AlertEngine) processRule(ctx context.Context, rule models.AlertRule, lo
 	return nil
 }
 
-// SendTestNotification delivers a demo/test alert email, bypassing match rules and cooldown.
+// SendTestNotification delivers a demo/test alert via all configured channels,
+// bypassing match rules and cooldown.
 func (e *AlertEngine) SendTestNotification(ctx context.Context, ruleID uint) error {
 	rule, err := e.GetRule(ctx, ruleID)
 	if err != nil {
@@ -122,9 +139,12 @@ func (e *AlertEngine) SendTestNotification(ctx context.Context, ruleID uint) err
 
 	var alertStatus models.AlertStatus
 	var errorMessage string
-	if err := e.notifier.Send(ctx, rule, testLog); err != nil {
+	sendErr := e.notifier.Send(ctx, rule, testLog)
+	if sendErr != nil {
+		// Partial (email ok, push failed) still fails the test endpoint so the
+		// dashboard surfaces the real push problem instead of a false "sent".
 		alertStatus = models.AlertStatusFailed
-		errorMessage = err.Error()
+		errorMessage = sendErr.Error()
 	} else {
 		alertStatus = models.AlertStatusSuccess
 	}
@@ -137,8 +157,8 @@ func (e *AlertEngine) SendTestNotification(ctx context.Context, ruleID uint) err
 	if err := e.db.Create(&history).Error; err != nil {
 		return err
 	}
-	if alertStatus == models.AlertStatusFailed {
-		return fmt.Errorf("%s", errorMessage)
+	if sendErr != nil {
+		return sendErr
 	}
 	return nil
 }

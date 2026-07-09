@@ -41,6 +41,7 @@ class LogStreamService {
   int _connectGeneration = 0;
   bool _emittedLiveForCurrent = false;
   Timer? _keepAliveTimer;
+  StreamConnectionStatus _lastStatus = StreamConnectionStatus.disconnected;
 
   final _statusController =
       StreamController<StreamConnectionStatus>.broadcast();
@@ -49,13 +50,24 @@ class LogStreamService {
   Stream<StreamConnectionStatus> get statusStream => _statusController.stream;
   Stream<Log> get logStream => _logController.stream;
 
+  /// Current connection status (for late subscribers / debugging).
+  StreamConnectionStatus get currentStatus => _lastStatus;
+
   /// @deprecated Use [statusStream]; kept for quick migration.
   Stream<bool> get connectionStream =>
       statusStream.map((s) => s == StreamConnectionStatus.connected);
 
+  bool get isConnected =>
+      _emittedLiveForCurrent && _channel != null && !_connecting;
+
   Future<void> connect(String projectId) async {
-    if (_projectId == projectId &&
-        (_connecting || _channel != null)) {
+    // Already live on this project — do not tear down a working socket.
+    if (_projectId == projectId && isConnected) {
+      _emitStatus(StreamConnectionStatus.connected);
+      return;
+    }
+    // Handshake in flight for same project — leave it alone.
+    if (_projectId == projectId && _connecting) {
       return;
     }
     final projectChanged = _projectId != projectId;
@@ -83,15 +95,16 @@ class LogStreamService {
     _emittedLiveForCurrent = false;
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
-    _statusController.add(StreamConnectionStatus.disconnected);
+    _emitStatus(StreamConnectionStatus.disconnected);
   }
 
   Future<void> retry() async {
     if (_projectId == null) return;
+    final projectId = _projectId!;
     await disconnect();
     _attempt = 0;
     _consecutiveFailures = 0;
-    // disconnect already cancelled timer and reset emitted
+    _projectId = projectId;
     await _open();
   }
 
@@ -105,20 +118,35 @@ class LogStreamService {
     }
   }
 
+  void _emitStatus(StreamConnectionStatus status) {
+    if (_lastStatus == status && status != StreamConnectionStatus.connected) {
+      // Still re-emit connected when data proves live so late UI recovers.
+      return;
+    }
+    // Always re-emit connected so UI recovers from reconnecting/unavailable.
+    if (status == StreamConnectionStatus.connected || _lastStatus != status) {
+      _lastStatus = status;
+      if (!_statusController.isClosed) {
+        _statusController.add(status);
+      }
+    }
+  }
+
   Future<void> _open() async {
     final projectId = _projectId;
-    if (projectId == null || _connecting) return;
+    if (projectId == null) return;
+    if (_connecting) return;
 
     final token = await _resolveAccessToken();
     if (token == null || token.isEmpty) {
-      _statusController.add(StreamConnectionStatus.unavailable);
+      _emitStatus(StreamConnectionStatus.unavailable);
       return;
     }
 
     final generation = ++_connectGeneration;
     _connecting = true;
     _emittedLiveForCurrent = false;
-    _statusController.add(StreamConnectionStatus.connecting);
+    _emitStatus(StreamConnectionStatus.connecting);
 
     final url = AppConfig.logStreamUrl(projectId: projectId, token: token);
     try {
@@ -126,108 +154,132 @@ class LogStreamService {
         Uri.parse(url),
         headers: {'Authorization': 'Bearer $token'},
       );
+      // Assign immediately so isConnected / keepAlive / connect() early-exit work
+      // even if channel.ready is slow or flaky on some platforms.
+      _channel = channel;
+
       _subscription = channel.stream.listen(
-        _onMessage,
-        onError: (_) => _scheduleReconnect(),
-        onDone: _scheduleReconnect,
+        (event) {
+          if (generation != _connectGeneration) return;
+          _onMessage(event);
+        },
+        onError: (_) {
+          if (generation != _connectGeneration) return;
+          _connecting = false;
+          _scheduleReconnect();
+        },
+        onDone: () {
+          if (generation != _connectGeneration) return;
+          _connecting = false;
+          _scheduleReconnect();
+        },
         cancelOnError: true,
       );
 
-      // Do not block or fail the connection attempt solely on ready.
-      // Some platforms/networks deliver data before ready completes, or ready
-      // can be slow. We use data arrival (in _onMessage) as authoritative for "live".
-      // Only reconnect on ready failure if we have received NO data yet for this attempt.
+      // ready is best-effort. Data arrival is authoritative for "live".
       unawaited(
-        channel.ready.timeout(const Duration(seconds: 12)).then((_) {
+        channel.ready.timeout(const Duration(seconds: 20)).then((_) {
           if (generation != _connectGeneration || _projectId != projectId) {
             return;
           }
-          _channel = channel;
           _connecting = false;
           _attempt = 0;
           _consecutiveFailures = 0;
-          if (!_emittedLiveForCurrent) {
-            _emittedLiveForCurrent = true;
-            _statusController.add(StreamConnectionStatus.connected);
-          }
-          _startKeepAlive();
+          _markLive();
         }).catchError((_) {
           if (generation != _connectGeneration || _projectId != projectId) {
             return;
           }
-          if (!_emittedLiveForCurrent) {
-            // No data received yet — treat as failure and reconnect.
-            _connecting = false;
-            _scheduleReconnect();
-          } else {
-            // Data is already flowing (promoted in _onMessage). Keep this channel
-            // even though ready did not complete.
-            _channel = channel;
-            _connecting = false;
+          _connecting = false;
+          if (_emittedLiveForCurrent) {
+            // Frames already flowing — keep the socket.
             _startKeepAlive();
+            return;
           }
+          // No frames yet and ready failed — reconnect.
+          _scheduleReconnect();
         }),
       );
     } catch (_) {
       _connecting = false;
+      _channel = null;
       if (generation == _connectGeneration) {
         _scheduleReconnect();
       }
     }
   }
 
+  void _markLive() {
+    final wasLive = _emittedLiveForCurrent;
+    _emittedLiveForCurrent = true;
+    _attempt = 0;
+    _consecutiveFailures = 0;
+    _emitStatus(StreamConnectionStatus.connected);
+    if (!wasLive) {
+      _startKeepAlive();
+    }
+  }
+
   void _onMessage(dynamic event) {
+    // Any frame (log or otherwise) means the socket is alive.
+    _markLive();
+
     try {
-      // If data is flowing over the socket, the live stream is connected.
-      // This ensures "Live stream connected" is shown even if channel.ready
-      // is slow to resolve on some platforms/networks.
-      if (!_emittedLiveForCurrent) {
-        _emittedLiveForCurrent = true;
-        _statusController.add(StreamConnectionStatus.connected);
-        _startKeepAlive();
-      }
+      final raw = event is String
+          ? event
+          : (event is List<int> ? utf8.decode(event) : event.toString());
 
       // Server WritePump may batch multiple logs into one frame separated by \n.
-      // Split and parse each to avoid dropping logs.
-      final raw = event as String;
       for (final line in raw.split('\n')) {
         final trimmed = line.trim();
         if (trimmed.isEmpty) continue;
-        final map = jsonDecode(trimmed) as Map<String, dynamic>;
-        _logController.add(Log.fromJson(map));
+
+        final decoded = jsonDecode(trimmed);
+        if (decoded is! Map<String, dynamic>) continue;
+
+        // Server control frames e.g. {"type":"error",...}
+        if (decoded.containsKey('type') && !decoded.containsKey('id')) {
+          continue;
+        }
+
+        _logController.add(Log.fromJson(decoded));
       }
     } catch (_) {
-      // Ignore malformed frames
+      // Ignore malformed frames — still counted as live above.
     }
   }
 
   void _scheduleReconnect() {
-    if (_connecting) return;
     _subscription?.cancel();
     _subscription = null;
+    try {
+      _channel?.sink.close();
+    } catch (_) {}
     _channel = null;
     _emittedLiveForCurrent = false;
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+    _connecting = false;
 
     if (_projectId == null) {
-      _statusController.add(StreamConnectionStatus.disconnected);
+      _emitStatus(StreamConnectionStatus.disconnected);
       return;
     }
 
     _attempt++;
     _consecutiveFailures++;
     if (_consecutiveFailures >= _maxFastRetries) {
-      _statusController.add(StreamConnectionStatus.unavailable);
+      _emitStatus(StreamConnectionStatus.unavailable);
       _reconnectTimer?.cancel();
       _reconnectTimer = Timer(const Duration(seconds: 60), () {
-        _consecutiveFailures = _maxFastRetries - 1;
+        _consecutiveFailures = 0;
+        _attempt = 0;
         _open();
       });
       return;
     }
 
-    _statusController.add(StreamConnectionStatus.disconnected);
+    _emitStatus(StreamConnectionStatus.disconnected);
     _reconnectTimer?.cancel();
     final delay = Duration(seconds: (1 << _attempt.clamp(0, 4)).clamp(1, 16));
     _reconnectTimer = Timer(delay, _open);
@@ -244,8 +296,8 @@ class LogStreamService {
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 25), (_) {
       if (_channel != null && _emittedLiveForCurrent) {
         try {
-          // Send a lightweight ping to keep the server read deadline and conn alive.
-          // Server ReadPump will receive it and keep the connection healthy.
+          // Application-level ping — server ReadPump should reset its deadline
+          // on any inbound frame (see packages/logstack-go websocket client).
           _channel!.sink.add('{"type":"ping"}');
         } catch (_) {}
       }

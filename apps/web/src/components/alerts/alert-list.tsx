@@ -68,11 +68,11 @@ export function AlertList({
                   checked={alert.enabled}
                   onCheckedChange={(checked) => onToggle(alert.id, checked)}
                 />
-                {onTestEmail && alert.channels?.includes("email") && (
+                {onTestEmail && (alert.channels?.length ?? 0) > 0 && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    title="Send test email"
+                    title="Send test notification (all channels)"
                     disabled={testingAlertId === alert.id}
                     onClick={() => onTestEmail(alert.id)}
                   >

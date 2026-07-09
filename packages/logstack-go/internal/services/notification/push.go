@@ -101,7 +101,7 @@ func (p *PushNotifier) SendDirect(
 	data map[string]string,
 ) error {
 	if p.client == nil {
-		return fmt.Errorf("FCM client not initialized")
+		return fmt.Errorf("FCM client not initialized — set FCM_SERVICE_ACCOUNT_PATH on the API")
 	}
 
 	var tokens []models.PushToken
@@ -109,7 +109,7 @@ func (p *PushNotifier) SendDirect(
 		return fmt.Errorf("failed to fetch push tokens: %w", err)
 	}
 	if len(tokens) == 0 {
-		return fmt.Errorf("no push tokens found for user")
+		return fmt.Errorf("no push tokens found for user %d", userID)
 	}
 
 	checker := p.isInvalidTokenErr
@@ -141,7 +141,7 @@ func (p *PushNotifier) SendDirect(
 
 func (p *PushNotifier) Send(ctx context.Context, rule *models.AlertRule, log *models.Log) error {
 	if p.client == nil {
-		return fmt.Errorf("FCM client not initialized")
+		return fmt.Errorf("FCM client not initialized — set FCM_SERVICE_ACCOUNT_PATH on the API to a valid Firebase service account JSON (must match the mobile app's Firebase project)")
 	}
 
 	userID, err := p.resolveUserID(rule, log)
@@ -155,7 +155,7 @@ func (p *PushNotifier) Send(ctx context.Context, rule *models.AlertRule, log *mo
 	}
 
 	if len(tokens) == 0 {
-		return fmt.Errorf("no push tokens found for user")
+		return fmt.Errorf("no push tokens found for user %d — open the Logstack mobile app, sign in as this account, grant notification permission, and confirm Settings shows push registered", userID)
 	}
 
 	title := fmt.Sprintf("Logstack Alert: %s", rule.Name)
