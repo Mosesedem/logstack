@@ -27,6 +27,12 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   bool _biometricAvailable = false;
   bool _biometricEnabled = false;
 
+  /// True after a real background ([AppLifecycleState.paused] / hidden).
+  /// Face ID / fingerprint sheets typically only go inactive→resumed, and
+  /// on some platforms they also pause — we still must not re-lock while
+  /// [_attemptingBiometric] is true, and must clear this after auth.
+  bool _requiresLockOnResume = false;
+
   static const _pinLength = 4;
 
   @override
@@ -42,21 +48,64 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     super.dispose();
   }
 
+  bool get _bioAuthBusy {
+    if (_attemptingBiometric) return true;
+    return ref.read(appLockServiceProvider).shouldSuppressLifecycleLock;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // Fresh lock cycle on resume — do not keep previous unlocked
-      setState(() {
-        _unlocked = false;
-        _pin = '';
-        _error = null;
-        _attemptingBiometric = false;
-        _autoBioAttempted = false;
-        _biometricEnabled = false;
-        _checking = false; // resume shows PIN UI quickly, not full checking
-      });
-      _unlockIfNeeded(isInitial: false);
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      // System biometric sheets can pause the app. Do not schedule a
+      // re-lock while we are mid-auth — that is the infinite Face ID loop.
+      if (_bioAuthBusy) return;
+      _requiresLockOnResume = true;
+      if (_unlocked && mounted) {
+        // Hide app content while backgrounded (app switcher privacy).
+        setState(() {
+          _unlocked = false;
+          _pin = '';
+          _error = null;
+          _autoBioAttempted = false;
+          _checking = false;
+        });
+      }
+      return;
     }
+
+    if (state == AppLifecycleState.resumed) {
+      _onResumed();
+    }
+    // inactive / detached: Face ID and system overlays use inactive —
+    // never re-lock on those alone.
+  }
+
+  void _onResumed() {
+    // Resume from biometric dialog (gate or settings/setup) — do not re-prompt.
+    if (_bioAuthBusy) {
+      // Auth sheet caused pause; ignore so we don't re-lock after success.
+      _requiresLockOnResume = false;
+      return;
+    }
+
+    if (!_requiresLockOnResume) {
+      // inactive → resumed only (control center, notification shade, etc.)
+      return;
+    }
+
+    _requiresLockOnResume = false;
+    if (!mounted) return;
+
+    setState(() {
+      _unlocked = false;
+      _pin = '';
+      _error = null;
+      _attemptingBiometric = false;
+      _autoBioAttempted = false;
+      _checking = false;
+    });
+    _unlockIfNeeded(isInitial: false);
   }
 
   Future<void> _unlockIfNeeded({bool isInitial = false}) async {
@@ -89,24 +138,10 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
 
     if (bioEnabled && !_autoBioAttempted) {
       _autoBioAttempted = true;
-      setState(() {
-        _attemptingBiometric = true;
-        if (isInitial) _checking = true;
-      });
-
-      final ok = await lock.authenticateWithBiometrics();
-      if (!mounted) return;
-
-      setState(() {
-        _attemptingBiometric = false;
-        _checking = false;
-        if (ok) {
-          _unlocked = true;
-          _pin = '';
-          _error = null;
-        }
-        // on fail/cancel: fall through to show stable PIN pad + manual button
-      });
+      await _runBiometricAuth(
+        lock: lock,
+        showChecking: isInitial,
+      );
       return;
     }
 
@@ -115,6 +150,45 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
       _checking = false;
       _unlocked = false;
       _attemptingBiometric = false;
+    });
+  }
+
+  /// Runs system biometric auth without treating lifecycle resume as a new lock.
+  Future<void> _runBiometricAuth({
+    required AppLockService lock,
+    bool showChecking = false,
+    bool requireEnabled = true,
+    String reason = 'Unlock Logstack',
+  }) async {
+    setState(() {
+      _attemptingBiometric = true;
+      _error = null;
+      if (showChecking) _checking = true;
+    });
+
+    // Auth UI will pause/resume the app; those events must not re-lock.
+    _requiresLockOnResume = false;
+
+    final ok = await lock.authenticateWithBiometrics(
+      reason: reason,
+      requireEnabled: requireEnabled,
+    );
+
+    // Drop any pause that occurred during the sheet so a late resumed
+    // event does not immediately re-lock and re-prompt.
+    _requiresLockOnResume = false;
+
+    if (!mounted) return;
+
+    setState(() {
+      _attemptingBiometric = false;
+      _checking = false;
+      if (ok) {
+        _unlocked = true;
+        _pin = '';
+        _error = null;
+      }
+      // on fail/cancel: fall through to show stable PIN pad + manual button
     });
   }
 
@@ -156,23 +230,8 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
   }
 
   Future<void> _tryBiometric() async {
-    setState(() {
-      _attemptingBiometric = true;
-      _error = null;
-    });
     final lock = ref.read(appLockServiceProvider);
-    final ok = await lock.authenticateWithBiometrics();
-    if (!mounted) return;
-    setState(() {
-      _attemptingBiometric = false;
-      if (ok) {
-        _unlocked = true;
-        _pin = '';
-        _error = null;
-      } else {
-        _error = 'Biometric failed or cancelled';
-      }
-    });
+    await _runBiometricAuth(lock: lock);
   }
 
   @override
@@ -188,9 +247,8 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
     }
 
     if (!_unlocked) {
-      final bioLabel = _attemptingBiometric
-          ? 'Authenticating…'
-          : 'Use biometrics';
+      final bioLabel =
+          _attemptingBiometric ? 'Authenticating…' : 'Use biometrics';
 
       return Theme(
         data: AppTheme.dark,
@@ -228,8 +286,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate>
                   if (_biometricAvailable && _biometricEnabled) ...[
                     const SizedBox(height: 24),
                     TextButton.icon(
-                      onPressed:
-                          _attemptingBiometric ? null : _tryBiometric,
+                      onPressed: _attemptingBiometric ? null : _tryBiometric,
                       icon: const Icon(Icons.fingerprint),
                       label: Text(bioLabel),
                     ),

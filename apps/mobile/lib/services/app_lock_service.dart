@@ -17,6 +17,22 @@ class AppLockService {
   final StorageService _storage;
   final _auth = LocalAuthentication();
 
+  /// True while a system biometric sheet is showing.
+  /// [AppLockGate] must not re-lock on lifecycle pause/resume during this window
+  /// (that causes an infinite Face ID / fingerprint prompt loop).
+  bool biometricAuthInProgress = false;
+
+  /// Ignore lock-on-resume until this time (covers late lifecycle events after
+  /// [authenticateWithBiometrics] returns on iOS/Android).
+  DateTime? suppressLifecycleLockUntil;
+
+  /// Whether AppLockGate should treat lifecycle as "biometric auth busy".
+  bool get shouldSuppressLifecycleLock {
+    if (biometricAuthInProgress) return true;
+    final until = suppressLifecycleLockUntil;
+    return until != null && DateTime.now().isBefore(until);
+  }
+
   Future<AppLockMode> getLockMode() async {
     final mode = await _storage.getAppLockMode();
     return mode == AppLockMode.never.name
@@ -61,6 +77,7 @@ class AppLockService {
   }) async {
     if (requireEnabled && !await isBiometricEnabled()) return false;
     if (!await isBiometricAvailable()) return false;
+    biometricAuthInProgress = true;
     try {
       return await _auth.authenticate(
         localizedReason: reason,
@@ -71,6 +88,11 @@ class AppLockService {
       );
     } catch (_) {
       return false;
+    } finally {
+      biometricAuthInProgress = false;
+      // Late paused/resumed events often arrive after the Future completes.
+      suppressLifecycleLockUntil =
+          DateTime.now().add(const Duration(milliseconds: 1200));
     }
   }
 
@@ -79,6 +101,9 @@ class AppLockService {
     if (mode == AppLockMode.never) return false;
     final refreshToken = await _storage.getRefreshToken();
     if (refreshToken == null) return false;
+    // PIN is saved mid-setup before biometrics; do not show AppLockGate
+    // over SecuritySetupScreen (biometric sheet would re-lock forever).
+    if (!await _storage.isSessionSecurityComplete()) return false;
     return await hasPin() || await isBiometricEnabled();
   }
 
