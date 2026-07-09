@@ -85,7 +85,11 @@ export default function LogsPage() {
   });
 
   // Live stream for the selected project.
-  const { logs: realtimeLogs, isConnected } = useWebSocket({ projectId });
+  const {
+    logs: realtimeLogs,
+    isConnected,
+    error: streamError,
+  } = useWebSocket({ projectId });
 
   // Merge realtime + paginated logs, dedupe by id (realtime wins), apply the
   // active filters to realtime entries too, sort newest-first, and cap.
@@ -155,7 +159,12 @@ export default function LogsPage() {
         <div className="flex items-center gap-2">
           <div
             className="flex items-center gap-2 text-sm text-muted-foreground"
-            title={isConnected ? "Live stream connected" : "Reconnecting…"}
+            title={
+              isConnected
+                ? "Live stream connected"
+                : streamError?.message ||
+                  "Reconnecting to live stream… (check NEXT_PUBLIC_WS_URL is wss://api…/v1, not /api/v1)"
+            }
           >
             {isConnected ? (
               <Wifi className="h-4 w-4 text-green-500" />
