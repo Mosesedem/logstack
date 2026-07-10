@@ -58,6 +58,9 @@ func NewNotificationServiceWithDB(cfg *config.Config, db *gorm.DB) *Service {
 		slog.Warn("push notifier disabled", "error", err)
 		push = nil
 	}
+	if push != nil {
+		push.SetEmailNotifier(email)
+	}
 
 	if push != nil && push.client != nil {
 		slog.Info("push notifier enabled", "firebase_project_id", cfg.FCMProjectID, "path", cfg.FCMServiceAccountPath)
@@ -81,6 +84,18 @@ func (s *Service) GetEmailNotifier() *EmailNotifier {
 // GetPushNotifier returns the push notifier for direct delivery (e.g. escalations).
 func (s *Service) GetPushNotifier() *PushNotifier {
 	return s.push
+}
+
+// ReportPushFailure emails the ops contact when push delivery fails outside SendDirectDetailed.
+func (s *Service) ReportPushFailure(
+	ctx context.Context,
+	source string,
+	userID uint,
+	title, body string,
+	err error,
+	result *DirectPushResult,
+) {
+	ReportPushFailure(ctx, s.email, source, userID, title, body, err, result)
 }
 
 func (s *Service) Send(ctx context.Context, rule *models.AlertRule, log *models.Log) error {
@@ -158,7 +173,9 @@ func (s *Service) sendChannel(ctx context.Context, rule *models.AlertRule, log *
 		return s.email.Send(ctx, rule, log)
 	case models.AlertChannelPush:
 		if s.push == nil {
-			return fmt.Errorf("push notifier not initialized")
+			err := fmt.Errorf("push notifier not initialized")
+			ReportPushFailure(ctx, s.email, "alert", 0, rule.Name, "", err, nil)
+			return err
 		}
 		return s.push.Send(ctx, rule, log)
 	case models.AlertChannelWebhook:

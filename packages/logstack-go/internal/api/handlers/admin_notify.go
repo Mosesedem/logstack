@@ -230,10 +230,14 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 		if wantPush {
 			if t.userID == 0 {
 				pushFail++
-				failures = append(failures, "push: recipient has no user id (email-only target cannot receive push)")
+				pushErr := fmt.Errorf("push: recipient has no user id (email-only target cannot receive push)")
+				failures = append(failures, pushErr.Error())
+				h.notifier.ReportPushFailure(c.Request.Context(), "admin", t.userID, title, message, pushErr, nil)
 			} else if pushN == nil || !pushN.IsEnabled() {
 				pushFail++
-				failures = append(failures, "push: FCM not configured on API (set FCM_SERVICE_ACCOUNT_PATH + mount firebase JSON)")
+				pushErr := fmt.Errorf("push: FCM not configured on API (set FCM_SERVICE_ACCOUNT_PATH + mount firebase JSON)")
+				failures = append(failures, pushErr.Error())
+				h.notifier.ReportPushFailure(c.Request.Context(), "admin", t.userID, title, message, pushErr, nil)
 			} else {
 				detail, err := pushN.SendDirectDetailed(c.Request.Context(), t.userID, title, message, map[string]string{
 					"type":   "admin",

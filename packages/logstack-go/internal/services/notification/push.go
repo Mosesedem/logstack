@@ -22,9 +22,18 @@ type fcmClient interface {
 type PushNotifier struct {
 	client fcmClient
 	db     *gorm.DB
+	email  *EmailNotifier
 	// isInvalidTokenErr overrides the Firebase error check in tests.
 	// When nil, the production check (messaging.IsRegistrationTokenNotRegistered || messaging.IsInvalidArgument) is used.
 	isInvalidTokenErr func(error) bool
+}
+
+// SetEmailNotifier wires the email notifier used for ops alerts on push failures.
+func (p *PushNotifier) SetEmailNotifier(email *EmailNotifier) {
+	if p == nil {
+		return
+	}
+	p.email = email
 }
 
 // NewPushNotifier creates a new push notifier using Firebase Admin SDK with HTTP v1 API.
@@ -153,17 +162,24 @@ func (p *PushNotifier) SendDirectDetailed(
 	data map[string]string,
 ) (*DirectPushResult, error) {
 	result := &DirectPushResult{}
+	source := pushSourceFromData(data)
+
+	reportErr := func(err error) (*DirectPushResult, error) {
+		ReportPushFailure(ctx, p.email, source, userID, title, body, err, result)
+		return result, err
+	}
+
 	if p.client == nil {
-		return result, fmt.Errorf("FCM client not initialized — set FCM_SERVICE_ACCOUNT_PATH on the API (and ensure the service account JSON is mounted in production)")
+		return reportErr(fmt.Errorf("FCM client not initialized — set FCM_SERVICE_ACCOUNT_PATH on the API (and ensure the service account JSON is mounted in production)"))
 	}
 
 	var tokens []models.PushToken
 	if err := p.db.Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
-		return result, fmt.Errorf("failed to fetch push tokens: %w", err)
+		return reportErr(fmt.Errorf("failed to fetch push tokens: %w", err))
 	}
 	result.TokensFound = len(tokens)
 	if len(tokens) == 0 {
-		return result, fmt.Errorf("no push tokens for user %d — open the Logstack mobile app signed in as this user, grant notification permission, and confirm Settings shows push registered", userID)
+		return reportErr(fmt.Errorf("no push tokens for user %d — open the Logstack mobile app signed in as this user, grant notification permission, and confirm Settings shows push registered", userID))
 	}
 
 	checker := p.isInvalidTokenErr
@@ -217,7 +233,7 @@ func (p *PushNotifier) SendDirectDetailed(
 		if len(result.Errors) > 0 {
 			detail = detail + ": " + strings.Join(result.Errors, "; ")
 		}
-		return result, fmt.Errorf("%s", detail)
+		return reportErr(fmt.Errorf("%s", detail))
 	}
 	return result, nil
 }
