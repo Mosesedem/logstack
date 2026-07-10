@@ -56,6 +56,15 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		return
 	}
 
+	masked := maskPushToken(req.Token)
+	notification.RecordPushTrace(notification.PushTraceEvent{
+		Phase:       "register_attempt",
+		Source:      "mobile_register",
+		UserID:      userID,
+		DeviceType:  string(req.DeviceType),
+		MaskedToken: masked,
+	})
+
 	now := time.Now()
 
 	// One active token per platform per user — stale iOS tokens from old builds
@@ -94,7 +103,6 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		masked := maskPushToken(req.Token)
 		notification.RecordPushTrace(notification.PushTraceEvent{
 			Phase:       "register_ok",
 			Source:      "mobile_register",
@@ -133,7 +141,6 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		return
 	}
 
-	masked := maskPushToken(req.Token)
 	notification.RecordPushTrace(notification.PushTraceEvent{
 		Phase:       "register_ok",
 		Source:      "mobile_register",

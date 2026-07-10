@@ -297,6 +297,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     await NotificationService.instance.completeSetupAfterPermission();
 
+    if (Platform.isIOS) {
+      for (var attempt = 0; attempt < 8; attempt++) {
+        final token = await NotificationService.instance.fetchFCMToken();
+        if (token != null) break;
+        await Future<void>.delayed(
+          Duration(milliseconds: 400 * (attempt + 1)),
+        );
+      }
+    }
+
     _tokenSubscription =
         NotificationService.instance.tokenStream.listen((token) {
       _currentFcmToken = token;

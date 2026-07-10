@@ -11,6 +11,7 @@ import 'package:logstack_mobile/services/notification_service.dart';
 import 'package:logstack_mobile/services/notification_tone_service.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/pin_pad.dart';
+import 'package:logstack_mobile/widgets/push_debug_card.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Minimal settings: security, notification tone, account, logout.
@@ -222,14 +223,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   leading: const Icon(Icons.notifications_outlined),
                   title: const Text('Alert notifications'),
                   subtitle: Text(_pushPermissionLabel()),
-                  trailing: _pushEnabled
-                      ? null
-                      : const Icon(Icons.chevron_right),
-                  onTap: _pushEnabled || !DefaultFirebaseOptions.isConfigured
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: !DefaultFirebaseOptions.isConfigured
                       ? null
                       : () async {
-                          await context.push('/settings/push');
-                          await _loadPushPermission();
+                          if (!_pushEnabled) {
+                            await context.push('/settings/push');
+                            await _loadPushPermission();
+                          }
+                          if (_pushEnabled) {
+                            await ref
+                                .read(authProvider.notifier)
+                                .registerPushAfterPermission();
+                          }
                         },
                 ),
                 if (DefaultFirebaseOptions.isConfigured && !_pushEnabled)
@@ -245,6 +251,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
         ),
+        if (DefaultFirebaseOptions.isConfigured) ...[
+          const SizedBox(height: 16),
+          const PushDebugCard(),
+        ],
         const SizedBox(height: 16),
         Card(
           child: Column(
