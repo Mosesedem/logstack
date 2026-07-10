@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
+import { AuditPageSkeleton, TableSkeleton } from "@/components/loading";
 
 interface AuditLogUser {
   id: number;
@@ -174,6 +175,10 @@ export default function AuditLogsPage() {
     return date.toLocaleDateString();
   };
 
+  if (loading && logs.length === 0) {
+    return <AuditPageSkeleton />;
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -215,9 +220,7 @@ export default function AuditLogsPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
+            <TableSkeleton rows={6} columns={4} className="border-0" />
           ) : logs.length === 0 ? (
             <div className="text-center py-12">
               <Shield className="h-12 w-12 mx-auto text-muted-foreground mb-4" />

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
+import { PageHeaderSkeleton, TableSkeleton } from "@/components/loading";
 
 interface User {
   id: number;
@@ -30,7 +31,14 @@ export default function UsersPage() {
     loadUsers();
   }, []);
 
-  if (loading) return <div className="p-8">Loading users...</div>;
+  if (loading) {
+    return (
+      <div className="space-y-6" role="status" aria-label="Loading users">
+        <PageHeaderSkeleton withAction={false} />
+        <TableSkeleton rows={8} columns={4} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api-client";
+import { PageHeaderSkeleton, TableSkeleton } from "@/components/loading";
 
 interface Project {
   id: string;
@@ -32,7 +33,14 @@ export default function ProjectsPage() {
     loadProjects();
   }, []);
 
-  if (loading) return <div className="p-8">Loading projects...</div>;
+  if (loading) {
+    return (
+      <div className="space-y-6" role="status" aria-label="Loading projects">
+        <PageHeaderSkeleton withAction={false} />
+        <TableSkeleton rows={8} columns={4} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

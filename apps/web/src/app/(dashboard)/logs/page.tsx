@@ -10,6 +10,7 @@ import { useWebSocket } from "@/hooks/use-websocket";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { LogList, LogFilters } from "@/components/logs";
+import { LogsPageSkeleton } from "@/components/loading";
 import type { Log, LogLevel } from "@/types";
 
 const PAGE_SIZE = 50;
@@ -50,7 +51,7 @@ function matchesFilters(log: Log, filters: FilterState): boolean {
 }
 
 export default function LogsPage() {
-  const { currentProject } = useProject();
+  const { currentProject, isLoading: projectLoading } = useProject();
   const router = useRouter();
   const projectId = currentProject?.id;
   const [filters, setFilters] = useState<FilterState>({ level: "", search: "", source: "" });
@@ -61,6 +62,7 @@ export default function LogsPage() {
     hasNextPage,
     isFetching,
     isFetchingNextPage,
+    isLoading: logsQueryLoading,
     isError,
     error,
     refetch,
@@ -110,6 +112,10 @@ export default function LogsPage() {
       .slice(0, MAX_RENDERED);
   }, [data, realtimeLogs, filters]);
 
+  if (projectLoading) {
+    return <LogsPageSkeleton />;
+  }
+
   if (!currentProject) {
     return (
       <div className="flex flex-col items-center justify-center h-full space-y-4 py-12">
@@ -128,7 +134,8 @@ export default function LogsPage() {
     );
   }
 
-  const hasLogs = logs.length > 0
+  const hasLogs = logs.length > 0;
+  const isInitialLoading = logsQueryLoading && !data;
 
   // Quick test: use the shared logger (it will console + ship if the dashboard key is configured)
   const sendTestLog = () => {
@@ -203,7 +210,7 @@ export default function LogsPage() {
         </div>
       ) : (
         <>
-          {!hasLogs && !isFetching && (
+          {!hasLogs && !isInitialLoading && !isFetching && (
             <div className="rounded-xl border bg-card p-8 text-center space-y-4">
               <div>
                 <p className="font-medium">No logs yet for this project.</p>
@@ -224,14 +231,17 @@ export default function LogsPage() {
             </div>
           )}
 
-          <LogList
-            logs={logs}
-            onLoadMore={() => {
-              if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-            }}
-            hasMore={!!hasNextPage}
-            isLoading={isFetching}
-          />
+          {(hasLogs || isInitialLoading || isFetching) && (
+            <LogList
+              logs={logs}
+              onLoadMore={() => {
+                if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+              }}
+              hasMore={!!hasNextPage}
+              isLoading={isFetchingNextPage || (isFetching && hasLogs)}
+              isInitialLoading={isInitialLoading}
+            />
+          )}
 
           {hasLogs && (
             <div className="text-center text-xs text-muted-foreground pt-2">

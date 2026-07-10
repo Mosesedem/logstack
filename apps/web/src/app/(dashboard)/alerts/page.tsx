@@ -30,11 +30,12 @@ import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { AlertsPageSkeleton } from "@/components/loading";
 
 type AlertsTab = "rules" | "history";
 
 export default function AlertsPage() {
-  const { currentProject } = useProject();
+  const { currentProject, isLoading: projectLoading } = useProject();
   const { data: session } = useSession();
   const router = useRouter();
   const [tab, setTab] = useState<AlertsTab>("rules");
@@ -153,6 +154,10 @@ export default function AlertsPage() {
       });
     },
   });
+
+  if (projectLoading || (currentProject && isLoading && !alerts)) {
+    return <AlertsPageSkeleton />;
+  }
 
   if (!currentProject) {
     return (

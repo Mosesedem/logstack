@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useProject } from "@/hooks/use-project";
 import { api } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
+import { OverviewPageSkeleton, Spinner } from "@/components/loading";
 import {
   Activity,
   AlertTriangle,
@@ -25,10 +26,11 @@ interface DashboardStats {
 }
 
 export default function OverviewPage() {
-  const { currentProject } = useProject();
+  const { currentProject, isLoading: projectLoading } = useProject();
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const projectId = currentProject?.id;
 
   useEffect(() => {
@@ -37,11 +39,12 @@ export default function OverviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  const loadStats = async () => {
+  const loadStats = async (opts?: { silent?: boolean }) => {
     if (!projectId) return;
 
     try {
-      setLoading(true);
+      if (opts?.silent) setRefreshing(true);
+      else setLoading(true);
       const [logsResult, alertsResult] = await Promise.allSettled([
         api.get<{ logs: { level: string }[]; total: number }>(
           `/projects/${projectId}/logs?limit=1&offset=0`,
@@ -71,8 +74,13 @@ export default function OverviewPage() {
       console.error("Failed to load dashboard stats:", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
+
+  if (projectLoading || (currentProject && loading && !stats)) {
+    return <OverviewPageSkeleton />;
+  }
 
   if (!currentProject) {
     return (
@@ -88,14 +96,6 @@ export default function OverviewPage() {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -105,8 +105,16 @@ export default function OverviewPage() {
             Overview for {currentProject.name}
           </p>
         </div>
-        <Button onClick={loadStats} className="w-full sm:w-auto">
-          <Activity className="mr-2 h-4 w-4" />
+        <Button
+          onClick={() => loadStats({ silent: true })}
+          className="w-full sm:w-auto"
+          disabled={refreshing}
+        >
+          {refreshing ? (
+            <Spinner size="sm" className="mr-2" label="Refreshing" />
+          ) : (
+            <Activity className="mr-2 h-4 w-4" />
+          )}
           Refresh
         </Button>
       </div>

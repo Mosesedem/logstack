@@ -1,45 +1,61 @@
-'use client'
+"use client";
 
-import { useRef, useCallback } from 'react'
-import { Log } from '@/types'
-import { LogCard } from './log-card'
-import { Loader2 } from 'lucide-react'
+import { useRef, useCallback } from "react";
+import { Log } from "@/types";
+import { LogCard } from "./log-card";
+import { LogListSkeleton, Spinner } from "@/components/loading";
 
 interface LogListProps {
-  logs: Log[]
-  onLoadMore: () => void
-  hasMore: boolean
-  isLoading: boolean
+  logs: Log[];
+  onLoadMore: () => void;
+  hasMore: boolean;
+  isLoading: boolean;
+  /** True while the first page is loading (show full list skeleton). */
+  isInitialLoading?: boolean;
 }
 
-export function LogList({ logs, onLoadMore, hasMore, isLoading }: LogListProps) {
-  const observer = useRef<IntersectionObserver>(undefined)
+export function LogList({
+  logs,
+  onLoadMore,
+  hasMore,
+  isLoading,
+  isInitialLoading,
+}: LogListProps) {
+  const observer = useRef<IntersectionObserver | undefined>(undefined);
 
   const lastLogRef = useCallback(
     (node: HTMLDivElement | null) => {
-      if (isLoading) return
-      if (observer.current) observer.current.disconnect()
+      if (isLoading) return;
+      if (observer.current) observer.current.disconnect();
 
       observer.current = new IntersectionObserver((entries) => {
         if (entries[0].isIntersecting && hasMore) {
-          onLoadMore()
+          onLoadMore();
         }
-      })
+      });
 
-      if (node) observer.current.observe(node)
+      if (node) observer.current.observe(node);
     },
-    [isLoading, hasMore, onLoadMore]
-  )
+    [isLoading, hasMore, onLoadMore],
+  );
+
+  if (isInitialLoading || (logs.length === 0 && isLoading)) {
+    return <LogListSkeleton rows={8} />;
+  }
 
   if (logs.length === 0 && !isLoading) {
     return (
       <div className="flex items-center justify-center py-12 text-center text-muted-foreground">
         <div>
-          No logs match current filters.<br />
-          <span className="text-xs">Clear filters or send logs with the SDK (console.* are auto-captured).</span>
+          No logs match current filters.
+          <br />
+          <span className="text-xs">
+            Clear filters or send logs with the SDK (console.* are
+            auto-captured).
+          </span>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -53,10 +69,11 @@ export function LogList({ logs, onLoadMore, hasMore, isLoading }: LogListProps) 
         </div>
       ))}
       {isLoading && (
-        <div className="flex items-center justify-center py-4">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+          <Spinner size="sm" label="Loading more logs" />
+          <span>Loading more…</span>
         </div>
       )}
     </div>
-  )
+  );
 }

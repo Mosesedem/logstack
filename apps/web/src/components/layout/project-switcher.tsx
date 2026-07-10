@@ -1,20 +1,22 @@
-'use client'
+"use client";
 
-import { useProject } from '@/hooks/use-project'
-import { cn } from '@/lib/utils'
+import { useProject } from "@/hooks/use-project";
+import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 
 export function ProjectSwitcher({ className }: { className?: string }) {
-  const { projects, currentProject, setCurrentProject, isLoading } = useProject()
+  const { projects, currentProject, setCurrentProject, isLoading } =
+    useProject();
 
   if (isLoading) {
-    return <div className="h-10 w-48 animate-pulse rounded-md bg-muted" />
+    return <Skeleton className={cn("h-10 w-48 rounded-md", className)} />;
   }
 
   if (projects.length === 0) {

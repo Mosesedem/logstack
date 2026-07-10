@@ -119,3 +119,33 @@
 .animate-scroll:hover {
   animation-play-state: paused;
 }
+
+/* Modern skeleton shimmer — content-shaped loading states */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted)) 35%,
+    hsl(var(--muted-foreground) / 0.12) 50%,
+    hsl(var(--muted)) 65%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+    background: hsl(var(--muted));
+  }
+}

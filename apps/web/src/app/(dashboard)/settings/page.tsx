@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { BillingContextResponse, User } from "@/types";
 import { LinkMobileDialog } from "@/components/auth/link-mobile-dialog";
+import { SettingsPageSkeleton } from "@/components/loading";
 
 const COUNTRIES = [
   { code: "NG", name: "Nigeria" },
@@ -57,12 +58,12 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: profile } = useQuery({
+  const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["user-profile"],
     queryFn: () => api.get<User>("/users/me"),
   });
 
-  const { data: billingData } = useQuery({
+  const { data: billingData, isLoading: billingLoading } = useQuery({
     queryKey: ["billing-context"],
     queryFn: () => api.get<BillingContextResponse>("/billing/context"),
   });
@@ -133,6 +134,10 @@ export default function SettingsPage() {
   };
 
   const billingContext = billingData?.context;
+
+  if (profileLoading || billingLoading) {
+    return <SettingsPageSkeleton />;
+  }
 
   return (
     <>

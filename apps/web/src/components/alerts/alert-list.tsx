@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { LevelBadge } from "@/components/logs";
 import { Edit, Mail, Plus, Trash2 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { AlertListSkeleton } from "@/components/loading";
 
 interface AlertListProps {
   alerts: AlertRule[];
@@ -30,13 +30,7 @@ export function AlertList({
   isLoading,
 }: AlertListProps) {
   if (isLoading && alerts.length === 0) {
-    return (
-      <div className="space-y-4">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-32 w-full rounded-lg" />
-        ))}
-      </div>
-    );
+    return <AlertListSkeleton count={3} />;
   }
 
   if (alerts.length === 0 && !isLoading) {

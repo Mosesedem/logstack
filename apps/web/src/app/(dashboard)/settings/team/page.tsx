@@ -51,6 +51,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useOrgRole } from "@/hooks/use-org-role";
 import { api } from "@/lib/api-client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { TeamPageSkeleton } from "@/components/loading";
 import type { Invite } from "@/types";
 
 interface Organization {
@@ -298,11 +299,7 @@ export default function TeamPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <TeamPageSkeleton />;
   }
 
   const limit = getMemberLimit();

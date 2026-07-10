@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import { SidebarWidgetSkeleton } from "@/components/loading";
 import type { UsageSummary } from "@/types";
 
 function getTierName(tier?: string) {
@@ -40,9 +40,7 @@ export function SidebarUsage({ className }: { className?: string }) {
   return (
     <div className={cn("rounded-lg border bg-muted/50 p-4", className)}>
       {loading ? (
-        <div className="flex justify-center py-2">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
+        <SidebarWidgetSkeleton className="p-0" />
       ) : usage ? (
         <>
           <div className="mb-1 flex items-center justify-between">

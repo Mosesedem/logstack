@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { LevelBadge } from "@/components/logs";
 import { formatRelativeTime } from "@/lib/utils";
 import { Bell } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { AlertListSkeleton } from "@/components/loading";
 
 interface AlertHistoryProps {
   history: AlertHistoryType[];
@@ -15,13 +15,7 @@ interface AlertHistoryProps {
 
 export function AlertHistory({ history, isLoading, ruleName }: AlertHistoryProps) {
   if (isLoading && history.length === 0) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-24 w-full rounded-lg" />
-        ))}
-      </div>
-    );
+    return <AlertListSkeleton count={4} />;
   }
 
   if (history.length === 0 && !isLoading) {

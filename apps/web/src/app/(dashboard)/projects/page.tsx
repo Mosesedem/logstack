@@ -25,12 +25,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api-client";
 import { ApiKeyRevealDialog } from "@/components/projects/api-key-reveal-dialog";
+import { ProjectsPageSkeleton } from "@/components/loading";
 import { Plus, Copy, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ProjectsPage() {
-  const { projects, refreshProjects } = useProject();
+  const { projects, refreshProjects, isLoading } = useProject();
   const [rotatedApiKey, setRotatedApiKey] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -75,6 +76,10 @@ export default function ProjectsPage() {
     navigator.clipboard.writeText(text);
     toast({ title: "Copied to clipboard" });
   };
+
+  if (isLoading) {
+    return <ProjectsPageSkeleton />;
+  }
 
   return (
     <>

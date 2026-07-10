@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { BillingPageSkeleton, TableSkeleton } from "@/components/loading";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -274,13 +274,7 @@ function BillingPageContent() {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-5xl py-8">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-muted rounded w-1/4" />
-          <div className="grid gap-8">
-            <div className="h-48 bg-muted rounded" />
-            <div className="h-32 bg-muted rounded" />
-          </div>
-        </div>
+        <BillingPageSkeleton />
       </div>
     );
   }
@@ -445,23 +439,7 @@ function BillingPageContent() {
             </CardHeader>
             <CardContent>
               {invoicesLoading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between py-3 border-b last:border-0"
-                    >
-                      <div className="space-y-2">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-3 w-24" />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Skeleton className="h-4 w-16" />
-                        <Skeleton className="h-5 w-14 rounded-full" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <TableSkeleton rows={4} columns={3} className="border-0" />
               ) : invoices.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">
                   No invoices yet
