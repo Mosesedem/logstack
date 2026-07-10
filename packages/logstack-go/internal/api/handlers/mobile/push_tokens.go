@@ -40,6 +40,15 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	switch strings.ToLower(strings.TrimSpace(string(req.DeviceType))) {
+	case string(models.DeviceTypeIOS), "iphone", "apple":
+		req.DeviceType = models.DeviceTypeIOS
+	case string(models.DeviceTypeAndroid):
+		req.DeviceType = models.DeviceTypeAndroid
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "deviceType must be ios or android"})
+		return
+	}
 
 	// Check if token already exists
 	var existing models.PushToken

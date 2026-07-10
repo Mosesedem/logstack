@@ -330,11 +330,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
-    final token = _currentFcmToken ?? NotificationService.instance.fcmToken;
+    state = state.copyWith(pushStatus: PushRegistrationStatus.registering);
+
+    String? token = _currentFcmToken ?? NotificationService.instance.fcmToken;
+    if (Platform.isIOS) {
+      token = await NotificationService.instance.refreshFCMToken() ?? token;
+    }
     if (token == null) {
       state = state.copyWith(pushStatus: PushRegistrationStatus.awaitingToken);
       return;
     }
+
+    _currentFcmToken = token;
+    state = state.copyWith(
+      pushToken: token,
+      pushStatus: PushRegistrationStatus.registering,
+    );
+    await _registerPushToken(token);
+  }
+
+  /// Re-syncs the device FCM token with the API after app resume (iOS tokens rotate).
+  Future<void> syncPushTokenOnResume() async {
+    if (!state.isAuthenticated || state.isOfflineAuth) return;
+    if (!await NotificationService.instance.hasPushPermission()) return;
+
+    final token = Platform.isIOS
+        ? await NotificationService.instance.refreshFCMToken()
+        : NotificationService.instance.fcmToken;
+    if (token == null || token == _currentFcmToken) return;
 
     _currentFcmToken = token;
     state = state.copyWith(

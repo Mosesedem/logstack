@@ -187,9 +187,12 @@ func TestFCMMessagePayloadStructure(t *testing.T) {
 			t.Fatal("Android message must not include APNS overrides")
 		}
 
-		iosMsg := buildFCMMessage(models.DeviceTypeIOS, tok, title, body, nil)
+		iosMsg := buildFCMMessage(models.DeviceTypeIOS, tok, title, body, map[string]string{"type": "alert"})
 		if iosMsg.Notification == nil || iosMsg.Notification.Title != truncateUTF8Bytes(title, 200) {
 			t.Fatal("iOS message must include top-level notification for FCM APNS conversion")
+		}
+		if len(iosMsg.Data) > 0 {
+			t.Fatal("iOS message must be notification-only (no data payload)")
 		}
 		if iosMsg.Android != nil {
 			t.Fatal("iOS message must not include Android overrides")

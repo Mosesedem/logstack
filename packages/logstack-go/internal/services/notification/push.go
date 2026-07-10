@@ -75,29 +75,49 @@ func (p *PushNotifier) IsEnabled() bool {
 	return p != nil && p.client != nil
 }
 
+func normalizeDeviceType(deviceType models.DeviceType) models.DeviceType {
+	switch strings.ToLower(strings.TrimSpace(string(deviceType))) {
+	case string(models.DeviceTypeAndroid):
+		return models.DeviceTypeAndroid
+	case string(models.DeviceTypeIOS), "iphone", "apple":
+		return models.DeviceTypeIOS
+	default:
+		slog.Warn("unknown push token device type, using iOS-safe payload", "deviceType", deviceType)
+		return models.DeviceTypeIOS
+	}
+}
+
 // buildFCMMessage constructs a per-platform Firebase message.
 //
-// iOS: notification + data only — same shape Firebase Console uses. Custom APNS
-// overrides (manual topic, duplicate alert blocks, content-available) caused FCM
-// to accept the message while APNs never displayed it on device.
+// iOS: notification-only — identical to Firebase Console's test composer. Adding
+// Data or custom APNS blocks caused FCM to accept the message while APNs never
+// displayed it on device.
 //
-// Android: high-priority notification channel for reliable delivery.
-// Title/body are duplicated into Data so Flutter can render foreground alerts.
+// Android: notification + data + high-priority channel for reliable delivery.
 func buildFCMMessage(
 	deviceType models.DeviceType,
 	token, title, body string,
 	data map[string]string,
 ) *messaging.Message {
+	deviceType = normalizeDeviceType(deviceType)
+
 	displayTitle := title
 	displayBody := body
 	if deviceType == models.DeviceTypeIOS {
 		displayTitle = truncateUTF8Bytes(title, 200)
 		displayBody = truncateUTF8Bytes(body, 1500)
+		return &messaging.Message{
+			Token: token,
+			Notification: &messaging.Notification{
+				Title: displayTitle,
+				Body:  displayBody,
+			},
+		}
 	}
 
 	payload := map[string]string{
-		"title": displayTitle,
-		"body":  displayBody,
+		"title": title,
+		"body":  body,
 	}
 	for k, v := range data {
 		if k == "" {
@@ -106,17 +126,14 @@ func buildFCMMessage(
 		payload[k] = v
 	}
 
-	msg := &messaging.Message{
+	return &messaging.Message{
 		Token: token,
 		Notification: &messaging.Notification{
-			Title: displayTitle,
-			Body:  displayBody,
+			Title: title,
+			Body:  body,
 		},
 		Data: payload,
-	}
-
-	if deviceType == models.DeviceTypeAndroid {
-		msg.Android = &messaging.AndroidConfig{
+		Android: &messaging.AndroidConfig{
 			Priority: "high",
 			Notification: &messaging.AndroidNotification{
 				// Must match the channel created by the mobile app
@@ -129,10 +146,8 @@ func buildFCMMessage(
 				DefaultSound:          true,
 				DefaultVibrateTimings: true,
 			},
-		}
+		},
 	}
-
-	return msg
 }
 
 func truncateUTF8Bytes(s string, maxBytes int) string {
@@ -211,18 +226,19 @@ func (p *PushNotifier) SendDirectDetailed(
 	}
 
 	for _, token := range tokens {
-		switch token.DeviceType {
+		deviceType := normalizeDeviceType(token.DeviceType)
+		switch deviceType {
 		case models.DeviceTypeIOS:
 			result.IOSTokens++
 		case models.DeviceTypeAndroid:
 			result.AndroidTokens++
 		}
 
-		message := buildFCMMessage(token.DeviceType, token.Token, title, body, data)
+		message := buildFCMMessage(deviceType, token.Token, title, body, data)
 		response, err := p.client.Send(ctx, message)
 		if err != nil {
 			result.Failed++
-			switch token.DeviceType {
+			switch deviceType {
 			case models.DeviceTypeIOS:
 				result.IOSFailed++
 			case models.DeviceTypeAndroid:
@@ -254,7 +270,7 @@ func (p *PushNotifier) SendDirectDetailed(
 			continue
 		}
 		result.Sent++
-		switch token.DeviceType {
+		switch deviceType {
 		case models.DeviceTypeIOS:
 			result.IOSSent++
 		case models.DeviceTypeAndroid:

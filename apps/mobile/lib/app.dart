@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logstack_mobile/router.dart';
 import 'package:logstack_mobile/theme/app_theme.dart';
 import 'package:logstack_mobile/widgets/app_lock_gate.dart';
+import 'package:logstack_mobile/widgets/push_lifecycle_listener.dart';
 
 /// Stable key so AppLockGate's internal state survives root widget rebuilds
 /// triggered by router/auth/security provider notifications.
@@ -22,9 +23,11 @@ class LogstackApp extends ConsumerWidget {
       themeMode: ThemeMode.dark,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
-      builder: (context, child) => AppLockGate(
-        key: _appLockGateKey,
-        child: child ?? const SizedBox(),
+      builder: (context, child) => PushLifecycleListener(
+        child: AppLockGate(
+          key: _appLockGateKey,
+          child: child ?? const SizedBox(),
+        ),
       ),
     );
   }

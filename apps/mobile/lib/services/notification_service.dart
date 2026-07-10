@@ -64,6 +64,56 @@ class NotificationService {
     await _initializeFCM();
   }
 
+  /// Forces a new FCM token from Firebase and emits it on [tokenStream].
+  /// Use before backend registration so the API targets the same token Firebase
+  /// Console tests with (stale DB tokens are a common cause of "Console works, API doesn't").
+  Future<String?> refreshFCMToken() async {
+    if (!DefaultFirebaseOptions.isConfigured) {
+      return null;
+    }
+    if (!await hasPushPermission()) {
+      return null;
+    }
+
+    await _ensureIOSRemoteNotificationRegistration();
+
+    try {
+      await _messaging.deleteToken();
+    } catch (error, stackTrace) {
+      _logger.w('FCM deleteToken failed', error: error, stackTrace: stackTrace);
+    }
+
+    _fcmToken = null;
+    _apnsToken = null;
+
+    if (Platform.isIOS) {
+      for (var attempt = 0; attempt < 10; attempt++) {
+        try {
+          _apnsToken = await _messaging
+              .getAPNSToken()
+              .timeout(const Duration(seconds: 5));
+        } catch (_) {
+          _apnsToken = null;
+        }
+        if (_apnsToken != null) break;
+        await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+      }
+    }
+
+    try {
+      _fcmToken = await _messaging.getToken();
+    } catch (error, stackTrace) {
+      _logger.w('FCM getToken after refresh failed', error: error, stackTrace: stackTrace);
+      return null;
+    }
+
+    if (_fcmToken != null) {
+      _tokenController.add(_fcmToken!);
+      _logger.i('FCM token refreshed: $_fcmToken');
+    }
+    return _fcmToken;
+  }
+
   /// iOS must call registerForRemoteNotifications after the user grants permission.
   /// Doing it only at cold start (before permission) often leaves APNS/FCM without a token.
   Future<void> _ensureIOSRemoteNotificationRegistration() async {
