@@ -22,7 +22,7 @@ case "$MODE" in
     grep --line-buffered -E "$FILTER" || true
     ;;
   prod)
-    HOST="${2:-ubuntu@18.225.219.208}"
+    HOST="${2:-renboot}"
     echo "Tailing production API logs on $HOST (Ctrl-C to stop)"
     ssh "$HOST" "docker compose -f ~/logstack/docker-compose.host.yml logs -f api 2>&1" | grep --line-buffered -E "$FILTER" || true
     ;;
