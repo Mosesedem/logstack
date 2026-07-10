@@ -20,6 +20,7 @@ import {
   productFooterLinks,
   resourcesFooterLinks,
 } from "@/lib/navigation";
+import { LogstackLogo } from "@/components/brand/logstack-logo";
 
 export default function HomePage() {
   return (
@@ -465,38 +466,13 @@ export default function HomePage() {
         <div className="container mx-auto px-4">
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4 mb-12">
             <div>
-              <Link
+              <LogstackLogo
                 href="/"
-                className="mb-4 flex items-center gap-2 text-xl font-bold"
-              >
-                <svg
-                  className="h-7 w-7 text-primary"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M12 2L2 7l10 5 10-5-10-5z"
-                    fill="currentColor"
-                    opacity="0.8"
-                  />
-                  <path
-                    d="M2 17l10 5 10-5"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M2 12l10 5 10-5"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                Logstack
-              </Link>
+                size={28}
+                className="mb-4 text-xl text-white"
+                labelClassName="text-white"
+              />
+
               <p className="text-sm text-zinc-500 leading-relaxed max-w-xs">
                 The modern logging stack for forward-thinking engineering teams.
                 Designed for scale, built for speed.

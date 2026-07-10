@@ -16,7 +16,7 @@ import {
   ChevronsUpDown,
   Wifi,
 } from "lucide-react";
-import Image from "next/image";
+import { LogstackLogo } from "@/components/brand/logstack-logo";
 
 /**
  * Landing mockup of the Logstack Flutter companion app.
@@ -123,23 +123,9 @@ const screenMotion = {
 };
 
 function AppLogoMark({ size = 72 }: { size?: number }) {
-  const radius = size * 0.22;
-  const pad = Math.round(size * 0.1);
-  const inner = size - pad * 2;
   return (
-    <div
-      className="relative flex shrink-0 items-center justify-center bg-white shadow-lg shadow-black/40"
-      style={{ width: size, height: size, borderRadius: radius }}
-    >
-      <Image
-        src="/icon.png"
-        alt="Logstack"
-        width={inner}
-        height={inner}
-        className="object-contain"
-        style={{ width: inner, height: inner, borderRadius: radius * 0.55 }}
-        priority
-      />
+    <div className="relative flex shrink-0 items-center justify-center shadow-lg shadow-black/40">
+      <LogstackLogo href={null} showLabel={false} size={size} priority />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/your-org/logstack/main/docs/logo.svg" alt="Logstack Logo" width="120" />
+  <img src="docs/logo.svg" alt="Logstack Logo" width="120" />
 </p>
 
 <h1 align="center">Logstack</h1>

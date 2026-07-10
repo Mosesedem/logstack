@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { api, ApiClientError } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
+import { LogstackLogo } from "@/components/brand/logstack-logo";
 
 type InviteStatus = "loading" | "success" | "expired" | "error";
 
@@ -73,7 +74,7 @@ function AcceptInviteContent() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-            <svg
+            {/* <svg
               className="animate-spin h-6 w-6 text-muted-foreground"
               viewBox="0 0 24 24"
               fill="none"
@@ -91,7 +92,14 @@ function AcceptInviteContent() {
                 fill="currentColor"
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               />
-            </svg>
+            </svg> */}
+
+            <LogstackLogo
+              href="/"
+              // onClick={() => setMobileMenuOpen(false)}
+              className="text-xl text-white"
+              labelClassName="hidden"
+            />
           </div>
           <CardTitle>Accepting your invite…</CardTitle>
           <CardDescription>

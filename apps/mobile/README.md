@@ -1,6 +1,6 @@
 # Logstack Mobile
 
-Flutter app for real-time log monitoring, alerts, and project management.
+Flutter companion app for real-time log monitoring, alerts, and project management.
 
 ## Setup
 
@@ -10,24 +10,33 @@ flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-App launcher icons live in `assets/icons/` (Android, iOS, and web variants). After updating those assets, sync them to platform projects:
+## Brand icons
+
+**Monorepo source of truth:** repo-root `assets/` (not this folder alone).
+
+After updating brand files under `/assets`, from the **repo root**:
 
 ```bash
-# Android
-cp -R assets/icons/android/res/* android/app/src/main/res/
-
-# iOS
-cp assets/icons/ios/*.png ios/Runner/Assets.xcassets/AppIcon.appiconset/
-cp assets/icons/ios/Contents.json ios/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json
-
-# Web
-cp assets/icons/web/icon-192.png web/icons/Icon-192.png
-cp assets/icons/web/icon-512.png web/icons/Icon-512.png
-cp assets/icons/web/icon-192-maskable.png web/icons/Icon-maskable-192.png
-cp assets/icons/web/icon-512-maskable.png web/icons/Icon-maskable-512.png
-cp assets/icons/web/favicon.ico web/favicon.ico
-cp assets/icons/web/apple-touch-icon.png web/apple-touch-icon.png
+./scripts/sync_brand_icons.sh
 ```
+
+That regenerates:
+
+| Target | Content |
+|--------|---------|
+| `assets/icons/master-*.png` | Flutter masters |
+| `assets/icons/web/*` | In-app `AppLogo` + mobile web PWA |
+| `assets/icons/android/**` | Adaptive launcher + monochrome |
+| `assets/icons/ios/**` | AppIcon set |
+| Android / iOS / Web / macOS platforms | Launchers, splash, notification icons |
+
+Local-only re-sync (after masters already exist):
+
+```bash
+./scripts/sync_icons.sh
+```
+
+In Flutter UI always use `AppLogo` / `AppAssets` — never hardcode other image paths.
 
 ## Run
 

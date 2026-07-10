@@ -44,6 +44,7 @@ export function Header() {
           <div className="md:hidden">
             <LogstackLogo
               href="/overview"
+              size={28}
               className="text-lg text-foreground"
               labelClassName="text-foreground"
             />

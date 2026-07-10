@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { api } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
+import { LogstackLogo } from "@/components/brand/logstack-logo";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -75,36 +76,11 @@ export default function SignupPage() {
     <div className="flex min-h-dvh items-start justify-center px-4 py-8 sm:items-center sm:py-12">
       <Card className="my-auto w-full max-w-md border-border bg-card shadow-lg">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-            <svg
-              className="h-7 w-7 text-primary"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M12 2L2 7l10 5 10-5-10-5z"
-                fill="currentColor"
-                opacity="0.8"
-              />
-              <path
-                d="M2 17l10 5 10-5"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M2 12l10 5 10-5"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+          <div className="mx-auto mb-4 flex justify-center">
+            <LogstackLogo href="/" showLabel={false} size={48} priority />
           </div>
           <CardTitle className="text-2xl">Create an account</CardTitle>
-          <CardDescription>Get started with LogStack for free</CardDescription>
+          <CardDescription>Get started with Logstack for free</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* OAuth Buttons */}

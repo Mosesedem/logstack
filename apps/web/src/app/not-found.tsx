@@ -96,7 +96,7 @@ export default function NotFound() {
 
       {/* Footer note */}
       <div className="absolute bottom-6 text-xs text-zinc-600">
-        LogStack • {new Date().getFullYear()}
+        Logstack • {new Date().getFullYear()}
       </div>
     </div>
   );

@@ -27,6 +27,7 @@ export function Sidebar({ className }: { className?: string }) {
       <div className="flex h-16 items-center border-b border-border px-6">
         <LogstackLogo
           href="/overview"
+          size={28}
           className="text-xl text-foreground"
           labelClassName="text-foreground"
         />

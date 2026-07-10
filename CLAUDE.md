@@ -10,6 +10,13 @@ dashboard with alerts & billing. Git remote: `github.com/Mosesedem/logstack`.
 > `logstack-js`, PyPI `logstack-py`, Go module `.../logstack-go-sdk`, API `api.logstack.tech`,
 > UI title). All directories, module paths and references now use `logstack-*` (rename completed).
 
+## Brand icons
+Source of truth: **repo-root `assets/`**. After updating icons there:
+```bash
+./scripts/sync_brand_icons.sh   # web public + mobile launchers/splash + docs/logo.svg
+```
+Do not hand-edit copies under `apps/web/public` or `apps/mobile/assets/icons`.
+
 ## Layout (monorepo: pnpm + turbo)
 - `apps/web` — Next.js 15 dashboard + landing + docs (fumadocs). `@logstack/web`.
 - `apps/mobile` — Flutter app.

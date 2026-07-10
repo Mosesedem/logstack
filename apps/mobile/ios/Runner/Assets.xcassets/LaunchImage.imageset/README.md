@@ -1,5 +1,13 @@
-# Launch Screen Assets
+# LaunchImage
 
-You can customize the launch screen with your own desired assets by replacing the image files in this directory.
+Brand mark shown on the native iOS launch screen (white Logstack glyph on dark
+`#09090B` background — see `LaunchScreen.storyboard`).
 
-You can also do it by opening your Flutter project's Xcode project with `open ios/Runner.xcworkspace`, selecting `Runner/Assets.xcassets` in the Project Navigator and dropping in the desired images.
+Regenerate from the asset source of truth:
+
+```bash
+# from apps/mobile
+./scripts/sync_icons.sh
+```
+
+Source: `assets/icons/web/icon-clear-512.png`.

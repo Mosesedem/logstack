@@ -1,37 +1,15 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
+import { LogstackLogo } from "@/components/brand/logstack-logo";
 
 export const baseOptions: BaseLayoutProps = {
   nav: {
     title: (
-      <span className="flex items-center gap-2 font-semibold">
-        <svg
-          className="h-6 w-6"
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="M12 2L2 7l10 5 10-5-10-5z"
-            fill="currentColor"
-            opacity="0.8"
-          />
-          <path
-            d="M2 17l10 5 10-5"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M2 12l10 5 10-5"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        LogStack
-      </span>
+      <LogstackLogo
+        href={null}
+        size={24}
+        className="font-semibold"
+        labelClassName="text-sm font-semibold"
+      />
     ),
   },
   links: [

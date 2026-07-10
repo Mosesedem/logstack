@@ -1,65 +1,94 @@
 import Link from "next/link";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 interface LogstackLogoProps {
-  href?: string;
+  /** Destination when the logo is a link. Pass `null` for a non-link mark. */
+  href?: string | null;
   className?: string;
   iconClassName?: string;
   labelClassName?: string;
+  /** Show the "Logstack" wordmark next to the mark. Default true. */
+  showLabel?: boolean;
+  /** Pixel size of the mark (width & height). Default 32. */
+  size?: number;
+  /**
+   * `default` — solid brand tile (`/icon.png`, matches PWA / home-screen).
+   * `clear` — transparent white mark (`/icon_clear.png`) for dark/colored surfaces.
+   */
+  variant?: "default" | "clear";
   onClick?: () => void;
+  priority?: boolean;
 }
 
+/**
+ * Canonical Logstack brand mark + optional wordmark.
+ *
+ * Brand assets live in repo-root `assets/` and are synced to `public/` via
+ * `./scripts/sync_brand_icons.sh`. Prefer this component over ad-hoc images.
+ */
 export function LogstackLogo({
   href = "/",
   className,
   iconClassName,
   labelClassName,
+  showLabel = true,
+  size = 32,
+  variant = "default",
   onClick,
+  priority = false,
 }: LogstackLogoProps) {
+  const src = variant === "clear" ? "/icon_clear.png" : "/icon.png";
+  const radius = Math.round(size * 0.22);
+  const isClear = variant === "clear";
+
+  const mark = (
+    <Image
+      src={src}
+      alt="Logstack"
+      width={size}
+      height={size}
+      priority={priority}
+      className={cn(
+        "shrink-0",
+        isClear ? "object-contain" : "object-cover",
+        iconClassName,
+      )}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: isClear ? 0 : radius,
+      }}
+    />
+  );
+
   const content = (
     <>
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-        <svg
-          className={cn("h-7 w-7 text-primary", iconClassName)}
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <path
-            d="M12 2L2 7l10 5 10-5-10-5z"
-            fill="currentColor"
-            opacity="0.8"
-          />
-          <path
-            d="M2 17l10 5 10-5"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M2 12l10 5 10-5"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-      <span className={cn("truncate", labelClassName)}>Logstack</span>
+      {mark}
+      {showLabel && (
+        <span className={cn("truncate font-bold tracking-tight", labelClassName)}>
+          Logstack
+        </span>
+      )}
     </>
   );
 
+  const layoutClass = cn(
+    "inline-flex min-w-0 items-center gap-2 transition-opacity",
+    href != null && "hover:opacity-80",
+    className,
+  );
+
+  if (href == null) {
+    return (
+      <div className={layoutClass} onClick={onClick}>
+        {content}
+      </div>
+    );
+  }
+
   return (
-    <Link
-      href={href}
-      onClick={onClick}
-      className={cn(
-        "flex min-w-0 items-center gap-2 font-bold tracking-tight transition-opacity hover:opacity-80",
-        className,
-      )}
-    >
+    <Link href={href} onClick={onClick} className={layoutClass}>
       {content}
     </Link>
   );

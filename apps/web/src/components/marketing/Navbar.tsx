@@ -18,6 +18,7 @@ export function Navbar() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
           <LogstackLogo
             href="/"
+            size={28}
             onClick={() => setMobileMenuOpen(false)}
             className="text-xl text-white"
             labelClassName="text-white"
@@ -71,6 +72,7 @@ export function Navbar() {
         header={
           <LogstackLogo
             href="/"
+            size={28}
             onClick={() => setMobileMenuOpen(false)}
             className="text-lg text-white"
             labelClassName="text-white"
