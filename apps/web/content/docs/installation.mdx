@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Install Logstack SDK and set up your development environment.
+description: Install Logstack SDKs for JavaScript, Go, and Python.
 ---
 
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
@@ -8,88 +8,174 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 # Installation
 
+Pick the SDK for your stack. All three use the same project API key and ingest
+endpoint (`POST /v1/logs`).
+
 ## Requirements
 
-- **Node.js** 16.0.0 or higher
-- **TypeScript** 4.7+ (optional, but recommended)
+| SDK | Runtime |
+| --- | --- |
+| **JavaScript** (`logstack-js`) | Node.js 16+, modern browsers, Deno, Bun |
+| **Go** (`logstack-go-sdk`) | Go 1.21+ |
+| **Python** (`logstack-py`) | Python 3.7+ |
 
-## Package Installation
+## Package install
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tab value="npm">```bash npm install logstack-js ```</Tab>
-  <Tab value="yarn">```bash yarn add logstack-js ```</Tab>
-  <Tab value="pnpm">```bash pnpm add logstack-js ```</Tab>
-  <Tab value="bun">```bash bun add logstack-js ```</Tab>
-</Tabs>
+<Tabs items={["JavaScript", "Go", "Python"]}>
+  <Tab value="JavaScript">
 
-## TypeScript Setup
-
-Logstack is written in TypeScript and ships with full type definitions. No additional `@types` packages are needed.
-
-```typescript
-import { createLogStack, LogLevel, LogEntry } from "logstack-js";
-
-// Full IntelliSense and type checking
-const logstack = createLogStack({
-  apiKey: process.env.LOGSTACK_API_KEY!,
-});
+```bash
+npm install logstack-js
+# yarn add logstack-js
+# pnpm add logstack-js
+# bun add logstack-js
 ```
 
-## Verify Installation
+  </Tab>
+  <Tab value="Go">
+
+```bash
+go get github.com/mosesedem/logstack/packages/logstack-go-sdk@v1.0.3
+```
+
+Go modules in the monorepo use tags shaped like
+`packages/logstack-go-sdk/vX.Y.Z`.
+
+  </Tab>
+  <Tab value="Python">
+
+```bash
+pip install logstack-py
+
+# Optional framework extras
+pip install "logstack-py[django]"
+pip install "logstack-py[fastapi]"
+```
+
+Import name is `logstack` (e.g. `from logstack import LogStackClient`).
+
+  </Tab>
+</Tabs>
+
+## Verify installation
+
+<Tabs items={["JavaScript", "Go", "Python"]}>
+  <Tab value="JavaScript">
 
 ```typescript
 import { createLogStack } from "logstack-js";
 
 const logstack = createLogStack({
-  apiKey: "ls_test_verify_installation",
-  endpoint: "https://api.logstack.tech", // or your self-hosted URL
+  apiKey: process.env.LOGSTACK_API_KEY!,
+  endpoint: "https://api.logstack.tech",
 });
 
-// This will fail authentication but verifies the package works
 logstack.info("Installation test");
 await logstack.flush();
-
-console.log("Logstack SDK installed successfully!");
+console.log("logstack-js ready");
 ```
 
-## Self-Hosted Setup
+  </Tab>
+  <Tab value="Go">
 
-If you're running a self-hosted Logstack instance:
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	logstack "github.com/mosesedem/logstack/packages/logstack-go-sdk"
+)
+
+func main() {
+	client := logstack.NewClient(logstack.Config{
+		APIKey: os.Getenv("LOGSTACK_API_KEY"),
+	})
+	defer client.Close()
+
+	_ = client.Info(context.Background(), "Installation test")
+	fmt.Println("logstack-go-sdk", logstack.Version)
+}
+```
+
+  </Tab>
+  <Tab value="Python">
+
+```python
+from logstack import LogStackClient
+import logstack
+
+client = LogStackClient(api_key="ls_test_verify")
+client.info("Installation test")
+client.close()
+print("logstack-py", logstack.__version__)
+```
+
+  </Tab>
+</Tabs>
+
+## Self-hosted endpoint
+
+Point any SDK at your own API host (no `/v1` suffix required):
+
+<Tabs items={["JavaScript", "Go", "Python"]}>
+  <Tab value="JavaScript">
 
 ```typescript
 const logstack = createLogStack({
   apiKey: process.env.LOGSTACK_API_KEY!,
-  endpoint: "https://logs.your-domain.com", // Your self-hosted URL
+  endpoint: "https://logs.your-domain.com", // or http://localhost:8080
 });
 ```
 
+  </Tab>
+  <Tab value="Go">
+
+```go
+client := logstack.NewClient(logstack.Config{
+	APIKey: os.Getenv("LOGSTACK_API_KEY"),
+	APIURL: "https://logs.your-domain.com",
+})
+```
+
+  </Tab>
+  <Tab value="Python">
+
+```python
+client = LogStackClient(
+    api_key=os.environ["LOGSTACK_API_KEY"],
+    api_url="https://logs.your-domain.com",
+)
+```
+
+  </Tab>
+</Tabs>
+
 <Callout type="info">
-  Self-hosted instances use the same SDK. Just point to your own endpoint.
+  Self-hosted instances use the same SDKs — only the host URL changes.
 </Callout>
 
-## CDN Usage (Browser)
-
-For browser environments or quick prototyping:
+## CDN (browser, JS only)
 
 ```html
 <script type="module">
   import { createLogStack } from "https://esm.sh/logstack-js";
 
-  const logstack = createLogStack({
-    apiKey: "ls_live_xxx",
-  });
-
+  const logstack = createLogStack({ apiKey: "ls_live_xxx" });
   logstack.info("Page loaded", { url: window.location.href });
 </script>
 ```
 
 <Callout type="warn">
-  Never expose your production API key in client-side code. Use a backend proxy
-  for browser logging.
+  Never expose production API keys in public client-side code. Prefer a backend
+  proxy for browser logging.
 </Callout>
 
-## Next Steps
+## Next steps
 
-- [Configuration Guide](/docs/sdk/configuration) — Customize SDK behavior
-- [Logging Guide](/docs/sdk/logging) — Learn about log levels and metadata
-- [Framework Integrations](/docs/sdk/frameworks) — Express, Next.js, and more
+- [SDK overview](/docs/sdk/overview) — all languages
+- [JavaScript SDK](/docs/sdk/javascript) · [Go SDK](/docs/sdk/go) · [Python SDK](/docs/sdk/python)
+- [Logging guide](/docs/sdk/logging) — levels and metadata
+- [Framework integrations](/docs/sdk/frameworks)

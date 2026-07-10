@@ -1,0 +1,137 @@
+---
+title: JavaScript / TypeScript SDK
+description: Complete guide to the Logstack JavaScript/TypeScript SDK (logstack-js).
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Card, Cards } from "fumadocs-ui/components/card";
+
+# JavaScript / TypeScript SDK
+
+The **logstack-js** package for Node.js, browsers, Deno, Bun, and edge runtimes.
+
+| | |
+| --- | --- |
+| **npm** | [`logstack-js`](https://www.npmjs.com/package/logstack-js) |
+| **Import** | `import { createLogStack } from "logstack-js"` |
+| **Default API** | `https://api.logstack.tech` |
+| **Ingest path** | `POST {endpoint}/v1/logs` |
+
+## Installation
+
+```bash
+npm install logstack-js
+# yarn add logstack-js · pnpm add logstack-js · bun add logstack-js
+```
+
+## Quick start
+
+```typescript
+import { createLogStack } from "logstack-js";
+
+const logstack = createLogStack({
+  apiKey: process.env.LOGSTACK_API_KEY!,
+  // captureConsole defaults to true — existing console.* calls are shipped
+});
+
+logstack.info("User signed up", { userId: "user_123" });
+logstack.warn("Rate limit approaching", { current: 90, limit: 100 });
+logstack.error("Payment failed", { orderId: "order_456" });
+logstack.critical("Database connection lost", { host: "db.example.com" });
+
+await logstack.close();
+```
+
+## Features
+
+- **Automatic batching** — buffer + flush interval
+- **Retry with backoff** — failed requests retried
+- **`captureConsole`** (default on) — ships `console.*` with `source: "console"`
+- **Offline queue** — browser localStorage cap (`maxOfflineQueueSize`)
+- **TypeScript** — full type definitions
+- **Graceful shutdown** — `flush()` / `close()`
+
+## Log levels
+
+| Level | Method | Use case |
+| --- | --- | --- |
+| `debug` | `logstack.debug()` | Verbose diagnostics |
+| `info` | `logstack.info()` | Normal operations |
+| `warn` | `logstack.warn()` | Potential issues |
+| `error` | `logstack.error()` | Failures |
+| `critical` | `logstack.critical()` | Immediate attention |
+| `fatal` | `logstack.fatal()` | Process-ending errors |
+
+## API reference
+
+### `createLogStack(options)`
+
+```typescript
+import { createLogStack } from "logstack-js";
+
+const logstack = createLogStack({
+  apiKey: "ls_live_xxx",
+  endpoint: "https://api.logstack.tech",
+  batchSize: 100,
+  flushInterval: 5000,
+  maxRetries: 3,
+  environment: "production",
+  captureConsole: true,
+  onError: (error, logs) => {
+    console.error("Failed to send logs:", error);
+  },
+});
+```
+
+### Logging methods
+
+```typescript
+logstack.info("User logged in", { userId: "user_123" });
+logstack.warn("API rate limit approaching", { usage: 90 });
+logstack.error("Database connection failed", { host: "db.example.com" });
+logstack.critical("Payment processing unavailable", { service: "stripe" });
+
+logstack.log({
+  level: "error",
+  message: "Operation failed",
+  source: "worker-service",
+  metadata: { jobId: "job_123" },
+});
+```
+
+### Flush and close
+
+```typescript
+await logstack.flush();
+await logstack.close();
+```
+
+<Callout type="info">
+  Always call <code>close()</code> on graceful shutdown so buffered logs are not lost.
+</Callout>
+
+## Explore more
+
+<Cards>
+  <Card
+    title="Configuration"
+    description="Batching, retries, captureConsole, environments"
+    href="/docs/sdk/configuration"
+  />
+  <Card
+    title="Logging best practices"
+    description="Levels, metadata, sources, privacy"
+    href="/docs/sdk/logging"
+  />
+  <Card
+    title="Framework integrations"
+    description="Express, Next.js, Fastify, NestJS"
+    href="/docs/sdk/frameworks"
+  />
+  <Card title="Go SDK" description="Official Go client" href="/docs/sdk/go" />
+  <Card
+    title="Python SDK"
+    description="Official Python client"
+    href="/docs/sdk/python"
+  />
+</Cards>

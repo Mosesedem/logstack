@@ -1,154 +1,110 @@
 # Logstack Python SDK
 
-A Python SDK for the Logstack logging platform.
+Official Python client for [Logstack](https://github.com/mosesedem/logstack) — structured
+ingest, batching, stdlib `logging` capture, Django and FastAPI middleware.
+
+**PyPI:** [`logstack-py`](https://pypi.org/project/logstack-py/) · **Import:** `logstack`  
+**Docs:** [logstack.tech/docs/sdk/python](https://logstack.tech/docs/sdk/python) · monorepo guide [docs/SDK.md](../../docs/SDK.md)
 
 ## Installation
 
 ```bash
 pip install logstack-py
+
+# Optional
+pip install "logstack-py[django]"
+pip install "logstack-py[fastapi]"
 ```
 
-The import name is still `logstack` (e.g. `from logstack import LogStackClient`).
-
-## v1.0.2
-
-- **`capture_logging` default on.** Automatically forwards stdlib `logging` calls with
-  `source: "python-logging"`. Original handlers (console, etc.) are preserved.
-- Lowers root logger level when needed so `info` / `debug` records reach the capture handler.
-- Skips re-entrant capture from the internal Logstack logger.
-
-## v1.0.1
-
-- Fix batch-flush deadlock when `batch_size` is reached
-- Normalize API URL (strips redundant `/v1` suffix)
-- Optional `on_error` callback; accepts HTTP 201 from ingest API
-- `create_fastapi_middleware(client)` for proper FastAPI/Starlette integration
-
-## Usage
-
-### Basic Usage
+## Quick start
 
 ```python
 from logstack import LogStackClient
 
-# Create a client
-# capture_logging=True (default): any logging.getLogger(...).info / error etc.
-# is automatically captured and sent with source="python-logging".
-# Your normal logging configuration (console handlers etc.) continues to work.
+# capture_logging=True (default): stdlib logging is forwarded (source="python-logging")
 client = LogStackClient(
-    api_key="your-api-key",
+    api_key="ls_live_xxx",
     environment="production",
+    # api_url="http://localhost:8080",  # self-hosted / local
 )
 
-# Explicit structured logs
 client.info("Application started", metadata={"version": "1.0.0"})
 client.error("Database connection failed", metadata={"error": "connection refused"})
-
-# Flush and close
 client.close()
 ```
 
-### Automatic stdlib logging capture
+Context manager:
 
-By default `capture_logging=True`. All Python `logging` calls across your app (including libraries) are forwarded:
+```python
+with LogStackClient(api_key="ls_live_xxx") as client:
+    client.info("job started")
+```
+
+### Stdlib logging capture
 
 ```python
 import logging
 from logstack import LogStackClient
 
-client = LogStackClient(api_key="...")  # capture_logging=True by default
+client = LogStackClient(api_key="…")  # capture on by default
 
 log = logging.getLogger(__name__)
-log.info("User action", extra={"user_id": 123})   # <- captured automatically
-log.error("Failed to process")                    # <- captured as error level
+log.info("User action")   # shipped automatically
+log.error("Failed job")
 ```
 
-The original log records still go to any handlers you have configured (StreamHandler, etc.).
+Disable with `capture_logging=False`.
 
-Disable with `capture_logging=False` if you only want explicit `client.xxx()` calls.
-
-### Using Context Manager
-
-```python
-from logstack import LogStackClient
-
-with LogStackClient(api_key="your-api-key") as client:
-    client.info("Application started")
-    client.error("Something went wrong")
-```
-
-### Django Integration
+## Django
 
 ```python
 # settings.py
 MIDDLEWARE = [
-    # ...
-    'logstack.middleware.DjangoMiddleware',
-    # ...
+    # …
+    "logstack.middleware.DjangoMiddleware",
 ]
-
-# Or with custom client
-MIDDLEWARE = [
-    # ...
-    'logstack.middleware.DjangoMiddleware',
-    # ...
-]
-
-# In your code
-from logstack import DjangoMiddleware, LogStackClient
-
-client = LogStackClient(api_key="your-api-key")
-middleware = DjangoMiddleware(get_response, client=client)
 ```
 
-### FastAPI Integration
+Logs unhandled exceptions. See the [Python docs](https://logstack.tech/docs/sdk/python#django-integration).
+
+## FastAPI
 
 ```python
 from fastapi import FastAPI
-from logstack import LogStackClient, FastAPIMiddleware
+from logstack import LogStackClient, create_fastapi_middleware
 
 app = FastAPI()
-client = LogStackClient(api_key="your-api-key")
-FastAPIMiddleware(app, client=client)
+client = LogStackClient(api_key="…")
+app.add_middleware(create_fastapi_middleware(client))
 ```
 
-## API Reference
+## Configuration
 
-### `LogStackClient(api_key, ..., capture_logging=True)`
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `api_key` | — | Project key |
+| `api_url` | `https://api.logstack.tech` | Host only |
+| `environment` | `production` | Batch label |
+| `flush_interval` | `5.0` | Seconds |
+| `batch_size` | `100` | Auto-flush size |
+| `capture_logging` | `True` | Root logger handler |
+| `on_error` | `None` | Failure callback |
 
-Create a new Logstack client.
+## API
 
-### `info(message, metadata=None)`
+- `debug` / `info` / `warn` / `error` / `critical` / `fatal` (fatal flushes)
+- `flush` / `close` (removes capture handler + final flush)
+- Context manager: `__enter__` / `__exit__`
 
-Send an info level log.
+Explicit calls use `source: "python-sdk"`.
 
-### `debug(message, metadata=None)`
+## v1.0.2
 
-Send a debug level log.
+- `capture_logging` default on; root level adjustment; skip internal logger loops
 
-### `warn(message, metadata=None)`
+## v1.0.1
 
-Send a warn level log.
-
-### `error(message, metadata=None)`
-
-Send an error level log.
-
-### `critical(message, metadata=None)`
-
-Send a critical level log.
-
-### `fatal(message, metadata=None)`
-
-Send a fatal level log and flush immediately.
-
-### `flush()`
-
-Manually flush the batch of logs.
-
-### `close()`
-
-Close the client and flush any pending logs.
+- Batch-flush deadlock fix; URL normalize; `on_error`; `create_fastapi_middleware`
 
 ## License
 

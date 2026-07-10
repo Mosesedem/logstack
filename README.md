@@ -48,19 +48,26 @@ Logstack is a **complete log management solution** designed for modern applicati
 - **🔔 Smart Alerts** — Pattern matching with cooldowns, email & push notifications
 - **📊 Beautiful Dashboard** — Search, filter, and analyze logs with an intuitive interface
 - **📱 Mobile Apps** — iOS & Android apps with offline support
-- **🔌 Easy Integration** — TypeScript SDK with framework integrations (Express, Next.js, Fastify, NestJS)
+- **🔌 Easy Integration** — Official SDKs for **JavaScript/TypeScript**, **Go**, and **Python**
 - **🏠 Self-Hostable** — Deploy on your infrastructure with Docker Compose
 - **🔒 Secure** — JWT authentication, rate limiting, CORS protection
 
 ## Quick Start
 
-### 1. Install the SDK
+### 1. Install an SDK
 
 ```bash
+# JavaScript / TypeScript
 npm install logstack-js
+
+# Go
+go get github.com/mosesedem/logstack/packages/logstack-go-sdk@v1.0.3
+
+# Python
+pip install logstack-py
 ```
 
-### 2. Start Logging
+### 2. Start logging
 
 ```typescript
 import { createLogStack } from "logstack-js";
@@ -69,22 +76,17 @@ const logstack = createLogStack({
   apiKey: process.env.LOGSTACK_API_KEY,
 });
 
-// Send structured logs
 logstack.info("User signed up", { userId: "user_123", plan: "pro" });
-logstack.warn("Rate limit approaching", { current: 90, limit: 100 });
-logstack.error("Payment failed", {
-  orderId: "order_456",
-  error: "Card declined",
-});
-logstack.critical("Database connection lost", { host: "db.example.com" });
+logstack.error("Payment failed", { orderId: "order_456" });
 
-// Graceful shutdown
 process.on("SIGTERM", () => logstack.close());
 ```
 
-### 3. View Your Logs
+Go and Python examples: [docs/SDK.md](./docs/SDK.md) · [Go](https://logstack.tech/docs/sdk/go) · [Python](https://logstack.tech/docs/sdk/python).
 
-Open the [Logstack dashboard](https://logstack.tech) to see your logs streaming in real-time.
+### 3. View your logs
+
+Open the [Logstack dashboard](https://logstack.tech) to see logs streaming in real time.
 
 ## Self-Hosting
 
@@ -114,8 +116,8 @@ See the [Self-Hosting Guide](https://logstack.tech/docs/deployment/overview) for
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Client Layer                             │
 ├──────────────────────┬──────────────────────┬───────────────────┤
-│  NPM Package         │  Next.js Dashboard   │  Flutter App      │
-│  (logstack-js)       │  (Web Interface)     │  (iOS/Android)    │
+│  SDKs (JS/Go/Python) │  Next.js Dashboard   │  Flutter App      │
+│  logstack-js / -py   │  (Web Interface)     │  (iOS/Android)    │
 └──────────┬───────────┴──────────┬───────────┴───────┬───────────┘
            │                      │                   │
            └──────────────────────┼───────────────────┘
@@ -145,23 +147,27 @@ See the [Self-Hosting Guide](https://logstack.tech/docs/deployment/overview) for
 ```
 logstack/
 ├── packages/
-│   ├── logstack-js/        # JavaScript/TypeScript SDK
+│   ├── logstack-js/        # JavaScript/TypeScript SDK (npm: logstack-js)
+│   ├── logstack-go-sdk/    # Go SDK
+│   ├── logstack-python/    # Python SDK (PyPI: logstack-py)
 │   ├── logstack-go/        # Go backend API server
 │   └── shared-types/       # Shared TypeScript types
 ├── apps/
-│   ├── web/                # Next.js dashboard
+│   ├── web/                # Next.js dashboard + fumadocs
 │   └── mobile/             # Flutter mobile app
-├── docs/                   # Documentation (Markdown)
+├── docs/                   # Reference Markdown (incl. multi-SDK SDK.md)
 └── infra/                  # Infrastructure configs
 ```
 
 ## Documentation
 
 - **[Quick Start](https://logstack.tech/docs/quickstart)** — Get up and running in 5 minutes
-- **[SDK Reference](https://logstack.tech/docs/sdk/overview)** — Complete JavaScript/TypeScript SDK guide
+- **[SDK Overview](https://logstack.tech/docs/sdk/overview)** — JavaScript, Go, and Python
+- **[Go SDK](https://logstack.tech/docs/sdk/go)** · **[Python SDK](https://logstack.tech/docs/sdk/python)** · **[JS SDK](https://logstack.tech/docs/sdk/javascript)**
 - **[API Reference](https://logstack.tech/docs/api/overview)** — REST API endpoints and authentication
 - **[Self-Hosting](https://logstack.tech/docs/deployment/overview)** — Deploy Logstack on your infrastructure
 - **[Production Checklist](https://logstack.tech/docs/deployment/production-checklist)** — Security and performance best practices
+- **[docs/SDK.md](./docs/SDK.md)** — Offline multi-language SDK reference
 
 ## Development
 

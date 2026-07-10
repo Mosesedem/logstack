@@ -5,17 +5,21 @@ description: Best practices for effective logging with Logstack, including log l
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-# Logging Guide
+# Logging guide
 
-Learn how to write effective, searchable, and actionable logs with Logstack.
+Patterns that apply to **all** Logstack SDKs (JavaScript, Go, Python). Examples below
+use TypeScript; the same levels and metadata shape work in every client.
 
 <Callout type="info">
-  <strong>Zero-config collection:</strong> Install the SDK with the default settings and all your existing <code>console.log</code>, <code>console.error</code>, etc. are automatically captured and sent (source: "console"). You get full coverage instantly + the power of structured logging when you use the explicit API.
+  <strong>Zero-config collection:</strong> each SDK can auto-capture existing loggers —
+  JS <code>console.*</code> (<code>source: "console"</code>), Go stdlib <code>log</code>
+  (<code>source: "go-log"</code>), Python <code>logging</code>
+  (<code>source: "python-logging"</code>). Explicit SDK calls still win for structured metadata.
 </Callout>
 
-## Log Levels
+## Log levels
 
-Choose the appropriate level for each log entry. Logstack supports five log levels:
+Choose the appropriate level for each entry. All official SDKs support:
 
 | Level      | Color (Dev) | Use Case                                      |
 | ---------- | ----------- | --------------------------------------------- |

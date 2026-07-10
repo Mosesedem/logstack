@@ -1,6 +1,6 @@
 ---
 title: Introduction to Logstack
-description: Production-ready log management platform with real-time streaming, smart alerts, and multi-platform SDKs.
+description: Production-ready log management with real-time streaming, smart alerts, and multi-language SDKs.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
@@ -9,38 +9,76 @@ import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
 # Welcome to Logstack
 
-Logstack is a **production-ready log management platform** designed for modern applications. Capture, stream, and analyze logs in real-time with powerful alerting and beautiful dashboards.
+Logstack is a **production-ready log management platform** for modern applications.
+Capture, stream, and analyze logs in real time with alerting, a web dashboard, and a
+mobile companion app.
 
 <Callout type="info">
   Open source and self-hostable. Get started in minutes with a single API key.
 </Callout>
 
-## Key Features
+## Key features
 
-- **Real-time Streaming** — See logs as they happen across your dashboards and mobile app
-- **Smart Alerts** — Automatic pattern detection with smart notifications via email or push
-- **Multi-platform** — Use our SDKs, web dashboard, or mobile apps
-- **Self-hosted** — Full control of your data on your infrastructure
+- **Real-time streaming** — dashboards and mobile as events land
+- **Smart alerts** — pattern rules with email and push
+- **Multi-language SDKs** — JavaScript/TypeScript, Go, and Python
+- **Self-hosted** — full control of your data
 
-## Getting Started
+## Install an SDK
 
-<Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tab value="npm">```bash npm install logstack-js ```</Tab>
-  <Tab value="yarn">```bash yarn add logstack-js ```</Tab>
-  <Tab value="pnpm">```bash pnpm add logstack-js ```</Tab>
-</Tabs>
+<Tabs items={["JavaScript", "Go", "Python"]}>
+  <Tab value="JavaScript">
 
-```typescript title="Send your first log"
+```bash
+npm install logstack-js
+```
+
+```typescript
 import { createLogStack } from "logstack-js";
 
 const logstack = createLogStack({
-  apiKey: "your_api_key_here",
+  apiKey: "ls_live_your_api_key",
 });
 
 logstack.info("User signed up", { userId: "user_123" });
 ```
 
-## What's Next?
+  </Tab>
+  <Tab value="Go">
+
+```bash
+go get github.com/mosesedem/logstack/packages/logstack-go-sdk@v1.0.3
+```
+
+```go
+client := logstack.NewClient(logstack.Config{
+	APIKey: "ls_live_your_api_key",
+})
+defer client.Close()
+
+_ = client.Info(ctx, "User signed up", map[string]interface{}{
+	"userId": "user_123",
+})
+```
+
+  </Tab>
+  <Tab value="Python">
+
+```bash
+pip install logstack-py
+```
+
+```python
+from logstack import LogStackClient
+
+with LogStackClient(api_key="ls_live_your_api_key") as client:
+    client.info("User signed up", metadata={"userId": "user_123"})
+```
+
+  </Tab>
+</Tabs>
+
+## What's next?
 
 <Cards>
   <Card
@@ -49,17 +87,17 @@ logstack.info("User signed up", { userId: "user_123" });
     href="/docs/quickstart"
   />
   <Card
-    title="SDK Reference"
-    description="Complete JavaScript/TypeScript SDK guide"
+    title="SDK overview"
+    description="JavaScript, Go, and Python clients"
     href="/docs/sdk/overview"
   />
   <Card
-    title="API Reference"
-    description="REST API endpoints and authentication"
+    title="API reference"
+    description="REST endpoints and authentication"
     href="/docs/api/overview"
   />
   <Card
-    title="Self-Hosting"
+    title="Self-hosting"
     description="Deploy Logstack on your infrastructure"
     href="/docs/deployment/overview"
   />
@@ -69,4 +107,3 @@ logstack.info("User signed up", { userId: "user_123" });
 
 - **GitHub Issues**: [Report bugs and request features](https://github.com/mosesedem/logstack/issues)
 - **Discussions**: [Ask questions and share ideas](https://github.com/mosesedem/logstack/discussions)
-- **Discord**: [Join our community](https://discord.gg/logstack)

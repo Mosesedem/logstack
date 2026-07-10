@@ -1,170 +1,139 @@
 ---
 title: SDK Overview
-description: Complete guide to the Logstack JavaScript/TypeScript SDK.
+description: Official Logstack SDKs for JavaScript/TypeScript, Go, and Python.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 import { Card, Cards } from "fumadocs-ui/components/card";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
 # SDK Overview
 
-The Logstack SDK provides a simple, powerful interface for sending logs from your JavaScript/TypeScript applications.
+Logstack ships **three official SDKs**. All talk to the same ingest API
+(`POST /v1/logs`), support structured metadata, batching, and optional automatic
+capture of existing logger / console output.
 
-## Features
+## Choose your language
 
-- **Automatic Batching** — Logs are buffered and sent in batches for efficiency
-- **Retry with Backoff** — Failed requests are automatically retried with exponential backoff
-- **TypeScript Support** — Full type definitions for IntelliSense and type safety
-- **Framework Agnostic** — Works with any JavaScript runtime (Node.js, Deno, Bun, browsers)
-- **Graceful Shutdown** — Ensures all logs are sent before process exit
+<Cards>
+  <Card
+    title="JavaScript / TypeScript"
+    description="logstack-js — Node, browsers, Next.js, Express, NestJS"
+    href="/docs/sdk/javascript"
+  />
+  <Card
+    title="Go"
+    description="logstack-go-sdk — services, workers, stdlib log capture"
+    href="/docs/sdk/go"
+  />
+  <Card
+    title="Python"
+    description="logstack-py — apps, Django, FastAPI, stdlib logging"
+    href="/docs/sdk/python"
+  />
+</Cards>
 
-## Core Concepts
+## Install
 
-### Log Levels
+<Tabs items={["JavaScript", "Go", "Python"]}>
+  <Tab value="JavaScript">
 
-| Level      | Method               | Use Case                                        |
-| ---------- | -------------------- | ----------------------------------------------- |
-| `info`     | `logstack.info()`     | General information, successful operations      |
-| `warn`     | `logstack.warn()`     | Warning conditions, potential issues            |
-| `error`    | `logstack.error()`    | Error conditions, failed operations             |
-| `critical` | `logstack.critical()` | Critical failures requiring immediate attention |
-
-### Metadata
-
-Attach structured metadata to any log entry:
-
-```typescript
-logstack.info("Order placed", {
-  orderId: "order_123",
-  userId: "user_456",
-  amount: 99.99,
-  currency: "USD",
-  items: ["item_1", "item_2"],
-});
+```bash
+npm install logstack-js
+# or: pnpm add logstack-js / yarn add logstack-js
 ```
 
-Metadata is indexed and searchable in the dashboard.
+  </Tab>
+  <Tab value="Go">
 
-### Source Tagging
-
-Identify where logs originate:
-
-```typescript
-logstack.log({
-  level: "info",
-  message: "Database query executed",
-  source: "database-service",
-  metadata: { query: "SELECT * FROM users", duration: 45 },
-});
+```bash
+go get github.com/mosesedem/logstack/packages/logstack-go-sdk@v1.0.3
 ```
 
-## API Reference
+  </Tab>
+  <Tab value="Python">
 
-### `createLogStack(options)`
+```bash
+pip install logstack-py
+```
 
-Creates a new Logstack client instance.
+  </Tab>
+</Tabs>
+
+## First log
+
+<Tabs items={["JavaScript", "Go", "Python"]}>
+  <Tab value="JavaScript">
 
 ```typescript
 import { createLogStack } from "logstack-js";
 
 const logstack = createLogStack({
-  apiKey: "ls_live_xxx", // Required
-  endpoint: "https://api.logstack.tech", // Optional
-  batchSize: 100, // Optional
-  flushInterval: 5000, // Optional
-  maxRetries: 3, // Optional
-  onError: (error, logs) => {}, // Optional
+  apiKey: process.env.LOGSTACK_API_KEY!,
 });
-```
 
-### `logstack.info(message, metadata?)`
-
-Send an info-level log.
-
-```typescript
-logstack.info("User logged in", { userId: "user_123" });
-```
-
-### `logstack.warn(message, metadata?)`
-
-Send a warning-level log.
-
-```typescript
-logstack.warn("API rate limit approaching", { usage: 90, limit: 100 });
-```
-
-### `logstack.error(message, metadata?)`
-
-Send an error-level log.
-
-```typescript
-logstack.error("Database connection failed", {
-  error: "Connection timeout",
-  host: "db.example.com",
-});
-```
-
-### `logstack.critical(message, metadata?)`
-
-Send a critical-level log.
-
-```typescript
-logstack.critical("Payment processing unavailable", {
-  service: "stripe",
-  lastSuccess: new Date().toISOString(),
-});
-```
-
-### `logstack.log(entry)`
-
-Send a custom log entry with full control.
-
-```typescript
-logstack.log({
-  level: "error",
-  message: "Operation failed",
-  source: "worker-service",
-  metadata: { jobId: "job_123" },
-  timestamp: new Date().toISOString(), // Optional, auto-generated if omitted
-});
-```
-
-### `logstack.flush()`
-
-Force send all buffered logs immediately.
-
-```typescript
-await logstack.flush();
-```
-
-### `logstack.close()`
-
-Flush remaining logs and close the client.
-
-```typescript
+logstack.info("User signed up", { userId: "user_123" });
 await logstack.close();
 ```
 
+  </Tab>
+  <Tab value="Go">
+
+```go
+client := logstack.NewClient(logstack.Config{
+	APIKey: os.Getenv("LOGSTACK_API_KEY"),
+})
+defer client.Close()
+
+_ = client.Info(context.Background(), "User signed up", map[string]interface{}{
+	"userId": "user_123",
+})
+```
+
+  </Tab>
+  <Tab value="Python">
+
+```python
+from logstack import LogStackClient
+
+with LogStackClient(api_key=os.environ["LOGSTACK_API_KEY"]) as client:
+    client.info("User signed up", metadata={"userId": "user_123"})
+```
+
+  </Tab>
+</Tabs>
+
+## Shared concepts
+
+| Concept | Behavior |
+| --- | --- |
+| **API key** | Project key from the dashboard (`ls_live_…`) |
+| **Endpoint** | Host only (e.g. `https://api.logstack.tech`); SDKs append `/v1/logs` |
+| **Levels** | `debug`, `info`, `warn`, `error`, `critical`, `fatal` |
+| **Metadata** | JSON object — searchable in the dashboard |
+| **Batching** | Buffer + interval flush (defaults: 100 entries / ~5s) |
+| **Environment** | `production` / `staging` / `development` / `test` label on each batch |
+| **Auto-capture** | JS: `console.*` · Go: stdlib `log` · Python: stdlib `logging` |
+
 <Callout type="info">
-  Always call `close()` during graceful shutdown to ensure no logs are lost.
+  Logs are shipped in <strong>every</strong> environment when an API key is set.
+  Console / local logger output is separate from network shipping.
 </Callout>
 
-## Explore More
+## Package map
 
-<Cards>
-  <Card
-    title="Configuration"
-    description="Customize batching, retries, and error handling"
-    href="/docs/sdk/configuration"
-  />
-  <Card
-    title="Logging Best Practices"
-    description="Log levels, metadata patterns, and tips"
-    href="/docs/sdk/logging"
-  />
-  <Card
-    title="Framework Integrations"
-    description="Express, Next.js, Fastify, NestJS guides"
-    href="/docs/sdk/frameworks"
-  />
-</Cards>
+| Language | Package | Source |
+| --- | --- | --- |
+| JavaScript / TypeScript | [`logstack-js`](https://www.npmjs.com/package/logstack-js) | `packages/logstack-js` |
+| Go | [`…/logstack-go-sdk`](https://pkg.go.dev/github.com/mosesedem/logstack/packages/logstack-go-sdk) | `packages/logstack-go-sdk` |
+| Python | [`logstack-py`](https://pypi.org/project/logstack-py/) (import `logstack`) | `packages/logstack-python` |
+
+## Guides
+
+- [JavaScript SDK (detailed)](/docs/sdk/javascript) — config, levels, close/flush
+- [Go SDK](/docs/sdk/go) — Config, context methods, stdlib capture
+- [Python SDK](/docs/sdk/python) — client, Django, FastAPI
+- [Configuration (JS deep-dive)](/docs/sdk/configuration)
+- [Logging best practices](/docs/sdk/logging)
+- [Framework integrations](/docs/sdk/frameworks)
+- [HTTP Logs API](/docs/api/logs)

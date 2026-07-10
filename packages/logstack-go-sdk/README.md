@@ -1,6 +1,9 @@
 # Logstack Go SDK
 
-A Go SDK for the Logstack logging platform.
+Official Go client for [Logstack](https://github.com/mosesedem/logstack) — structured
+ingest, batching, and optional stdlib `log` capture.
+
+**Docs:** [logstack.tech/docs/sdk/go](https://logstack.tech/docs/sdk/go) · monorepo guide [docs/SDK.md](../../docs/SDK.md)
 
 ## Installation
 
@@ -8,116 +11,76 @@ A Go SDK for the Logstack logging platform.
 go get github.com/mosesedem/logstack/packages/logstack-go-sdk@v1.0.3
 ```
 
-> Go modules in a monorepo subdir are tagged `packages/logstack-go-sdk/vX.Y.Z`.
+> Module tags are monorepo-style: `packages/logstack-go-sdk/vX.Y.Z`.
 
-## v1.0.3
-
-- **Automatic stdlib log capture (default on).** `CaptureStdLog` (default `true`) forwards
-  `log.Print*` / `log.Printf` output to Logstack with `source: "go-log"`. Original output is
-  preserved. Set `CaptureStdLog: logstack.Bool(false)` to disable.
-- Re-entrancy guard, idempotent install, and `Close()` restores the original `log` writer.
-
-## v1.0.2
-
-- Lowercase module path (`github.com/mosesedem/...`) so pkg.go.dev can index the package
-
-## v1.0.1
-
-- Normalize API URL (strips redundant `/v1` suffix)
-- Idempotent `Close()`; `FlushContext(ctx)` for cancellable flushes
-- Optional `OnError` callback; timed background flush
-
-Access the release version via `logstack.Version`.
-
-## Usage
+## Quick start
 
 ```go
 package main
 
 import (
-    "context"
-    "log"
+	"context"
+	"log"
+	"os"
 
-    logstack "github.com/mosesedem/logstack/packages/logstack-go-sdk"
+	logstack "github.com/mosesedem/logstack/packages/logstack-go-sdk"
 )
 
 func main() {
-    // Create a new client (CaptureStdLog defaults to true)
-    client := logstack.NewClient(logstack.Config{
-        APIKey:      "your-api-key",
-        APIURL:      "https://api.logstack.tech",
-        Environment: "production",
-    })
-    defer client.Close()
+	client := logstack.NewClient(logstack.Config{
+		APIKey:      os.Getenv("LOGSTACK_API_KEY"),
+		// APIURL:  "http://localhost:8080", // self-hosted / local
+		Environment: "production",
+		// CaptureStdLog defaults to true
+	})
+	defer client.Close()
 
-    ctx := context.Background()
+	ctx := context.Background()
 
-    // Explicit structured logs
-    err := client.Info(ctx, "Application started", map[string]interface{}{
-        "version": "1.0.0",
-        "env":     "production",
-    })
-    if err != nil {
-        log.Printf("Failed to send log: %v", err)
-    }
+	_ = client.Info(ctx, "Application started", map[string]interface{}{
+		"version": "1.0.0",
+	})
+	_ = client.Error(ctx, "Database connection failed", map[string]interface{}{
+		"host": "localhost:5432",
+	})
 
-    // Stdlib log package calls are auto-captured (source: "go-log") — like JS captureConsole
-    log.Printf("Legacy log.Printf output is shipped automatically")
-
-    // Send an error log
-    err = client.Error(ctx, "Database connection failed", map[string]interface{}{
-        "error": "connection refused",
-        "host": "localhost:5432",
-    })
-    if err != nil {
-        log.Printf("Failed to send log: %v", err)
-    }
+	// Stdlib log package is auto-captured (source: "go-log")
+	log.Printf("legacy log.Printf is shipped automatically")
 }
 ```
 
-## API Reference
+## Configuration
 
-### `NewClient(config Config) *Client`
+| Field | Default | Description |
+| --- | --- | --- |
+| `APIKey` | — | Project key (`ls_live_…`) |
+| `APIURL` | `https://api.logstack.tech` | Host only (SDK appends `/v1/logs`) |
+| `Environment` | `production` | Batch environment label |
+| `BatchSize` | `100` | Auto-flush size |
+| `FlushInterval` | `5s` | Background flush |
+| `CaptureStdLog` | `true` | Forward `log.Print*` — disable with `logstack.Bool(false)` |
+| `OnError` | `nil` | Flush failure callback |
 
-Creates a new Logstack client. With default `CaptureStdLog: true`, stdlib `log.Print*`
-calls are forwarded automatically (`source: "go-log"`).
+## API
 
-### `CaptureStdLog`
+- `Info` / `Debug` / `Warn` / `Error` / `Critical` / `Fatal` — all take `context.Context` + optional metadata
+- `Flush` / `FlushContext` — send the buffer now
+- `Close` — flush, stop ticker, restore stdlib log writer (idempotent)
+- `Version` — SDK version string
 
-When `true` (default), redirects the Go stdlib `log` package output to Logstack while
-preserving the original writer. Disable with `CaptureStdLog: logstack.Bool(false)`.
+Explicit calls use `source: "go-sdk"`. Captured stdlib lines use `source: "go-log"`.
 
-### `Info(ctx context.Context, message string, metadata ...map[string]interface{}) error`
+## v1.0.3
 
-Sends an info level log.
+- Automatic stdlib log capture (default on), re-entrancy guard, `Close()` restores writer
 
-### `Debug(ctx context.Context, message string, metadata ...map[string]interface{}) error`
+## v1.0.2
 
-Sends a debug level log.
+- Lowercase module path for pkg.go.dev
 
-### `Warn(ctx context.Context, message string, metadata ...map[string]interface{}) error`
+## v1.0.1
 
-Sends a warn level log.
-
-### `Error(ctx context.Context, message string, metadata ...map[string]interface{}) error`
-
-Sends an error level log.
-
-### `Critical(ctx context.Context, message string, metadata ...map[string]interface{}) error`
-
-Sends a critical level log.
-
-### `Fatal(ctx context.Context, message string, metadata ...map[string]interface{}) error`
-
-Sends a fatal level log and immediately flushes.
-
-### `Flush() error`
-
-Manually flushes any pending logs.
-
-### `Close() error`
-
-Closes the client and flushes any pending logs.
+- Normalize API URL; idempotent `Close`; `FlushContext`; optional `OnError`
 
 ## License
 

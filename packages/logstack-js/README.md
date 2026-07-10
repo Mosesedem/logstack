@@ -3,6 +3,8 @@
 The JavaScript/TypeScript SDK for [Logstack](https://github.com/Mosesedem/logstack) — log
 ingestion, real-time streaming, and querying.
 
+**Docs:** [logstack.tech/docs/sdk/javascript](https://logstack.tech/docs/sdk/javascript) · also [Go](https://logstack.tech/docs/sdk/go) · [Python](https://logstack.tech/docs/sdk/python) · monorepo [docs/SDK.md](../../docs/SDK.md)
+
 ## Installation
 
 ```bash

@@ -1,0 +1,264 @@
+---
+title: Python SDK
+description: Send structured logs from Python with logstack-py — Django, FastAPI, and stdlib logging capture.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+# Python SDK
+
+The official Python client for Logstack. Batch shipping, stdlib `logging` capture,
+and optional Django / FastAPI exception middleware.
+
+| | |
+| --- | --- |
+| **PyPI** | [`logstack-py`](https://pypi.org/project/logstack-py/) |
+| **Import** | `from logstack import LogStackClient` |
+| **Version** | `1.0.2` |
+| **Python** | 3.7+ |
+| **Default API** | `https://api.logstack.tech` |
+| **Ingest path** | `POST {api_url}/v1/logs` |
+
+## Installation
+
+```bash
+pip install logstack-py
+```
+
+Optional extras:
+
+```bash
+pip install "logstack-py[django]"   # Django middleware dependency
+pip install "logstack-py[fastapi]"  # FastAPI / Starlette middleware
+```
+
+## Quick start
+
+```python
+from logstack import LogStackClient
+
+client = LogStackClient(
+    api_key="ls_live_xxx",
+    environment="production",
+)
+
+# Explicit structured logs
+client.info("Application started", metadata={"version": "1.0.0"})
+client.error("Payment failed", metadata={"orderId": "ord_123", "code": 402})
+
+# Always flush on shutdown
+client.close()
+```
+
+Context manager (auto-`close()`):
+
+```python
+from logstack import LogStackClient
+
+with LogStackClient(api_key="ls_live_xxx") as client:
+    client.info("job started")
+    # … work …
+    client.info("job finished")
+```
+
+## Configuration
+
+```python
+from logstack import LogStackClient
+
+client = LogStackClient(
+    api_key="ls_live_xxx",                    # required
+    api_url="https://api.logstack.tech",      # host only; /v1 stripped if present
+    environment="production",                 # production | staging | development | test
+    flush_interval=5.0,                       # seconds (default 5)
+    batch_size=100,                           # auto-flush when full (default 100)
+    capture_logging=True,                     # stdlib logging capture (default True)
+    on_error=lambda exc, batch: print(exc),   # optional failure callback
+)
+```
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `api_key` | — | Project ingest key |
+| `api_url` | `https://api.logstack.tech` | API host (SDK appends `/v1/logs`) |
+| `environment` | `production` | Environment label on each batch |
+| `flush_interval` | `5.0` | Background flush interval (seconds) |
+| `batch_size` | `100` | Max buffered entries before flush |
+| `capture_logging` | `True` | Auto-forward stdlib `logging` |
+| `on_error` | `None` | `Callable[[Exception, list], None]` on send failure |
+
+Self-hosted:
+
+```python
+client = LogStackClient(
+    api_key=os.environ["LOGSTACK_API_KEY"],
+    api_url="https://logs.your-domain.com",  # or http://localhost:8080
+)
+```
+
+## Logging API
+
+```python
+client.debug("cache miss", metadata={"key": "user:1"})
+client.info("order placed", metadata={"orderId": "ord_1"})
+client.warn("rate limit approaching", metadata={"usage": 90})
+client.error("db query failed", metadata={"query": "SELECT …"})
+client.critical("primary down", metadata={"host": "db-1"})
+client.fatal("unrecoverable")  # flushes immediately after enqueue
+```
+
+| Level | Method | Notes |
+| --- | --- | --- |
+| `debug` | `debug` | Verbose diagnostics |
+| `info` | `info` | Normal operations |
+| `warn` | `warn` | Recoverable issues |
+| `error` | `error` | Failures |
+| `critical` | `critical` | Severe failures |
+| `fatal` | `fatal` | Logs then **flushes** |
+
+Explicit calls use `source: "python-sdk"`. Auto-captured stdlib records use
+`source: "python-logging"`.
+
+### Flush / close
+
+```python
+client.flush()   # send buffer now
+client.close()   # stop timer, remove capture handler, final flush
+```
+
+## Stdlib `logging` capture
+
+With `capture_logging=True` (default), a handler is installed on the **root** logger:
+
+- All `logging.getLogger(…).info/error/…` calls are forwarded
+- Levels map: CRITICAL→`critical`, ERROR→`error`, WARNING→`warn`, INFO→`info`, else `debug`
+- Metadata includes `logger`, `pathname`, `lineno`, `funcName` when available
+- Your existing handlers (console, files) still receive records
+- Internal `logstack` logger messages are skipped (no feedback loops)
+
+```python
+import logging
+from logstack import LogStackClient
+
+client = LogStackClient(api_key="ls_live_xxx")  # capture on
+
+log = logging.getLogger("myapp")
+log.info("user login", extra={"user_id": 42})  # shipped automatically
+log.error("failed to process job")
+```
+
+Disable when you only want explicit client calls:
+
+```python
+client = LogStackClient(api_key="…", capture_logging=False)
+```
+
+## Django integration
+
+Install extras and wire middleware:
+
+```bash
+pip install "logstack-py[django]"
+```
+
+```python
+# settings.py
+import os
+from logstack import LogStackClient
+
+LOGSTACK_CLIENT = LogStackClient(
+    api_key=os.environ["LOGSTACK_API_KEY"],
+    environment=os.environ.get("ENVIRONMENT", "production"),
+)
+
+MIDDLEWARE = [
+    # …
+    "logstack.middleware.DjangoMiddleware",
+    # …
+]
+```
+
+`DjangoMiddleware` logs **unhandled exceptions** with path, method, user, IP, and
+traceback. For a custom client instance:
+
+```python
+from logstack import DjangoMiddleware, LogStackClient
+
+client = LogStackClient(api_key="…")
+middleware = DjangoMiddleware(get_response, client=client)
+```
+
+Prefer explicit `client.info/error` in views for business events; use middleware
+for unexpected failures.
+
+## FastAPI / Starlette integration
+
+```bash
+pip install "logstack-py[fastapi]"
+```
+
+Recommended: `create_fastapi_middleware(client)`:
+
+```python
+from fastapi import FastAPI
+from logstack import LogStackClient, create_fastapi_middleware
+
+app = FastAPI()
+client = LogStackClient(api_key="ls_live_xxx", environment="production")
+
+app.add_middleware(create_fastapi_middleware(client))
+
+@app.get("/health")
+def health():
+    client.info("health check")
+    return {"ok": True}
+
+@app.on_event("shutdown")
+def shutdown():
+    client.close()
+```
+
+<Callout type="warn">
+  <code>FastAPIMiddleware(app, client=…)</code> still works but is a deprecated
+  alias. Prefer <code>create_fastapi_middleware</code>.
+</Callout>
+
+## Scripts and workers
+
+```python
+import os
+from logstack import LogStackClient
+
+def main() -> None:
+    with LogStackClient(
+        api_key=os.environ["LOGSTACK_API_KEY"],
+        environment="production",
+        capture_logging=True,
+    ) as client:
+        client.info("worker started")
+        # … process jobs …
+        client.info("worker finished")
+
+if __name__ == "__main__":
+    main()
+```
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| No logs in dashboard | Valid API key, network, `on_error` callback |
+| Only some levels appear | Root logger level — SDK lowers to INFO when capture is on |
+| Double `/v1` | Pass host only; `normalize_api_url` strips trailing `/v1` |
+| FastAPI import error | `pip install "logstack-py[fastapi]"` |
+| Logs after `close()` | Client drops new entries when closed |
+
+## Related
+
+- [Go SDK](/docs/sdk/go)
+- [JavaScript SDK](/docs/sdk/javascript)
+- [SDK overview](/docs/sdk/overview)
+- [Framework integrations](/docs/sdk/frameworks)
+- [Logging best practices](/docs/sdk/logging)
+- [Logs API](/docs/api/logs)

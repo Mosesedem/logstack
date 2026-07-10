@@ -1,14 +1,23 @@
 ---
 title: Framework Integrations
-description: Integrate LogStack with Express, Next.js, Fastify, NestJS, and more.
+description: Integrate Logstack with Express, Next.js, NestJS, Django, FastAPI, Go net/http, and more.
 ---
 
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import { Callout } from "fumadocs-ui/components/callout";
 
-# Framework Integrations
+# Framework integrations
 
-Step-by-step guides for popular frameworks.
+Guides for popular stacks. JavaScript examples use **logstack-js**; Python uses
+**logstack-py**; Go uses **logstack-go-sdk**.
+
+| Runtime | Package | Full docs |
+| --- | --- | --- |
+| Node / browser | `logstack-js` | [JavaScript SDK](/docs/sdk/javascript) |
+| Go | `logstack-go-sdk` | [Go SDK](/docs/sdk/go) |
+| Python | `logstack-py` | [Python SDK](/docs/sdk/python) |
+
+## JavaScript frameworks
 
 ## Express.js
 
@@ -367,3 +376,103 @@ app.get("/", (c) => c.json({ message: "Hello!" }));
 
 export default app;
 ```
+
+## Python frameworks
+
+### Django
+
+```bash
+pip install "logstack-py[django]"
+```
+
+```python title="settings.py"
+import os
+from logstack import LogStackClient
+
+LOGSTACK_CLIENT = LogStackClient(
+    api_key=os.environ["LOGSTACK_API_KEY"],
+    environment=os.environ.get("ENVIRONMENT", "production"),
+)
+
+MIDDLEWARE = [
+    # …
+    "logstack.middleware.DjangoMiddleware",
+    # …
+]
+```
+
+`DjangoMiddleware` captures **unhandled exceptions** (path, method, user, IP, traceback).
+Use the client for business events:
+
+```python
+from django.conf import settings
+
+settings.LOGSTACK_CLIENT.info("checkout completed", metadata={"orderId": order.id})
+```
+
+Full details: [Python SDK — Django](/docs/sdk/python#django-integration).
+
+### FastAPI
+
+```bash
+pip install "logstack-py[fastapi]"
+```
+
+```python title="main.py"
+from fastapi import FastAPI
+from logstack import LogStackClient, create_fastapi_middleware
+
+app = FastAPI()
+client = LogStackClient(api_key="ls_live_xxx", environment="production")
+app.add_middleware(create_fastapi_middleware(client))
+
+@app.get("/health")
+def health():
+    client.info("health check")
+    return {"ok": True}
+
+@app.on_event("shutdown")
+def shutdown():
+    client.close()
+```
+
+Full details: [Python SDK — FastAPI](/docs/sdk/python#fastapi--starlette-integration).
+
+## Go services
+
+```go title="main.go"
+package main
+
+import (
+	"net/http"
+	"os"
+	"time"
+
+	logstack "github.com/mosesedem/logstack/packages/logstack-go-sdk"
+)
+
+func main() {
+	client := logstack.NewClient(logstack.Config{
+		APIKey:      os.Getenv("LOGSTACK_API_KEY"),
+		Environment: "production",
+	})
+	defer client.Close()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		// … handle request …
+		w.WriteHeader(http.StatusOK)
+
+		_ = client.Info(r.Context(), r.Method+" "+r.URL.Path, map[string]interface{}{
+			"status":   200,
+			"duration": time.Since(start).Milliseconds(),
+		})
+	})
+
+	_ = http.ListenAndServe(":8080", mux)
+}
+```
+
+With default `CaptureStdLog`, existing `log.Printf` calls are shipped as
+`source: "go-log"`. See [Go SDK](/docs/sdk/go).

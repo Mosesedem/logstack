@@ -1,0 +1,248 @@
+---
+title: Go SDK
+description: Send structured logs from Go services with the official Logstack Go SDK.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
+
+# Go SDK
+
+The official Go client for Logstack. Batch shipping, context-aware methods, optional
+stdlib `log` capture, and graceful shutdown.
+
+| | |
+| --- | --- |
+| **Module** | `github.com/mosesedem/logstack/packages/logstack-go-sdk` |
+| **Version** | `v1.0.3` |
+| **Default API** | `https://api.logstack.tech` |
+| **Ingest path** | `POST {APIURL}/v1/logs` |
+
+## Installation
+
+```bash
+go get github.com/mosesedem/logstack/packages/logstack-go-sdk@v1.0.3
+```
+
+<Callout type="info">
+  The module lives in a monorepo subdirectory. Tags are
+  <code>packages/logstack-go-sdk/vX.Y.Z</code> (not a root-module tag).
+</Callout>
+
+## Quick start
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
+	logstack "github.com/mosesedem/logstack/packages/logstack-go-sdk"
+)
+
+func main() {
+	client := logstack.NewClient(logstack.Config{
+		APIKey:      os.Getenv("LOGSTACK_API_KEY"),
+		// APIURL defaults to https://api.logstack.tech
+		// For local: "http://localhost:8080"
+		Environment: "production",
+	})
+	defer client.Close()
+
+	ctx := context.Background()
+
+	_ = client.Info(ctx, "Application started", map[string]interface{}{
+		"version": "1.0.0",
+	})
+
+	// Stdlib log.Print* is captured by default (source: "go-log")
+	log.Printf("legacy logger output is shipped automatically")
+
+	// Graceful shutdown
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+}
+```
+
+## Configuration
+
+```go
+client := logstack.NewClient(logstack.Config{
+	// Required
+	APIKey: "ls_live_xxx",
+
+	// Host only — SDK appends /v1/logs. Trailing /v1 is stripped if present.
+	APIURL: "https://api.logstack.tech",
+
+	// Label stored with every batch: production | staging | development | test
+	Environment: "production",
+
+	// Buffer size before auto-flush (default 100)
+	BatchSize: 100,
+
+	// Background flush ticker (default 5s)
+	FlushInterval: 5 * time.Second,
+
+	// Forward stdlib log package (default true). Disable with Bool(false).
+	CaptureStdLog: logstack.Bool(true),
+
+	// Called when a send fails (after the attempt)
+	OnError: func(err error, logs []logstack.LogEntry) {
+		log.Printf("logstack flush failed: %v (%d entries)", err, len(logs))
+	},
+})
+```
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `APIKey` | — | Project ingest key (`ls_live_…`) |
+| `APIURL` | `https://api.logstack.tech` | API host (no `/v1` required) |
+| `Environment` | `production` | Environment label on the batch |
+| `BatchSize` | `100` | Max buffered entries before flush |
+| `FlushInterval` | `5s` | Background flush interval |
+| `CaptureStdLog` | `true` | Auto-forward `log.Print*` / `log.Printf` |
+| `OnError` | `nil` | Flush failure callback |
+
+Self-hosted:
+
+```go
+client := logstack.NewClient(logstack.Config{
+	APIKey: os.Getenv("LOGSTACK_API_KEY"),
+	APIURL: "https://logs.your-domain.com", // or http://localhost:8080
+})
+```
+
+## Logging API
+
+All methods take `context.Context` and optional metadata:
+
+```go
+ctx := context.Background()
+meta := map[string]interface{}{
+	"userId": "user_123",
+	"orderId": "ord_456",
+}
+
+_ = client.Debug(ctx, "cache miss", meta)
+_ = client.Info(ctx, "order placed", meta)
+_ = client.Warn(ctx, "rate limit approaching", meta)
+_ = client.Error(ctx, "payment failed", meta)
+_ = client.Critical(ctx, "db primary down", meta)
+_ = client.Fatal(ctx, "unrecoverable", meta) // also flushes immediately
+```
+
+| Level | Method | Notes |
+| --- | --- | --- |
+| `debug` | `Debug` | Verbose diagnostics |
+| `info` | `Info` | Normal operations |
+| `warn` | `Warn` | Recoverable issues |
+| `error` | `Error` | Failures |
+| `critical` | `Critical` | Severe failures |
+| `fatal` | `Fatal` | Logs then **flushes** |
+
+Explicit SDK calls use `source: "go-sdk"`. Auto-captured stdlib lines use `source: "go-log"`.
+
+## Stdlib `log` capture
+
+With `CaptureStdLog` enabled (default), the SDK redirects `log.SetOutput` to a
+passthrough writer:
+
+- Original destination (usually stderr) is preserved
+- Each line is shipped as an **info** log with `source: "go-log"`
+- Re-entrancy is guarded (safe if `OnError` itself logs)
+- `Close()` restores the previous writer
+
+```go
+// Disable automatic capture
+client := logstack.NewClient(logstack.Config{
+	APIKey:        os.Getenv("LOGSTACK_API_KEY"),
+	CaptureStdLog: logstack.Bool(false),
+})
+```
+
+## Flush and shutdown
+
+```go
+// Manual flush
+if err := client.Flush(); err != nil {
+	log.Printf("flush: %v", err)
+}
+
+// Cancellable flush
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+_ = client.FlushContext(ctx)
+
+// Always close on exit — flushes remaining buffer, stops ticker, restores log writer
+_ = client.Close()
+```
+
+`Close()` is **idempotent** (safe to call more than once).
+
+## HTTP service example
+
+```go
+package main
+
+import (
+	"context"
+	"net/http"
+	"os"
+	"time"
+
+	logstack "github.com/mosesedem/logstack/packages/logstack-go-sdk"
+)
+
+func main() {
+	client := logstack.NewClient(logstack.Config{
+		APIKey:      os.Getenv("LOGSTACK_API_KEY"),
+		Environment: "production",
+	})
+	defer client.Close()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+
+		_ = client.Info(r.Context(), "GET /health", map[string]interface{}{
+			"status":   200,
+			"duration": time.Since(start).Milliseconds(),
+			"path":     r.URL.Path,
+		})
+	})
+
+	_ = http.ListenAndServe(":8080", mux)
+}
+```
+
+## Version
+
+```go
+import logstack "github.com/mosesedem/logstack/packages/logstack-go-sdk"
+
+fmt.Println(logstack.Version) // e.g. "1.0.3"
+```
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| No logs in dashboard | Valid `APIKey`, network to API host, `OnError` callback |
+| `client is closed` | Logging after `Close()` — keep the client open for the process lifetime |
+| Double `/v1` | Pass host only (`https://api…`); SDK normalizes trailing `/v1` |
+| Stdlib logs missing | Ensure `CaptureStdLog` is not `Bool(false)` |
+
+## Related
+
+- [Python SDK](/docs/sdk/python)
+- [JavaScript SDK](/docs/sdk/javascript)
+- [SDK overview](/docs/sdk/overview)
+- [Logging best practices](/docs/sdk/logging)
+- [Logs API](/docs/api/logs)

@@ -76,6 +76,7 @@
 
 | Date       | Change                                                                                                                                                                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-10 | **SDK docs for Go + Python:** fumadocs pages `sdk/go`, `sdk/python`, multi-lang `sdk/overview` + `sdk/javascript`; installation/quickstart/frameworks updated; `docs/SDK.md` covers all three clients; package READMEs linked. |
 | 2026-07-10 | **Brand icons monorepo-wide:** root `assets/` is source of truth; `scripts/sync_brand_icons.sh` + `generate_mobile_icons.py` propagate to `apps/web/public`, mobile Android/iOS/Web/macOS, splash, notification monochrome, `docs/logo.svg`. `LogstackLogo` + `AppLogo` share the same mark. |
 | 2026-07-10 | Mobile brand icon overhaul (superseded by monorepo sync above): platform launchers + `AppLogo`/`AppAssets` + `scripts/sync_icons.sh`.                                                                                                          |
 | 2026-07-07 | Fixed Go alert test-notification fallback to keep `channels` as `datatypes.JSONSlice[string]`; `cd packages/logstack-go && go build ./...` now passes.                                                                                       |
