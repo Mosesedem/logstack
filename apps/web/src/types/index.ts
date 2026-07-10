@@ -10,12 +10,48 @@ export interface Log {
   createdAt: string;
 }
 
+export type PlatformRole = "user" | "admin";
+
 export interface User {
   id: number;
   email: string;
   name: string;
   country?: string;
+  role?: PlatformRole | string;
+  emailVerified?: boolean;
   createdAt: string;
+}
+
+export interface AdminUserListResponse {
+  users: User[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminProject {
+  id: string;
+  name: string;
+  ownerId: number;
+  environment?: string;
+  archivedAt?: string | null;
+  createdAt: string;
+  owner?: User | null;
+}
+
+export interface AdminProjectListResponse {
+  projects: AdminProject[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminSystemStats {
+  totalUsers: number;
+  totalProjects: number;
+  totalLogs: number;
+  activeSubscriptions?: number;
+  adminUsers?: number;
 }
 
 export type BillingProvider = "paystack" | "polar" | "none";

@@ -55,6 +55,8 @@ Email, push, billing, and OAuth are optional for local dev. Without an email pro
 | `JWT_SECRET`                     | API            | Required                 | —                                                 |
 | `ACCESS_TOKEN_EXPIRY`            | API            | Optional                 | `0` (set `15m` in `.env.example`)                 |
 | `REFRESH_TOKEN_EXPIRY`           | API            | Optional                 | `0` (set `168h` in `.env.example`)                |
+| `ADMIN_EMAILS`                   | API            | Optional                 | `mosesedem81@gmail.com`                           |
+| `ADMIN_SEED_PASSWORD`            | API            | Optional                 | random password logged once if admin user created |
 | `MAILCOW_API_KEY`                | API            | Optional                 | —                                                 |
 | `MAILCOW_API_URL`                | API            | Optional                 | —                                                 |
 | `BREVO_API_KEY`                  | API            | Optional                 | —                                                 |

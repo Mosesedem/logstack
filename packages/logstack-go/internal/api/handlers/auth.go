@@ -226,7 +226,19 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, tokens)
+	// Include user so clients can keep role / emailVerified in sync across refreshes.
+	var user models.User
+	if accessClaims, aerr := h.authService.ValidateToken(tokens.AccessToken); aerr == nil {
+		_ = h.db.First(&user, accessClaims.UserID).Error
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"accessToken":  tokens.AccessToken,
+		"refreshToken": tokens.RefreshToken,
+		"expiresAt":    tokens.ExpiresAt,
+		"tokenType":    tokens.TokenType,
+		"user":         user.ToResponse(),
+	})
 }
 
 // Logout handles POST /v1/auth/logout

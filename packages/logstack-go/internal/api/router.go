@@ -219,14 +219,23 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 				audit.GET("/:resource_type/:resource_id", auditHandler.GetResourceAuditLogs)
 			}
 
-			// Admin routes
+			// Admin routes — platform role=admin only; full CRUD over users & projects
 			admin := protected.Group("/admin")
 			admin.Use(middleware.AdminOnly(cfg.DB))
 			{
 				adminHandler := handlers.NewAdminHandler(cfg.DB)
 				admin.GET("/stats", adminHandler.GetSystemStats)
+
 				admin.GET("/users", adminHandler.GetUsers)
+				admin.POST("/users", adminHandler.CreateUser)
+				admin.GET("/users/:id", adminHandler.GetUser)
+				admin.PUT("/users/:id", adminHandler.UpdateUser)
+				admin.DELETE("/users/:id", adminHandler.DeleteUser)
+
 				admin.GET("/projects", adminHandler.GetProjects)
+				admin.GET("/projects/:id", adminHandler.GetProject)
+				admin.PUT("/projects/:id", adminHandler.UpdateProject)
+				admin.DELETE("/projects/:id", adminHandler.DeleteProject)
 			}
 		}
 

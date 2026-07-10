@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { Header } from "@/components/layout/header";
 import { AdminSidebar } from "@/components/layout/admin-sidebar";
 
@@ -8,24 +9,22 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
-  // Server-side guard: redirect non-admins before rendering anything
   if (!session) {
     redirect("/login");
   }
 
-  // Note: role check is enforced by the backend on every API call.
-  // The client-side 403 catch in admin/page.tsx is a secondary fallback.
+  if (session.user?.role !== "admin") {
+    redirect("/overview");
+  }
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-background text-foreground dark">
       <AdminSidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto bg-muted/30 p-6">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto bg-muted/30 p-6">{children}</main>
       </div>
     </div>
   );

@@ -45,6 +45,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Auto-seed platform admins (e.g. mosesedem81@gmail.com)
+	if err := redisdb.SeedAdmins(db, cfg.AdminEmails, cfg.AdminSeedPassword); err != nil {
+		slog.Error("Failed to seed admin users", "error", err)
+		os.Exit(1)
+	}
+
 	// Connect to Redis
 	rdb, err := redisdb.NewRedis(cfg.RedisURL, cfg.RedisPoolSize)
 	if err != nil {

@@ -25,6 +25,12 @@ type Config struct {
 	JWTSecret          string
 	AccessTokenExpiry  time.Duration
 	RefreshTokenExpiry time.Duration
+	// AdminEmails is a comma-separated list of emails auto-promoted to role=admin on startup.
+	// Defaults to mosesedem81@gmail.com when unset.
+	AdminEmails []string
+	// AdminSeedPassword is used only when creating a missing admin user during seed.
+	// If empty, a random password is generated and logged once.
+	AdminSeedPassword string
 
 	// External services
 	BrevoAPIKey           string
@@ -89,6 +95,7 @@ func Load() (*Config, error) {
 		JWTSecret:          getEnv("JWT_SECRET", ""),
 		AccessTokenExpiry:  getEnvDuration("ACCESS_TOKEN_EXPIRY", 0),
 		RefreshTokenExpiry: getEnvDuration("REFRESH_TOKEN_EXPIRY", 0),
+		AdminSeedPassword:  getEnv("ADMIN_SEED_PASSWORD", ""),
 
 		// External services
 		BrevoAPIKey:           getEnv("BREVO_API_KEY", ""),
@@ -134,6 +141,13 @@ func Load() (*Config, error) {
 
 	// Parse allowed origins; pair apex <-> www so dashboards on either host work.
 	cfg.AllowedOrigins = expandAllowedOrigins(splitAndTrim(getEnv("ALLOWED_ORIGINS", ""), ","))
+
+	// Platform admins: comma-separated emails, default founder account.
+	adminEmailsRaw := getEnv("ADMIN_EMAILS", "mosesedem81@gmail.com")
+	cfg.AdminEmails = splitAndTrim(adminEmailsRaw, ",")
+	if len(cfg.AdminEmails) == 0 {
+		cfg.AdminEmails = []string{"mosesedem81@gmail.com"}
+	}
 
 	// Validate required fields in production
 	if err := cfg.Validate(); err != nil {

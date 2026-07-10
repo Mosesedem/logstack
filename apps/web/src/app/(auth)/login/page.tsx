@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { LogstackLogo } from "@/components/brand/logstack-logo";
+import { postLoginPath } from "@/lib/auth-utils";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -44,9 +45,11 @@ export default function LoginPage() {
           variant: "destructive",
         });
       } else {
-        router.push("/overview");
+        const session = await getSession();
+        router.push(postLoginPath(session?.user?.role));
+        router.refresh();
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Something went wrong",
@@ -60,8 +63,8 @@ export default function LoginPage() {
   const handleOAuthSignIn = async (provider: "google" | "github") => {
     setIsOAuthLoading(provider);
     try {
-      await signIn(provider, { callbackUrl: "/overview" });
-    } catch (error) {
+      await signIn(provider, { callbackUrl: "/continue" });
+    } catch {
       toast({
         title: "Error",
         description: "Failed to sign in with " + provider,

@@ -1,7 +1,7 @@
 "use client";
 
 import { signOut, useSession } from "next-auth/react";
-import { LogOut, Smartphone, User } from "lucide-react";
+import { LogOut, Shield, Smartphone, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LogstackLogo } from "@/components/brand/logstack-logo";
 import { ProjectSwitcher } from "./project-switcher";
@@ -12,6 +12,7 @@ import {
   authNavActions,
   dashboardNavItems,
   resourceNavLinks,
+  type NavLink,
 } from "@/lib/navigation";
 
 interface MobileNavDrawerProps {
@@ -26,6 +27,10 @@ export function MobileNavDrawer({
   onLinkMobile,
 }: MobileNavDrawerProps) {
   const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
+  const dashboardItems: NavLink[] = isAdmin
+    ? [...dashboardNavItems, { href: "/admin", label: "Admin", icon: Shield }]
+    : dashboardNavItems;
 
   return (
     <SlideMenuDrawer
@@ -89,7 +94,7 @@ export function MobileNavDrawer({
           Dashboard
         </p>
         <NavLinkList
-          items={dashboardNavItems}
+          items={dashboardItems}
           onNavigate={onClose}
           activePrefixMatch
         />

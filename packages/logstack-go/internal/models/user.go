@@ -74,17 +74,28 @@ type UserResponse struct {
 	Email         string    `json:"email"`
 	Name          string    `json:"name"`
 	Country       *string   `json:"country,omitempty"`
+	Role          string    `json:"role"`
 	EmailVerified bool      `json:"emailVerified"`
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
 func (u *User) ToResponse() UserResponse {
+	role := u.Role
+	if role == "" {
+		role = "user"
+	}
 	return UserResponse{
 		ID:            u.ID,
 		Email:         u.Email,
 		Name:          u.Name,
 		Country:       u.Country,
+		Role:          role,
 		EmailVerified: u.EmailVerified,
 		CreatedAt:     u.CreatedAt,
 	}
+}
+
+// IsAdmin returns true when the user has the platform admin role.
+func (u *User) IsAdmin() bool {
+	return u.Role == "admin"
 }

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { ArrowUpRight, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   dashboardNavItems,
@@ -16,6 +17,8 @@ export { dashboardNavItems as navItems, resourceNavLinks as navLinks } from "@/l
 
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
 
   return (
     <aside
@@ -53,6 +56,21 @@ export function Sidebar({ className }: { className?: string }) {
             </Link>
           );
         })}
+
+        {isAdmin ? (
+          <Link
+            href="/admin"
+            className={cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+              pathname.startsWith("/admin")
+                ? "border border-primary/20 bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-accent/5 hover:text-foreground",
+            )}
+          >
+            <Shield className="h-4 w-4" />
+            Admin
+          </Link>
+        ) : null}
 
         <div className="my-3 border-t border-border" />
 

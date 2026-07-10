@@ -617,7 +617,11 @@ clients. Requires JWT auth via the `Authorization` header.
 
 ## Admin
 
-All admin endpoints require JWT auth and `role: "admin"`.
+All admin endpoints require JWT auth and platform `role: "admin"`.
+Admins have full CRUD over users and projects.
+
+On API startup, emails in `ADMIN_EMAILS` (default `mosesedem81@gmail.com`) are
+auto-seeded as admins (promoted if they exist, created if not).
 
 ### GET /admin/stats
 
@@ -629,17 +633,47 @@ System-wide statistics.
 {
   "totalUsers": 1543,
   "totalProjects": 3287,
-  "totalLogs": 45234567
+  "totalLogs": 45234567,
+  "activeSubscriptions": 234,
+  "adminUsers": 2
 }
 ```
 
 ### GET /admin/users
 
-List all users.
+List users. Query: `offset`, `limit`, `search`, `role` (`user`|`admin`).
+
+**Response `200`:** `{ "users": [...], "total", "limit", "offset" }`
+
+### POST /admin/users
+
+Create a user. Body: `{ email, name, password, role?, emailVerified? }`
+
+### GET /admin/users/:id
+
+### PUT /admin/users/:id
+
+Update name, email, role, emailVerified, and optional password.
+
+### DELETE /admin/users/:id
+
+Deletes the user and owned projects. Cannot delete self or the last admin.
 
 ### GET /admin/projects
 
-List all projects.
+List projects. Query: `offset`, `limit`, `search`.
+
+**Response `200`:** `{ "projects": [...], "total", "limit", "offset" }`
+
+### GET /admin/projects/:id
+
+### PUT /admin/projects/:id
+
+Update name, environment, ownerId.
+
+### DELETE /admin/projects/:id
+
+Deletes the project and dependent logs/alerts/usage.
 
 ---
 
