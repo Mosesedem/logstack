@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -89,6 +90,16 @@ class _PushDebugCardState extends ConsumerState<PushDebugCard> {
                 : LogstackColors.textPrimary,
             monospace: token != null,
           ),
+          if (Platform.isIOS)
+            _DebugRow(
+              label: 'APNS token',
+              value: NotificationService.instance.apnsToken == null
+                  ? 'Unavailable (check Firebase APNs key + APS env)'
+                  : 'Ready',
+              valueColor: NotificationService.instance.apnsToken == null
+                  ? LogstackColors.warnAmber
+                  : LogstackColors.liveGreen,
+            ),
           _DebugRow(
             label: 'Backend',
             value: _backendStatusLabel(status),

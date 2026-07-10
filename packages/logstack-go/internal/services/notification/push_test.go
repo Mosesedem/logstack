@@ -184,6 +184,9 @@ func TestFCMMessagePayloadStructure(t *testing.T) {
 		if msg.APNS.Headers["apns-priority"] != "10" {
 			t.Fatalf("expected apns-priority=10, got %q", msg.APNS.Headers["apns-priority"])
 		}
+		if msg.APNS.Headers["apns-topic"] != iosBundleID {
+			t.Fatalf("expected apns-topic=%s, got %q", iosBundleID, msg.APNS.Headers["apns-topic"])
+		}
 		if msg.APNS.Payload == nil || msg.APNS.Payload.Aps == nil {
 			t.Fatal("APNS.Payload.Aps must not be nil")
 		}

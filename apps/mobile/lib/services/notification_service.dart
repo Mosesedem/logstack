@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:logger/logger.dart';
 import 'package:logstack_mobile/firebase_options.dart';
@@ -18,6 +19,8 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
   NotificationService._();
 
+  static const _iosPushChannel = MethodChannel('tech.logstack.mobile/push');
+
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -29,6 +32,9 @@ class NotificationService {
 
   String? _fcmToken;
   String? get fcmToken => _fcmToken;
+
+  String? _apnsToken;
+  String? get apnsToken => _apnsToken;
 
   Future<void> initialize() async {
     if (!DefaultFirebaseOptions.isConfigured) {
@@ -54,7 +60,23 @@ class NotificationService {
   }
 
   Future<void> completeSetupAfterPermission() async {
+    await _ensureIOSRemoteNotificationRegistration();
     await _initializeFCM();
+  }
+
+  /// iOS must call registerForRemoteNotifications after the user grants permission.
+  /// Doing it only at cold start (before permission) often leaves APNS/FCM without a token.
+  Future<void> _ensureIOSRemoteNotificationRegistration() async {
+    if (!Platform.isIOS) return;
+    try {
+      await _iosPushChannel.invokeMethod<void>('registerForRemoteNotifications');
+    } catch (error, stackTrace) {
+      _logger.w(
+        'iOS registerForRemoteNotifications failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   Future<AuthorizationStatus> getPermissionStatus() async {
@@ -176,25 +198,27 @@ class NotificationService {
 
     if (Platform.isIOS) {
       String? apnsToken;
-      for (var attempt = 0; attempt < 3; attempt++) {
+      for (var attempt = 0; attempt < 10; attempt++) {
         try {
           apnsToken = await _messaging
               .getAPNSToken()
-              .timeout(const Duration(seconds: 3));
+              .timeout(const Duration(seconds: 5));
         } catch (_) {
           apnsToken = null;
         }
         if (apnsToken != null) break;
-        await Future<void>.delayed(const Duration(milliseconds: 400));
+        await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
       }
 
+      _apnsToken = apnsToken;
       if (apnsToken == null) {
         apnsReady = false;
         _logger.w(
           'APNS token not yet available — will rely on getToken() + onTokenRefresh. '
-          'On physical devices + TestFlight this usually means the Firebase project '
-          'is missing an APNs Authentication Key (p8) under Project Settings > Cloud Messaging. '
-          'Push will not be deliverable until that is configured.',
+          'On a physical device this usually means either (1) the Firebase project is missing '
+          'an APNs Authentication Key (.p8) under Project Settings > Cloud Messaging, or '
+          '(2) the build APS environment does not match how you installed the app '
+          '(Xcode Debug needs development; TestFlight/App Store needs production).',
         );
       } else {
         _logger.i('APNS token obtained on iOS');

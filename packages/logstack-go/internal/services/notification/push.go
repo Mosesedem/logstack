@@ -75,6 +75,8 @@ func (p *PushNotifier) IsEnabled() bool {
 	return p != nil && p.client != nil
 }
 
+const iosBundleID = "tech.logstack.mobile"
+
 // buildFCMMessage constructs a Firebase messaging.Message with the correct
 // iOS (APNS) and Android priority settings for reliable delivery.
 // Title/body are duplicated into Data so the Flutter client can always render
@@ -117,6 +119,7 @@ func buildFCMMessage(token string, title, body string, data map[string]string) *
 				// Required by APNs HTTP/2 for user-visible alerts.
 				"apns-priority":  "10",
 				"apns-push-type": "alert",
+				"apns-topic":     iosBundleID,
 			},
 			Payload: &messaging.APNSPayload{
 				Aps: &messaging.Aps{
@@ -126,9 +129,7 @@ func buildFCMMessage(token string, title, body string, data map[string]string) *
 						Title: title,
 						Body:  body,
 					},
-					Sound:            "default",
-					ContentAvailable: true,
-					MutableContent:   true,
+					Sound: "default",
 				},
 			},
 		},

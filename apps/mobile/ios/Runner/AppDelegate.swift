@@ -4,7 +4,7 @@ import FirebaseCore
 import FirebaseMessaging
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, MessagingDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -15,20 +15,33 @@ import FirebaseMessaging
       FirebaseApp.configure()
     }
 
-    // Register for remote notifications so APNS token is delivered promptly.
-    // Required for reliable getAPNSToken() + push on physical devices + TestFlight.
-    application.registerForRemoteNotifications()
+    Messaging.messaging().delegate = self
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    let channel = FlutterMethodChannel(
+      name: "tech.logstack.mobile/push",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "registerForRemoteNotifications":
+        DispatchQueue.main.async {
+          UIApplication.shared.registerForRemoteNotifications()
+        }
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 
   // Forward the APNS device token to Firebase Messaging.
-  // Without this, getAPNSToken() often returns nil and production pushes (TestFlight)
-  // fail even when permission is granted and GoogleService-Info.plist is present.
+  // Without this, getAPNSToken() often returns nil and production pushes fail.
   override func application(
     _ application: UIApplication,
     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
@@ -43,5 +56,9 @@ import FirebaseMessaging
   ) {
     print("[Logstack] Failed to register for remote notifications: \(error)")
     super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
+  }
+
+  func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+    print("[Logstack] FCM registration token refreshed: \(fcmToken ?? "nil")")
   }
 }
