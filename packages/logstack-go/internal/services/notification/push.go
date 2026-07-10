@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
@@ -19,8 +20,8 @@ type fcmClient interface {
 }
 
 type PushNotifier struct {
-	client           fcmClient
-	db               *gorm.DB
+	client fcmClient
+	db     *gorm.DB
 	// isInvalidTokenErr overrides the Firebase error check in tests.
 	// When nil, the production check (messaging.IsRegistrationTokenNotRegistered || messaging.IsInvalidArgument) is used.
 	isInvalidTokenErr func(error) bool
@@ -36,11 +37,11 @@ func NewPushNotifier(serviceAccountPath string, projectID string, db *gorm.DB) (
 	}
 
 	ctx := context.Background()
-	
+
 	// Initialize Firebase app with service account
 	opt := option.WithCredentialsFile(serviceAccountPath)
 	config := &firebase.Config{ProjectID: projectID}
-	
+
 	app, err := firebase.NewApp(ctx, config, opt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Firebase app: %w", err)
@@ -52,45 +53,85 @@ func NewPushNotifier(serviceAccountPath string, projectID string, db *gorm.DB) (
 		return nil, fmt.Errorf("failed to get Firebase messaging client: %w", err)
 	}
 
-	slog.Info("Firebase Cloud Messaging initialized with HTTP v1 API")
-	
+	slog.Info("Firebase Cloud Messaging initialized with HTTP v1 API", "projectId", projectID)
+
 	return &PushNotifier{
 		client: client,
 		db:     db,
 	}, nil
 }
 
+// IsEnabled reports whether FCM is wired with a live messaging client.
+func (p *PushNotifier) IsEnabled() bool {
+	return p != nil && p.client != nil
+}
+
 // buildFCMMessage constructs a Firebase messaging.Message with the correct
 // iOS (APNS) and Android priority settings for reliable delivery.
+// Title/body are duplicated into Data so the Flutter client can always render
+// a local notification in the foreground (data-only recovery path).
 func buildFCMMessage(token string, title, body string, data map[string]string) *messaging.Message {
+	payload := map[string]string{
+		"title": title,
+		"body":  body,
+	}
+	for k, v := range data {
+		if k == "" {
+			continue
+		}
+		payload[k] = v
+	}
+
 	return &messaging.Message{
 		Token: token,
 		Notification: &messaging.Notification{
 			Title: title,
 			Body:  body,
 		},
-		Data: data,
+		Data: payload,
 		Android: &messaging.AndroidConfig{
 			Priority: "high",
 			Notification: &messaging.AndroidNotification{
-				ChannelID: "logstack_alerts_default",
-				Icon:      "ic_launcher_monochrome", // resolved from res/drawable (or mipmap fallback)
-				Color:     "#3B82F6",
-				Sound:     "default",
-				Priority:  messaging.PriorityHigh,
+				// Must match the channel created by the mobile app
+				// (NotificationService: logstack_alerts_default).
+				ChannelID:            "logstack_alerts_default",
+				Icon:                 "ic_launcher_monochrome",
+				Color:                "#3B82F6",
+				Sound:                "default",
+				Priority:             messaging.PriorityHigh,
+				DefaultSound:         true,
+				DefaultVibrateTimings: true,
 			},
 		},
 		APNS: &messaging.APNSConfig{
 			Headers: map[string]string{
-				"apns-priority": "10",
+				// Required by APNs HTTP/2 for user-visible alerts.
+				"apns-priority":  "10",
+				"apns-push-type": "alert",
 			},
 			Payload: &messaging.APNSPayload{
 				Aps: &messaging.Aps{
-					Sound: "default",
+					// Explicit alert — do not rely only on the top-level Notification
+					// conversion (unreliable for some iOS + FCM combinations).
+					Alert: &messaging.ApsAlert{
+						Title: title,
+						Body:  body,
+					},
+					Sound:            "default",
+					ContentAvailable: true,
+					MutableContent:   true,
 				},
 			},
 		},
 	}
+}
+
+// DirectPushResult summarizes a SendDirect attempt for admin diagnostics.
+type DirectPushResult struct {
+	TokensFound int
+	Sent        int
+	Failed      int
+	Errors      []string
 }
 
 // SendDirect delivers a push notification to every device registered for [userID].
@@ -100,16 +141,29 @@ func (p *PushNotifier) SendDirect(
 	title, body string,
 	data map[string]string,
 ) error {
+	_, err := p.SendDirectDetailed(ctx, userID, title, body, data)
+	return err
+}
+
+// SendDirectDetailed is like SendDirect but returns token/send diagnostics.
+func (p *PushNotifier) SendDirectDetailed(
+	ctx context.Context,
+	userID uint,
+	title, body string,
+	data map[string]string,
+) (*DirectPushResult, error) {
+	result := &DirectPushResult{}
 	if p.client == nil {
-		return fmt.Errorf("FCM client not initialized — set FCM_SERVICE_ACCOUNT_PATH on the API")
+		return result, fmt.Errorf("FCM client not initialized — set FCM_SERVICE_ACCOUNT_PATH on the API (and ensure the service account JSON is mounted in production)")
 	}
 
 	var tokens []models.PushToken
 	if err := p.db.Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
-		return fmt.Errorf("failed to fetch push tokens: %w", err)
+		return result, fmt.Errorf("failed to fetch push tokens: %w", err)
 	}
+	result.TokensFound = len(tokens)
 	if len(tokens) == 0 {
-		return fmt.Errorf("no push tokens found for user %d", userID)
+		return result, fmt.Errorf("no push tokens for user %d — open the Logstack mobile app signed in as this user, grant notification permission, and confirm Settings shows push registered", userID)
 	}
 
 	checker := p.isInvalidTokenErr
@@ -119,24 +173,53 @@ func (p *PushNotifier) SendDirect(
 		}
 	}
 
-	successCount := 0
 	for _, token := range tokens {
 		message := buildFCMMessage(token.Token, title, body, data)
 		response, err := p.client.Send(ctx, message)
 		if err != nil {
+			result.Failed++
+			errMsg := err.Error()
 			if checker(err) {
-				p.db.Where("token = ?", token.Token).Delete(&models.PushToken{})
+				if delErr := p.db.Where("token = ?", token.Token).Delete(&models.PushToken{}).Error; delErr != nil {
+					slog.Warn("failed to delete stale push token", "error", delErr)
+				}
+				slog.Warn("deleted stale push token",
+					"userId", userID,
+					"deviceType", token.DeviceType,
+					"token", maskToken(token.Token),
+					"error", err,
+					"token_removed", true,
+				)
+				result.Errors = append(result.Errors, fmt.Sprintf("%s token invalid/stale: %s", token.DeviceType, errMsg))
+			} else {
+				slog.Error("push send failed",
+					"userId", userID,
+					"deviceType", token.DeviceType,
+					"token", maskToken(token.Token),
+					"error", err,
+					"token_removed", false,
+				)
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: %s", token.DeviceType, errMsg))
 			}
 			continue
 		}
-		slog.Info("direct push sent", "userId", userID, "messageId", response)
-		successCount++
+		result.Sent++
+		slog.Info("direct push sent",
+			"userId", userID,
+			"deviceType", token.DeviceType,
+			"messageId", response,
+			"token", maskToken(token.Token),
+		)
 	}
 
-	if successCount == 0 {
-		return fmt.Errorf("failed to send notifications to any device")
+	if result.Sent == 0 {
+		detail := "failed to send to any device"
+		if len(result.Errors) > 0 {
+			detail = detail + ": " + strings.Join(result.Errors, "; ")
+		}
+		return result, fmt.Errorf("%s", detail)
 	}
-	return nil
+	return result, nil
 }
 
 func (p *PushNotifier) Send(ctx context.Context, rule *models.AlertRule, log *models.Log) error {
@@ -149,74 +232,18 @@ func (p *PushNotifier) Send(ctx context.Context, rule *models.AlertRule, log *mo
 		return err
 	}
 
-	var tokens []models.PushToken
-	if err := p.db.Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
-		return fmt.Errorf("failed to fetch push tokens: %w", err)
-	}
-
-	if len(tokens) == 0 {
-		return fmt.Errorf("no push tokens found for user %d — open the Logstack mobile app, sign in as this account, grant notification permission, and confirm Settings shows push registered", userID)
-	}
-
 	title := fmt.Sprintf("Logstack Alert: %s", rule.Name)
 	body := fmt.Sprintf("[%s] %s", log.Level, truncate(log.Message, 100))
-
-	// Resolve invalid-token checker: use injected one in tests, real SDK functions in production.
-	checker := p.isInvalidTokenErr
-	if checker == nil {
-		checker = func(err error) bool {
-			return messaging.IsRegistrationTokenNotRegistered(err) || messaging.IsInvalidArgument(err)
-		}
+	data := map[string]string{
+		"logId":     fmt.Sprintf("%d", log.ID),
+		"projectId": log.ProjectID.String(),
+		"ruleId":    fmt.Sprintf("%d", rule.ID),
+		"level":     string(log.Level),
+		"type":      "alert",
 	}
 
-	// Send to all tokens
-	successCount := 0
-	for _, token := range tokens {
-		data := map[string]string{
-			"logId":     fmt.Sprintf("%d", log.ID),
-			"projectId": log.ProjectID.String(),
-			"ruleId":    fmt.Sprintf("%d", rule.ID),
-			"level":     string(log.Level),
-		}
-		message := buildFCMMessage(token.Token, title, body, data)
-
-		// Send message using FCM HTTP v1 API
-		response, err := p.client.Send(ctx, message)
-		if err != nil {
-			if checker(err) {
-				p.db.Where("token = ?", token.Token).Delete(&models.PushToken{})
-				slog.Warn("deleted stale push token",
-					"token", maskToken(token.Token),
-					"error", err,
-					"token_removed", true,
-				)
-			} else {
-				slog.Error("push send failed",
-					"token", maskToken(token.Token),
-					"error", err,
-					"token_removed", false,
-				)
-			}
-			continue
-		}
-
-		slog.Info("Push notification sent successfully",
-			"token", maskToken(token.Token),
-			"messageId", response,
-		)
-		successCount++
-	}
-
-	if successCount == 0 {
-		return fmt.Errorf("failed to send notifications to any device")
-	}
-
-	slog.Info("Push notifications sent",
-		"total", len(tokens),
-		"successful", successCount,
-	)
-
-	return nil
+	_, err = p.SendDirectDetailed(ctx, userID, title, body, data)
+	return err
 }
 
 // resolveUserID returns the push recipient user ID. When the rule recipient is

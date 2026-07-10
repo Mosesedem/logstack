@@ -35,7 +35,10 @@ interface NotifyResults {
   emailFailed?: number;
   pushSent?: number;
   pushFailed?: number;
+  pushTokensFound?: number;
+  pushDevicesSent?: number;
   recipients?: number;
+  fcmEnabled?: boolean;
   errors?: string[];
 }
 
@@ -160,11 +163,17 @@ export default function AdminNotificationsPage() {
         channels,
         title: title.trim(),
         message: message.trim(),
-        broadcast: broadcast && channels.includes("push"),
       };
-      if (!broadcast) {
-        if (userId.trim()) body.userId = Number(userId);
-        if (email.trim()) body.email = email.trim();
+      if (broadcast && channels.includes("push")) {
+        body.broadcast = true;
+      } else {
+        const idNum = Number(userId);
+        if (Number.isFinite(idNum) && idNum > 0) {
+          body.userId = Math.floor(idNum);
+        }
+        if (email.trim()) {
+          body.email = email.trim().toLowerCase();
+        }
       }
 
       const res = await apiClient.post<{
@@ -178,10 +187,11 @@ export default function AdminNotificationsPage() {
         description: res.message || "Notifications sent",
       });
     } catch (e) {
+      const msg =
+        e instanceof ApiClientError ? e.message : "Unexpected error";
       toast({
         title: "Send failed",
-        description:
-          e instanceof ApiClientError ? e.message : "Unexpected error",
+        description: msg,
         variant: "destructive",
       });
     } finally {
@@ -490,7 +500,10 @@ function DeliveryResults({ results }: { results: NotifyResults }) {
   const emailFailed = Number(results.emailFailed ?? 0);
   const pushSent = Number(results.pushSent ?? 0);
   const pushFailed = Number(results.pushFailed ?? 0);
+  const pushTokensFound = Number(results.pushTokensFound ?? 0);
+  const pushDevicesSent = Number(results.pushDevicesSent ?? 0);
   const recipients = Number(results.recipients ?? 0);
+  const fcmEnabled = results.fcmEnabled !== false;
   const totalOk = emailSent + pushSent;
   const totalFail = emailFailed + pushFailed;
   const allGood = totalFail === 0 && totalOk > 0;
@@ -518,11 +531,18 @@ function DeliveryResults({ results }: { results: NotifyResults }) {
       tone: "danger" as const,
     },
     {
-      key: "pushSent",
-      label: "Push sent",
-      value: pushSent,
+      key: "pushDevicesSent",
+      label: "Devices reached",
+      value: pushDevicesSent,
       icon: Bell,
       tone: "success" as const,
+    },
+    {
+      key: "pushTokensFound",
+      label: "Device tokens",
+      value: pushTokensFound,
+      icon: Bell,
+      tone: "neutral" as const,
     },
     {
       key: "pushFailed",
@@ -561,6 +581,11 @@ function DeliveryResults({ results }: { results: NotifyResults }) {
                 : totalOk > 0
                   ? "Partial delivery — some channels failed."
                   : "No messages were delivered."}
+              {!fcmEnabled
+                ? " FCM is not enabled on the API — push cannot leave the server."
+                : pushTokensFound === 0 && pushFailed > 0
+                  ? " No device tokens registered for this user — open the mobile app and enable push."
+                  : null}
             </CardDescription>
           </div>
           <Badge

@@ -631,8 +631,15 @@ class LogStack implements LogStackClient {
     try {
       await this.sendLogs(logsToSend);
     } catch (error) {
-      // Put logs back in buffer for retry
-      this.buffer = [...logsToSend, ...this.buffer];
+      // Auth failures are terminal — do not re-queue (avoids infinite 401 spam,
+      // especially with captureConsole + console.error feedback loops).
+      const authFailed =
+        error instanceof LogStackError &&
+        (error.status === 401 || error.status === 403);
+
+      if (!authFailed) {
+        this.buffer = [...logsToSend, ...this.buffer];
+      }
 
       if (this.config.onError && error instanceof Error) {
         this.config.onError(error, logsToSend);
@@ -659,6 +666,26 @@ class LogStack implements LogStackClient {
       });
 
       if (!response.ok) {
+        // 401/403: invalid/revoked API key — stop shipping permanently.
+        if (response.status === 401 || response.status === 403) {
+          this.config.disabled = true;
+          this.stopFlushTimer();
+          let errorData: LogStackErrorResponse = {
+            code: "INVALID_API_KEY",
+            message: `Log ingest unauthorized (${response.status}) — shipping disabled`,
+          };
+          try {
+            errorData = parseApiErrorBody(await response.json(), errorData);
+          } catch {
+            // keep default
+          }
+          throw new LogStackError(
+            errorData.code,
+            errorData.message,
+            response.status,
+          );
+        }
+
         if (response.status >= 500 && attempt < this.config.maxRetries) {
           // Exponential backoff with jitter for server errors
           const delay =
@@ -686,7 +713,10 @@ class LogStack implements LogStackClient {
         );
       }
     } catch (error) {
-      // If we get a network error while online, queue the logs for later
+      if (error instanceof LogStackError) {
+        throw error;
+      }
+      // Network error while online — queue for later (not for 4xx auth).
       if (this.isOnline && error instanceof Error) {
         this.enqueueOffline(logs);
         this.isOnline = false;

@@ -1,0 +1,11 @@
+# 2026/07/10 18:07:32.677183 [TestPushNotificationStructuredLogging] [rapid] draw tokenCount: 1
+# 2026/07/10 18:07:32.678548 [TestPushNotificationStructuredLogging] [rapid] draw outcome-logtok-0: 1
+# 2026/07/10 18:07:32.678674 [TestPushNotificationStructuredLogging] failure log entry missing 'token_removed' field: map[deviceType:android error:invalid token:*** userId:1]
+# 
+v0.4.8#13489683950683772569
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1

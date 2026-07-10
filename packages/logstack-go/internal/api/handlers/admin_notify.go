@@ -12,17 +12,68 @@ import (
 )
 
 type adminNotifyRequest struct {
-	// Channels: "email", "push" (at least one required)
-	Channels []string `json:"channels" binding:"required,min=1"`
-	// Target: userId and/or email. If userId set, email is resolved from the user
-	// when sending email and push is delivered to that user's devices.
-	UserID *uint  `json:"userId"`
-	Email  string `json:"email" binding:"omitempty,email"`
-	// Broadcast to every user with a registered push token (push only).
-	Broadcast bool `json:"broadcast"`
+	Channels  []string
+	UserID    *uint
+	Email     string
+	Broadcast bool
+	Title     string
+	Message   string
+}
 
-	Title   string `json:"title" binding:"required,min=1,max=200"`
-	Message string `json:"message" binding:"required,min=1,max=4000"`
+func parseAdminNotifyRequest(raw map[string]interface{}) adminNotifyRequest {
+	var req adminNotifyRequest
+	if title, ok := raw["title"].(string); ok {
+		req.Title = title
+	}
+	if msg, ok := raw["message"].(string); ok {
+		req.Message = msg
+	}
+	if email, ok := raw["email"].(string); ok {
+		req.Email = strings.TrimSpace(email)
+	}
+	if b, ok := raw["broadcast"].(bool); ok {
+		req.Broadcast = b
+	}
+	switch ch := raw["channels"].(type) {
+	case []interface{}:
+		for _, item := range ch {
+			if s, ok := item.(string); ok {
+				req.Channels = append(req.Channels, s)
+			}
+		}
+	case []string:
+		req.Channels = append(req.Channels, ch...)
+	}
+	// userId may arrive as float64 (JSON number) or string
+	switch v := raw["userId"].(type) {
+	case float64:
+		if v > 0 {
+			id := uint(v)
+			req.UserID = &id
+		}
+	case int:
+		if v > 0 {
+			id := uint(v)
+			req.UserID = &id
+		}
+	case string:
+		v = strings.TrimSpace(v)
+		if v != "" {
+			var n uint64
+			for _, r := range v {
+				if r < '0' || r > '9' {
+					n = 0
+					break
+				}
+				n = n*10 + uint64(r-'0')
+			}
+			if n > 0 {
+				id := uint(n)
+				req.UserID = &id
+			}
+		}
+	}
+	return req
 }
 
 // SendNotification handles POST /v1/admin/notifications
@@ -35,9 +86,29 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 		return
 	}
 
-	var req adminNotifyRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: err.Error()})
+	var raw map[string]interface{}
+	if err := c.ShouldBindJSON(&raw); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: "Invalid JSON body: " + err.Error()})
+		return
+	}
+
+	req := parseAdminNotifyRequest(raw)
+	title := strings.TrimSpace(req.Title)
+	message := strings.TrimSpace(req.Message)
+	if title == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: "title is required"})
+		return
+	}
+	if message == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: "message is required"})
+		return
+	}
+	if len(title) > 200 {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: "title must be at most 200 characters"})
+		return
+	}
+	if len(message) > 4000 {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: "message must be at most 4000 characters"})
 		return
 	}
 
@@ -48,6 +119,8 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 			wantEmail = true
 		case "push":
 			wantPush = true
+		case "":
+			continue
 		default:
 			c.JSON(http.StatusBadRequest, ErrorResponse{
 				Code:    "VALIDATION_ERROR",
@@ -59,13 +132,10 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 	if !wantEmail && !wantPush {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Code:    "VALIDATION_ERROR",
-			Message: "select at least one channel",
+			Message: "select at least one channel (email, push)",
 		})
 		return
 	}
-
-	title := strings.TrimSpace(req.Title)
-	message := strings.TrimSpace(req.Message)
 
 	type target struct {
 		userID uint
@@ -121,6 +191,7 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 
 	emailOK, pushOK := 0, 0
 	emailFail, pushFail := 0, 0
+	pushTokensFound, pushDevicesSent := 0, 0
 	var failures []string
 
 	emailN := h.notifier.GetEmailNotifier()
@@ -159,18 +230,31 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 		if wantPush {
 			if t.userID == 0 {
 				pushFail++
-				failures = append(failures, "push: recipient has no user id")
-			} else if pushN == nil {
+				failures = append(failures, "push: recipient has no user id (email-only target cannot receive push)")
+			} else if pushN == nil || !pushN.IsEnabled() {
 				pushFail++
-				failures = append(failures, "push: FCM not configured")
+				failures = append(failures, "push: FCM not configured on API (set FCM_SERVICE_ACCOUNT_PATH + mount firebase JSON)")
 			} else {
-				if err := pushN.SendDirect(c.Request.Context(), t.userID, title, message, map[string]string{
+				detail, err := pushN.SendDirectDetailed(c.Request.Context(), t.userID, title, message, map[string]string{
 					"type":   "admin",
 					"source": "admin_dashboard",
-				}); err != nil {
+				})
+				if detail != nil {
+					pushTokensFound += detail.TokensFound
+					pushDevicesSent += detail.Sent
+					if len(detail.Errors) > 0 {
+						for _, pe := range detail.Errors {
+							failures = append(failures, fmt.Sprintf("push user=%d: %s", t.userID, pe))
+						}
+					}
+				}
+				if err != nil {
 					pushFail++
-					failures = append(failures, fmt.Sprintf("push user=%d: %v", t.userID, err))
-					slog.Warn("admin notify push failed", "userId", t.userID, "error", err)
+					// Avoid duplicating the detailed errors already appended above.
+					if detail == nil || len(detail.Errors) == 0 {
+						failures = append(failures, fmt.Sprintf("push user=%d: %v", t.userID, err))
+					}
+					slog.Warn("admin notify push failed", "userId", t.userID, "error", err, "tokens", detail)
 				} else {
 					pushOK++
 				}
@@ -186,14 +270,19 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 		"pushOK", pushOK,
 		"emailFail", emailFail,
 		"pushFail", pushFail,
+		"pushTokensFound", pushTokensFound,
+		"pushDevicesSent", pushDevicesSent,
 	)
 
 	results := gin.H{
-		"emailSent":   emailOK,
-		"emailFailed": emailFail,
-		"pushSent":    pushOK,
-		"pushFailed":  pushFail,
-		"recipients":  len(targets),
+		"emailSent":       emailOK,
+		"emailFailed":     emailFail,
+		"pushSent":        pushOK,
+		"pushFailed":      pushFail,
+		"pushTokensFound": pushTokensFound,
+		"pushDevicesSent": pushDevicesSent,
+		"recipients":      len(targets),
+		"fcmEnabled":      pushN != nil && pushN.IsEnabled(),
 	}
 	if len(failures) > 0 {
 		if len(failures) > 20 {

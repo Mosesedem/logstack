@@ -164,6 +164,16 @@ class NotificationService {
   Future<void> _initializeFCM() async {
     bool apnsReady = true;
 
+    // iOS: show alerts while app is in the foreground (system banner).
+    // Without this, admin/alert pushes often appear to "not work" when open.
+    if (Platform.isIOS) {
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    }
+
     if (Platform.isIOS) {
       String? apnsToken;
       for (var attempt = 0; attempt < 3; attempt++) {
@@ -234,16 +244,32 @@ class NotificationService {
   }
 
   void _handleForegroundMessage(RemoteMessage message) {
-    _logger.i('Foreground message: ${message.messageId}');
+    _logger.i(
+      'Foreground message: ${message.messageId} data=${message.data} '
+      'notification=${message.notification?.title}',
+    );
 
-    final notification = message.notification;
-    if (notification != null) {
-      _showLocalNotification(
-        title: notification.title ?? 'Logstack Alert',
-        body: notification.body ?? '',
-        payload: message.data.toString(),
-      );
+    // Prefer system notification payload; fall back to data keys (admin + alert
+    // pushes always include title/body in data for foreground display).
+    final title = message.notification?.title ??
+        message.data['title'] ??
+        'Logstack';
+    final body = message.notification?.body ??
+        message.data['body'] ??
+        message.data['message'] ??
+        '';
+
+    if (title.isEmpty && body.isEmpty) {
+      return;
     }
+
+    // Always show a local notification in the foreground so admin dashboard
+    // pushes and alerts are visible even when the app is open.
+    _showLocalNotification(
+      title: title,
+      body: body,
+      payload: message.data.toString(),
+    );
   }
 
   void _handleMessageOpenedApp(RemoteMessage message) {
