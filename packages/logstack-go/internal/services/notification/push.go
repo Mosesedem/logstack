@@ -209,10 +209,28 @@ func (p *PushNotifier) SendDirectDetailed(
 	if err := p.db.Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
 		return reportErr(fmt.Errorf("failed to fetch push tokens: %w", err))
 	}
+	storedCount := len(tokens)
 	tokens = latestTokensPerDevice(tokens)
 	result.TokensFound = len(tokens)
+
+	RecordPushTrace(PushTraceEvent{
+		Phase:  "send_start",
+		Source: source,
+		UserID: userID,
+		Title:  title,
+		Detail: fmt.Sprintf("stored=%d active=%d", storedCount, result.TokensFound),
+	})
+
 	if len(tokens) == 0 {
-		return reportErr(fmt.Errorf("no push tokens for user %d — open the Logstack mobile app signed in as this user, grant notification permission, and confirm Settings shows push registered", userID))
+		err := fmt.Errorf("no push tokens for user %d — open the Logstack mobile app signed in as this user, grant notification permission, and confirm Settings shows push registered", userID)
+		RecordPushTrace(PushTraceEvent{
+			Phase:  "send_done_fail",
+			Source: source,
+			UserID: userID,
+			Title:  title,
+			Error:  err.Error(),
+		})
+		return reportErr(err)
 	}
 
 	checker := p.isInvalidTokenErr
@@ -232,6 +250,20 @@ func (p *PushNotifier) SendDirectDetailed(
 		}
 
 		message := buildFCMMessage(deviceType, token.Token, title, body, data)
+		payloadKind := "android_notification_data"
+		if deviceType == models.DeviceTypeIOS {
+			payloadKind = "ios_notification_only"
+		}
+		RecordPushTrace(PushTraceEvent{
+			Phase:       "send_attempt",
+			Source:      source,
+			UserID:      userID,
+			DeviceType:  string(deviceType),
+			MaskedToken: maskToken(token.Token),
+			Title:       title,
+			PayloadKind: payloadKind,
+		})
+
 		response, err := p.client.Send(ctx, message)
 		if err != nil {
 			result.Failed++
@@ -264,6 +296,16 @@ func (p *PushNotifier) SendDirectDetailed(
 				)
 				result.Errors = append(result.Errors, fmt.Sprintf("%s: %s", token.DeviceType, errMsg))
 			}
+			RecordPushTrace(PushTraceEvent{
+				Phase:       "send_fail",
+				Source:      source,
+				UserID:      userID,
+				DeviceType:  string(deviceType),
+				MaskedToken: maskToken(token.Token),
+				Title:       title,
+				PayloadKind: payloadKind,
+				Error:       errMsg,
+			})
 			continue
 		}
 		result.Sent++
@@ -279,6 +321,16 @@ func (p *PushNotifier) SendDirectDetailed(
 			"messageId", response,
 			"token", maskToken(token.Token),
 		)
+		RecordPushTrace(PushTraceEvent{
+			Phase:       "send_ok",
+			Source:      source,
+			UserID:      userID,
+			DeviceType:  string(deviceType),
+			MaskedToken: maskToken(token.Token),
+			Title:       title,
+			PayloadKind: payloadKind,
+			MessageID:   response,
+		})
 	}
 
 	if result.Sent == 0 {
@@ -286,6 +338,20 @@ func (p *PushNotifier) SendDirectDetailed(
 		if len(result.Errors) > 0 {
 			detail = detail + ": " + strings.Join(result.Errors, "; ")
 		}
+		RecordPushTrace(PushTraceEvent{
+			Phase:         "send_done_fail",
+			Source:        source,
+			UserID:        userID,
+			Title:         title,
+			Error:         detail,
+			IOSTokens:     result.IOSTokens,
+			IOSSent:       result.IOSSent,
+			IOSFailed:     result.IOSFailed,
+			AndroidTokens: result.AndroidTokens,
+			AndroidSent:   result.AndroidSent,
+			AndroidFailed: result.AndroidFailed,
+			Detail:        strings.Join(result.Errors, "; "),
+		})
 		return reportErr(fmt.Errorf("%s", detail))
 	}
 	if result.Failed > 0 {
@@ -299,9 +365,35 @@ func (p *PushNotifier) SendDirectDetailed(
 			result.AndroidTokens,
 			strings.Join(result.Errors, "; "),
 		)
+		RecordPushTrace(PushTraceEvent{
+			Phase:         "send_done_partial",
+			Source:        source,
+			UserID:        userID,
+			Title:         title,
+			Error:         partialErr.Error(),
+			IOSTokens:     result.IOSTokens,
+			IOSSent:       result.IOSSent,
+			IOSFailed:     result.IOSFailed,
+			AndroidTokens: result.AndroidTokens,
+			AndroidSent:   result.AndroidSent,
+			AndroidFailed: result.AndroidFailed,
+			Detail:        strings.Join(result.Errors, "; "),
+		})
 		ReportPushFailure(ctx, p.email, source, userID, title, body, partialErr, result)
 		return result, partialErr
 	}
+	RecordPushTrace(PushTraceEvent{
+		Phase:         "send_done_ok",
+		Source:        source,
+		UserID:        userID,
+		Title:         title,
+		IOSTokens:     result.IOSTokens,
+		IOSSent:       result.IOSSent,
+		IOSFailed:     result.IOSFailed,
+		AndroidTokens: result.AndroidTokens,
+		AndroidSent:   result.AndroidSent,
+		AndroidFailed: result.AndroidFailed,
+	})
 	return result, nil
 }
 

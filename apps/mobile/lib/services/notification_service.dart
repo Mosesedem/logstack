@@ -314,6 +314,7 @@ class NotificationService {
 
     if (_fcmToken != null) {
       _tokenController.add(_fcmToken!);
+      debugPrint('[push_trace] fcm_token ${_fcmToken!}');
       _logger.i('FCM Token: $_fcmToken');
     } else if (Platform.isIOS && !apnsReady) {
       _logger.i('No FCM token yet on iOS (expected until APNS is ready / Firebase APNs key is configured).');
@@ -341,10 +342,13 @@ class NotificationService {
   }
 
   void _handleForegroundMessage(RemoteMessage message) {
-    _logger.i(
-      'Foreground message: ${message.messageId} data=${message.data} '
-      'notification=${message.notification?.title}',
-    );
+    final trace =
+        '[push_trace] foreground id=${message.messageId} '
+        'title=${message.notification?.title} '
+        'body=${message.notification?.body} '
+        'data=${message.data}';
+    debugPrint(trace);
+    _logger.i(trace);
 
     // Prefer system notification payload; fall back to data keys (admin + alert
     // pushes always include title/body in data for foreground display).

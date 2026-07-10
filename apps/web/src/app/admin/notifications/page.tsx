@@ -27,6 +27,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { PushTracePanel } from "./push-trace-panel";
 
 type Channel = "email" | "push";
 
@@ -466,6 +467,8 @@ export default function AdminNotificationsPage() {
       </Card>
 
       {lastResult ? <DeliveryResults results={lastResult} /> : null}
+
+      <PushTracePanel userId={userId} />
     </div>
   );
 }

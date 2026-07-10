@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -58,11 +60,29 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 
 	// One active token per platform per user — stale iOS tokens from old builds
 	// are the #1 cause of "Firebase Console works, API doesn't".
-	if err := h.db.
+	purge := h.db.
 		Where("user_id = ? AND device_type = ? AND token <> ?", userID, req.DeviceType, req.Token).
-		Delete(&models.PushToken{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		Delete(&models.PushToken{})
+	if purge.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": purge.Error.Error()})
 		return
+	}
+	if purge.RowsAffected > 0 {
+		slog.Info("push_trace",
+			"event", "push_trace",
+			"phase", "register_purge",
+			"source", "mobile_register",
+			"userId", userID,
+			"deviceType", req.DeviceType,
+			"purged", purge.RowsAffected,
+		)
+		notification.RecordPushTrace(notification.PushTraceEvent{
+			Phase:      "register_purge",
+			Source:     "mobile_register",
+			UserID:     userID,
+			DeviceType: string(req.DeviceType),
+			Detail:     fmt.Sprintf("purged=%d stale tokens", purge.RowsAffected),
+		})
 	}
 
 	var existing models.PushToken
@@ -74,10 +94,19 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		masked := maskPushToken(req.Token)
+		notification.RecordPushTrace(notification.PushTraceEvent{
+			Phase:       "register_ok",
+			Source:      "mobile_register",
+			UserID:      userID,
+			DeviceType:  string(req.DeviceType),
+			MaskedToken: masked,
+			Detail:      "updated existing token",
+		})
 		c.JSON(http.StatusOK, gin.H{
 			"message":     "push token updated",
 			"deviceType":  req.DeviceType,
-			"maskedToken": maskPushToken(req.Token),
+			"maskedToken": masked,
 		})
 		return
 	}
@@ -104,10 +133,19 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		return
 	}
 
+	masked := maskPushToken(req.Token)
+	notification.RecordPushTrace(notification.PushTraceEvent{
+		Phase:       "register_ok",
+		Source:      "mobile_register",
+		UserID:      userID,
+		DeviceType:  string(req.DeviceType),
+		MaskedToken: masked,
+		Detail:      "created new token",
+	})
 	c.JSON(http.StatusCreated, gin.H{
 		"message":     "push token registered",
 		"deviceType":  req.DeviceType,
-		"maskedToken": maskPushToken(req.Token),
+		"maskedToken": masked,
 	})
 }
 

@@ -229,6 +229,8 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 
 				// Direct push + email from admin dashboard
 				admin.POST("/notifications", adminHandler.SendNotification)
+				admin.GET("/push-trace", adminHandler.GetPushTrace)
+				admin.GET("/push-tokens", adminHandler.GetPushTokens)
 
 				// Users
 				admin.GET("/users", adminHandler.GetUsers)
