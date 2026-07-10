@@ -1,6 +1,6 @@
 "use client";
 
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { LogOut, Shield, Smartphone, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LogstackLogo } from "@/components/brand/logstack-logo";
@@ -9,7 +9,6 @@ import { SidebarUsage } from "./sidebar-usage";
 import { SlideMenuDrawer } from "./slide-menu-drawer";
 import { NavLinkList } from "./nav-link-list";
 import {
-  authNavActions,
   dashboardNavItems,
   resourceNavLinks,
   type NavLink,
@@ -19,12 +18,14 @@ interface MobileNavDrawerProps {
   open: boolean;
   onClose: () => void;
   onLinkMobile: () => void;
+  onRequestSignOut: () => void;
 }
 
 export function MobileNavDrawer({
   open,
   onClose,
   onLinkMobile,
+  onRequestSignOut,
 }: MobileNavDrawerProps) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
@@ -71,8 +72,8 @@ export function MobileNavDrawer({
               size="sm"
               className="h-10 text-destructive hover:text-destructive"
               onClick={() => {
-                localStorage.removeItem("currentProjectId");
-                signOut({ callbackUrl: authNavActions.signIn.href });
+                onClose();
+                onRequestSignOut();
               }}
             >
               <LogOut className="mr-2 h-4 w-4" />

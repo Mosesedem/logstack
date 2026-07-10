@@ -6,6 +6,15 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "tech.logstack.mobile"
     compileSdk = flutter.compileSdkVersion
@@ -22,21 +31,44 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "tech.logstack.mobile"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            val storeFilePath = keystoreProperties["storeFile"] as String?
+            val storePassword = keystoreProperties["storePassword"] as String?
+            val keyAlias = keystoreProperties["keyAlias"] as String?
+            val keyPassword = keystoreProperties["keyPassword"] as String?
+            if (
+                !storeFilePath.isNullOrBlank() &&
+                !storePassword.isNullOrBlank() &&
+                !keyAlias.isNullOrBlank() &&
+                !keyPassword.isNullOrBlank()
+            ) {
+                this.storeFile = file(storeFilePath.trim())
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            val releaseConfig = signingConfigs.findByName("release")
+            val hasReleaseKey =
+                releaseConfig?.storeFile != null && releaseConfig.storeFile!!.exists()
+            signingConfig = if (hasReleaseKey) {
+                releaseConfig
+            } else {
+                // Fallback so local release builds still work without upload keystore
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { LogOut, User, Menu, Smartphone } from "lucide-react";
 import { LogstackLogo } from "@/components/brand/logstack-logo";
 import { ProjectSwitcher } from "./project-switcher";
@@ -15,17 +15,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LinkMobileDialog } from "@/components/auth/link-mobile-dialog";
-import { authNavActions } from "@/lib/navigation";
+import { LogoutConfirmDialog } from "@/components/auth/logout-confirm-dialog";
 
 export function Header() {
   const { data: session } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [linkMobileOpen, setLinkMobileOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
-  const handleSignOut = () => {
-    localStorage.removeItem("currentProjectId");
-    signOut({ callbackUrl: authNavActions.signIn.href });
-  };
+  const requestSignOut = () => setLogoutConfirmOpen(true);
 
   return (
     <>
@@ -82,7 +80,7 @@ export function Header() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="cursor-pointer gap-2 text-destructive focus:text-destructive"
-                onSelect={handleSignOut}
+                onSelect={requestSignOut}
               >
                 <LogOut className="h-4 w-4" />
                 Sign out
@@ -114,7 +112,7 @@ export function Header() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="cursor-pointer gap-2 text-destructive focus:text-destructive"
-                onSelect={handleSignOut}
+                onSelect={requestSignOut}
               >
                 <LogOut className="h-4 w-4" />
                 Sign out
@@ -128,9 +126,14 @@ export function Header() {
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
         onLinkMobile={() => setLinkMobileOpen(true)}
+        onRequestSignOut={requestSignOut}
       />
 
       <LinkMobileDialog open={linkMobileOpen} onOpenChange={setLinkMobileOpen} />
+      <LogoutConfirmDialog
+        open={logoutConfirmOpen}
+        onOpenChange={setLogoutConfirmOpen}
+      />
     </>
   );
 }

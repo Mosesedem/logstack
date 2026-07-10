@@ -157,7 +157,10 @@ export default function AdminPlansPage() {
           empty={items.length === 0}
         >
           {items.map((p) => {
-            const prices = parseJsonField(p.prices, {} as Record<string, number>);
+            const prices = parseJsonField(
+              p.prices,
+              {} as Record<string, number>,
+            );
             return (
               <tr
                 key={p.id}
@@ -390,10 +393,7 @@ function PlanDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={onSubmit}
-            disabled={saving || !form.name.trim()}
-          >
+          <Button onClick={onSubmit} disabled={saving || !form.name.trim()}>
             {saving ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
