@@ -192,6 +192,8 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 	emailOK, pushOK := 0, 0
 	emailFail, pushFail := 0, 0
 	pushTokensFound, pushDevicesSent := 0, 0
+	pushIOSTokens, pushIOSSent, pushIOSFailed := 0, 0, 0
+	pushAndroidTokens, pushAndroidSent, pushAndroidFailed := 0, 0, 0
 	var failures []string
 
 	emailN := h.notifier.GetEmailNotifier()
@@ -246,6 +248,12 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 				if detail != nil {
 					pushTokensFound += detail.TokensFound
 					pushDevicesSent += detail.Sent
+					pushIOSTokens += detail.IOSTokens
+					pushIOSSent += detail.IOSSent
+					pushIOSFailed += detail.IOSFailed
+					pushAndroidTokens += detail.AndroidTokens
+					pushAndroidSent += detail.AndroidSent
+					pushAndroidFailed += detail.AndroidFailed
 					if len(detail.Errors) > 0 {
 						for _, pe := range detail.Errors {
 							failures = append(failures, fmt.Sprintf("push user=%d: %s", t.userID, pe))
@@ -279,14 +287,20 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 	)
 
 	results := gin.H{
-		"emailSent":       emailOK,
-		"emailFailed":     emailFail,
-		"pushSent":        pushOK,
-		"pushFailed":      pushFail,
-		"pushTokensFound": pushTokensFound,
-		"pushDevicesSent": pushDevicesSent,
-		"recipients":      len(targets),
-		"fcmEnabled":      pushN != nil && pushN.IsEnabled(),
+		"emailSent":           emailOK,
+		"emailFailed":         emailFail,
+		"pushSent":            pushOK,
+		"pushFailed":          pushFail,
+		"pushTokensFound":     pushTokensFound,
+		"pushDevicesSent":     pushDevicesSent,
+		"pushIOSTokens":       pushIOSTokens,
+		"pushIOSSent":         pushIOSSent,
+		"pushIOSFailed":       pushIOSFailed,
+		"pushAndroidTokens":   pushAndroidTokens,
+		"pushAndroidSent":     pushAndroidSent,
+		"pushAndroidFailed":   pushAndroidFailed,
+		"recipients":          len(targets),
+		"fcmEnabled":          pushN != nil && pushN.IsEnabled(),
 	}
 	if len(failures) > 0 {
 		if len(failures) > 20 {

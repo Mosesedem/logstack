@@ -176,28 +176,26 @@ func TestFCMMessagePayloadStructure(t *testing.T) {
 		title := rapid.String().Draw(t, "title")
 		body := rapid.String().Draw(t, "body")
 
-		msg := buildFCMMessage(tok, title, body, nil)
-
-		if msg.APNS == nil {
-			t.Fatal("APNS config must not be nil")
-		}
-		if msg.APNS.Headers["apns-priority"] != "10" {
-			t.Fatalf("expected apns-priority=10, got %q", msg.APNS.Headers["apns-priority"])
-		}
-		if msg.APNS.Headers["apns-topic"] != iosBundleID {
-			t.Fatalf("expected apns-topic=%s, got %q", iosBundleID, msg.APNS.Headers["apns-topic"])
-		}
-		if msg.APNS.Payload == nil || msg.APNS.Payload.Aps == nil {
-			t.Fatal("APNS.Payload.Aps must not be nil")
-		}
-		if msg.APNS.Payload.Aps.Sound != "default" {
-			t.Fatalf("expected APNS sound=default, got %q", msg.APNS.Payload.Aps.Sound)
-		}
-		if msg.Android == nil {
+		androidMsg := buildFCMMessage(models.DeviceTypeAndroid, tok, title, body, nil)
+		if androidMsg.Android == nil {
 			t.Fatal("Android config must not be nil")
 		}
-		if msg.Android.Priority != "high" {
-			t.Fatalf("expected Android priority=high, got %q", msg.Android.Priority)
+		if androidMsg.Android.Priority != "high" {
+			t.Fatalf("expected Android priority=high, got %q", androidMsg.Android.Priority)
+		}
+		if androidMsg.APNS != nil {
+			t.Fatal("Android message must not include APNS overrides")
+		}
+
+		iosMsg := buildFCMMessage(models.DeviceTypeIOS, tok, title, body, nil)
+		if iosMsg.Notification == nil || iosMsg.Notification.Title != truncateUTF8Bytes(title, 200) {
+			t.Fatal("iOS message must include top-level notification for FCM APNS conversion")
+		}
+		if iosMsg.Android != nil {
+			t.Fatal("iOS message must not include Android overrides")
+		}
+		if iosMsg.APNS != nil {
+			t.Fatal("iOS message must rely on FCM notification conversion (no custom APNS block)")
 		}
 	})
 }

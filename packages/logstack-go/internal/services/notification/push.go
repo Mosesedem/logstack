@@ -75,16 +75,29 @@ func (p *PushNotifier) IsEnabled() bool {
 	return p != nil && p.client != nil
 }
 
-const iosBundleID = "tech.logstack.mobile"
+// buildFCMMessage constructs a per-platform Firebase message.
+//
+// iOS: notification + data only — same shape Firebase Console uses. Custom APNS
+// overrides (manual topic, duplicate alert blocks, content-available) caused FCM
+// to accept the message while APNs never displayed it on device.
+//
+// Android: high-priority notification channel for reliable delivery.
+// Title/body are duplicated into Data so Flutter can render foreground alerts.
+func buildFCMMessage(
+	deviceType models.DeviceType,
+	token, title, body string,
+	data map[string]string,
+) *messaging.Message {
+	displayTitle := title
+	displayBody := body
+	if deviceType == models.DeviceTypeIOS {
+		displayTitle = truncateUTF8Bytes(title, 200)
+		displayBody = truncateUTF8Bytes(body, 1500)
+	}
 
-// buildFCMMessage constructs a Firebase messaging.Message with the correct
-// iOS (APNS) and Android priority settings for reliable delivery.
-// Title/body are duplicated into Data so the Flutter client can always render
-// a local notification in the foreground (data-only recovery path).
-func buildFCMMessage(token string, title, body string, data map[string]string) *messaging.Message {
 	payload := map[string]string{
-		"title": title,
-		"body":  body,
+		"title": displayTitle,
+		"body":  displayBody,
 	}
 	for k, v := range data {
 		if k == "" {
@@ -93,55 +106,62 @@ func buildFCMMessage(token string, title, body string, data map[string]string) *
 		payload[k] = v
 	}
 
-	return &messaging.Message{
+	msg := &messaging.Message{
 		Token: token,
 		Notification: &messaging.Notification{
-			Title: title,
-			Body:  body,
+			Title: displayTitle,
+			Body:  displayBody,
 		},
 		Data: payload,
-		Android: &messaging.AndroidConfig{
+	}
+
+	if deviceType == models.DeviceTypeAndroid {
+		msg.Android = &messaging.AndroidConfig{
 			Priority: "high",
 			Notification: &messaging.AndroidNotification{
 				// Must match the channel created by the mobile app
 				// (NotificationService: logstack_alerts_default).
-				ChannelID:            "logstack_alerts_default",
-				Icon:                 "ic_launcher_monochrome",
-				Color:                "#3B82F6",
-				Sound:                "default",
-				Priority:             messaging.PriorityHigh,
-				DefaultSound:         true,
+				ChannelID:             "logstack_alerts_default",
+				Icon:                  "ic_launcher_monochrome",
+				Color:                 "#3B82F6",
+				Sound:                 "default",
+				Priority:              messaging.PriorityHigh,
+				DefaultSound:          true,
 				DefaultVibrateTimings: true,
 			},
-		},
-		APNS: &messaging.APNSConfig{
-			Headers: map[string]string{
-				// Required by APNs HTTP/2 for user-visible alerts.
-				"apns-priority":  "10",
-				"apns-push-type": "alert",
-				"apns-topic":     iosBundleID,
-			},
-			Payload: &messaging.APNSPayload{
-				Aps: &messaging.Aps{
-					// Explicit alert — do not rely only on the top-level Notification
-					// conversion (unreliable for some iOS + FCM combinations).
-					Alert: &messaging.ApsAlert{
-						Title: title,
-						Body:  body,
-					},
-					Sound: "default",
-				},
-			},
-		},
+		}
 	}
+
+	return msg
+}
+
+func truncateUTF8Bytes(s string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	b := []byte(s)
+	if len(b) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && b[cut]&0xC0 == 0x80 {
+		cut--
+	}
+	return string(b[:cut]) + "..."
 }
 
 // DirectPushResult summarizes a SendDirect attempt for admin diagnostics.
 type DirectPushResult struct {
-	TokensFound int
-	Sent        int
-	Failed      int
-	Errors      []string
+	TokensFound   int
+	Sent          int
+	Failed        int
+	IOSTokens     int
+	IOSSent       int
+	IOSFailed     int
+	AndroidTokens int
+	AndroidSent   int
+	AndroidFailed int
+	Errors        []string
 }
 
 // SendDirect delivers a push notification to every device registered for [userID].
@@ -191,10 +211,23 @@ func (p *PushNotifier) SendDirectDetailed(
 	}
 
 	for _, token := range tokens {
-		message := buildFCMMessage(token.Token, title, body, data)
+		switch token.DeviceType {
+		case models.DeviceTypeIOS:
+			result.IOSTokens++
+		case models.DeviceTypeAndroid:
+			result.AndroidTokens++
+		}
+
+		message := buildFCMMessage(token.DeviceType, token.Token, title, body, data)
 		response, err := p.client.Send(ctx, message)
 		if err != nil {
 			result.Failed++
+			switch token.DeviceType {
+			case models.DeviceTypeIOS:
+				result.IOSFailed++
+			case models.DeviceTypeAndroid:
+				result.AndroidFailed++
+			}
 			errMsg := err.Error()
 			if checker(err) {
 				if delErr := p.db.Where("token = ?", token.Token).Delete(&models.PushToken{}).Error; delErr != nil {
@@ -221,6 +254,12 @@ func (p *PushNotifier) SendDirectDetailed(
 			continue
 		}
 		result.Sent++
+		switch token.DeviceType {
+		case models.DeviceTypeIOS:
+			result.IOSSent++
+		case models.DeviceTypeAndroid:
+			result.AndroidSent++
+		}
 		slog.Info("direct push sent",
 			"userId", userID,
 			"deviceType", token.DeviceType,
@@ -235,6 +274,20 @@ func (p *PushNotifier) SendDirectDetailed(
 			detail = detail + ": " + strings.Join(result.Errors, "; ")
 		}
 		return reportErr(fmt.Errorf("%s", detail))
+	}
+	if result.Failed > 0 {
+		partialErr := fmt.Errorf(
+			"partial device delivery: sent=%d failed=%d (ios %d/%d, android %d/%d): %s",
+			result.Sent,
+			result.Failed,
+			result.IOSSent,
+			result.IOSTokens,
+			result.AndroidSent,
+			result.AndroidTokens,
+			strings.Join(result.Errors, "; "),
+		)
+		ReportPushFailure(ctx, p.email, source, userID, title, body, partialErr, result)
+		return result, partialErr
 	}
 	return result, nil
 }
