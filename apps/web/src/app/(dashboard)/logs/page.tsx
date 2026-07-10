@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Wifi, WifiOff, AlertCircle, RefreshCw } from "lucide-react";
+import { Wifi, AlertCircle, RefreshCw } from "lucide-react";
 
 import { useProject } from "@/hooks/use-project";
 import { useWebSocket } from "@/hooks/use-websocket";
@@ -87,13 +87,7 @@ export default function LogsPage() {
   });
 
   // Live stream for the selected project.
-  const {
-    logs: realtimeLogs,
-    isConnected,
-    isUnavailable: streamUnavailable,
-    error: streamError,
-    retry: retryStream,
-  } = useWebSocket({ projectId });
+  const { logs: realtimeLogs, isConnected } = useWebSocket({ projectId });
 
   // Merge realtime + paginated logs, dedupe by id (realtime wins), apply the
   // active filters to realtime entries too, sort newest-first, and cap.
@@ -166,39 +160,15 @@ export default function LogsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div
-            className="flex items-center gap-2 text-sm text-muted-foreground"
-            title={
-              isConnected
-                ? "Live stream connected"
-                : streamUnavailable
-                  ? streamError?.message ||
-                    "Live stream unavailable — REST logs still work"
-                  : streamError?.message || "Reconnecting to live stream…"
-            }
-          >
-            {isConnected ? (
+          {isConnected ? (
+            <div
+              className="flex items-center gap-2 text-sm text-muted-foreground"
+              title="Live stream connected"
+            >
               <Wifi className="h-4 w-4 text-green-500" />
-            ) : (
-              <WifiOff className="h-4 w-4 text-muted-foreground" />
-            )}
-            {isConnected
-              ? "Live"
-              : streamUnavailable
-                ? "Stream offline"
-                : "Reconnecting…"}
-            {streamUnavailable ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2"
-                onClick={retryStream}
-              >
-                <RefreshCw className="mr-1 h-3 w-3" />
-                Retry
-              </Button>
-            ) : null}
-          </div>
+              Live
+            </div>
+          ) : null}
 
           <Button variant="outline" size="sm" onClick={sendTestLog}>
             Send test log
