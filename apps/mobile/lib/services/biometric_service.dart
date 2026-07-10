@@ -14,7 +14,11 @@ class BiometricService {
 
   Future<bool> isAvailable() async {
     try {
-      return await _auth.canCheckBiometrics || await _auth.isDeviceSupported();
+      final canCheck = await _auth.canCheckBiometrics;
+      final supported = await _auth.isDeviceSupported();
+      if (!canCheck && !supported) return false;
+      final enrolled = await _auth.getAvailableBiometrics();
+      return enrolled.isNotEmpty || supported;
     } catch (_) {
       return false;
     }
@@ -33,6 +37,8 @@ class BiometricService {
         options: const AuthenticationOptions(
           biometricOnly: false,
           stickyAuth: true,
+          useErrorDialogs: true,
+          sensitiveTransaction: true,
         ),
       );
     } catch (_) {

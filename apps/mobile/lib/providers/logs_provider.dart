@@ -146,14 +146,24 @@ class LogsNotifier extends StateNotifier<LogsState> {
                 isStreamUnavailable: true,
               ));
         case StreamConnectionStatus.connecting:
-          _patchState((s) => s.copyWith(
-                isStreamUnavailable: false,
-                // keep isLive if already true
-              ));
+          // If we were already unavailable, stay unavailable until live —
+          // do not flip the banner back to infinite "Reconnecting…".
+          _patchState((s) {
+            if (s.isStreamUnavailable) return s;
+            return s.copyWith(
+              isStreamUnavailable: false,
+              // keep isLive if already true
+            );
+          });
         case StreamConnectionStatus.disconnected:
-          // Only drop live if we are not mid-reconnect with recent data.
-          // Banner will show reconnecting only when isLive is already false.
-          break;
+          // Drop live immediately so the banner does not claim "connected".
+          // After several failures the service emits unavailable instead.
+          _patchState((s) {
+            if (s.isLive) {
+              return s.copyWith(isLive: false);
+            }
+            return s;
+          });
       }
     });
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {

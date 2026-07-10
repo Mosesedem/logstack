@@ -7,21 +7,30 @@ import { Log } from '@/types'
 interface UseWebSocketOptions {
   projectId?: string
   enabled?: boolean
+  /** Stop auto-reconnect after this many failures (default 5). */
+  maxReconnectAttempts?: number
 }
+
+export type StreamStatus =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'unavailable'
 
 interface UseWebSocketReturn {
   logs: Log[]
   isConnected: boolean
+  /** True after max reconnect attempts without success. */
+  isUnavailable: boolean
+  streamStatus: StreamStatus
   error: Error | null
+  /** Manual retry after unavailable. */
+  retry: () => void
 }
 
 /**
  * Build a WebSocket base URL ending in `/v1` (no trailing `/stream`).
- *
- * Production mistakes that used to break dashboard realtime while mobile worked:
- * - `NEXT_PUBLIC_WS_URL=…/api/v1` (nginx `/api/` location had no Upgrade headers)
- * - `…/v1/stream` already appended (hook would produce `/stream/stream`)
- * - http vs ws scheme mismatch
  */
 export function resolveWebSocketBaseUrl(): string {
   const raw =
@@ -31,19 +40,14 @@ export function resolveWebSocketBaseUrl(): string {
 
   let url = raw.trim().replace(/\/+$/, '')
 
-  // Legacy /api/v1 → /v1 (backend + nginx WS upgrade live under /v1)
   url = url.replace(/\/api\/v1(?=\/|$)/, '/v1')
-
-  // If someone set …/v1/stream, strip the path suffix — we append /stream ourselves
   url = url.replace(/\/stream$/i, '')
 
-  // http(s) → ws(s)
   if (url.startsWith('https://')) {
     url = 'wss://' + url.slice('https://'.length)
   } else if (url.startsWith('http://')) {
     url = 'ws://' + url.slice('http://'.length)
   } else if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
-    // Bare host or path — prefer secure when the page is https
     const scheme =
       typeof window !== 'undefined' && window.location.protocol === 'https:'
         ? 'wss'
@@ -51,7 +55,6 @@ export function resolveWebSocketBaseUrl(): string {
     url = `${scheme}://${url.replace(/^\/\//, '')}`
   }
 
-  // Ensure /v1 prefix exists for logstack API
   try {
     const parsed = new URL(url)
     if (!parsed.pathname || parsed.pathname === '/') {
@@ -68,26 +71,34 @@ export function resolveWebSocketBaseUrl(): string {
 export function useWebSocket({
   projectId,
   enabled = true,
+  maxReconnectAttempts = 5,
 }: UseWebSocketOptions): UseWebSocketReturn {
   const { data: session } = useSession()
   const [logs, setLogs] = useState<Log[]>([])
   const [isConnected, setIsConnected] = useState(false)
+  const [isUnavailable, setIsUnavailable] = useState(false)
+  const [streamStatus, setStreamStatus] = useState<StreamStatus>('idle')
   const [error, setError] = useState<Error | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   )
   const intentionalCloseRef = useRef(false)
+  const attemptsRef = useRef(0)
+  const connectRef = useRef<() => void>(() => {})
 
-  const connect = useCallback(() => {
-    if (!projectId || !session?.accessToken || !enabled) return
-
-    // Close any previous socket before opening a new one
-    intentionalCloseRef.current = true
+  const clearReconnectTimer = () => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = undefined
     }
+  }
+
+  const connect = useCallback(() => {
+    if (!projectId || !session?.accessToken || !enabled) return
+
+    intentionalCloseRef.current = true
+    clearReconnectTimer()
     if (wsRef.current) {
       try {
         wsRef.current.close(1000, 'reconnect')
@@ -98,8 +109,9 @@ export function useWebSocket({
     }
     intentionalCloseRef.current = false
 
-    // Browsers cannot set Authorization on WebSocket — use query token.
-    // Endpoint: GET /v1/stream (WSAuth), same as mobile.
+    setStreamStatus(attemptsRef.current > 0 ? 'reconnecting' : 'connecting')
+    setIsUnavailable(false)
+
     const base = resolveWebSocketBaseUrl()
     const params = new URLSearchParams({
       projectId,
@@ -112,16 +124,27 @@ export function useWebSocket({
       ws = new WebSocket(wsUrl)
     } catch (e) {
       setError(
-        e instanceof Error
-          ? e
-          : new Error('Failed to open WebSocket'),
+        e instanceof Error ? e : new Error('Failed to open WebSocket'),
       )
       setIsConnected(false)
+      attemptsRef.current += 1
+      if (attemptsRef.current >= maxReconnectAttempts) {
+        setIsUnavailable(true)
+        setStreamStatus('unavailable')
+      } else {
+        setStreamStatus('reconnecting')
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connectRef.current()
+        }, Math.min(1000 * 2 ** (attemptsRef.current - 1), 8000))
+      }
       return
     }
 
     ws.onopen = () => {
+      attemptsRef.current = 0
       setIsConnected(true)
+      setIsUnavailable(false)
+      setStreamStatus('connected')
       setError(null)
     }
 
@@ -130,13 +153,11 @@ export function useWebSocket({
         const raw: string =
           typeof event.data === 'string' ? event.data : String(event.data)
         const newLogs: Log[] = []
-        // Server may batch multiple JSON logs separated by \n in one frame.
         for (const line of raw.split('\n')) {
           const trimmed = line.trim()
           if (!trimmed) continue
           try {
             const parsed = JSON.parse(trimmed) as Record<string, unknown>
-            // Skip control frames e.g. {"type":"error",...}
             if (parsed.type && !parsed.id) continue
             if (typeof parsed.id !== 'number' && typeof parsed.id !== 'string') {
               continue
@@ -147,7 +168,9 @@ export function useWebSocket({
           }
         }
         if (newLogs.length > 0) {
-          // Prepend reversed so newest in batch appears first
+          setIsConnected(true)
+          setIsUnavailable(false)
+          setStreamStatus('connected')
           setLogs((prev) =>
             [...[...newLogs].reverse(), ...prev].slice(0, 100),
           )
@@ -172,16 +195,35 @@ export function useWebSocket({
           ),
         )
       }
-      // Reconnect after 3 seconds
+
+      attemptsRef.current += 1
+      if (attemptsRef.current >= maxReconnectAttempts) {
+        setIsUnavailable(true)
+        setStreamStatus('unavailable')
+        return
+      }
+
+      setStreamStatus('reconnecting')
+      const delay = Math.min(1000 * 2 ** (attemptsRef.current - 1), 8000)
       reconnectTimeoutRef.current = setTimeout(() => {
-        connect()
-      }, 3000)
+        connectRef.current()
+      }, delay)
     }
 
     wsRef.current = ws
-  }, [projectId, session?.accessToken, enabled])
+  }, [projectId, session?.accessToken, enabled, maxReconnectAttempts])
+
+  connectRef.current = connect
+
+  const retry = useCallback(() => {
+    attemptsRef.current = 0
+    setIsUnavailable(false)
+    setError(null)
+    connect()
+  }, [connect])
 
   useEffect(() => {
+    attemptsRef.current = 0
     connect()
 
     return () => {
@@ -194,17 +236,22 @@ export function useWebSocket({
         }
         wsRef.current = null
       }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = undefined
-      }
+      clearReconnectTimer()
     }
   }, [connect])
 
-  // Clear logs when project changes
   useEffect(() => {
     setLogs([])
+    attemptsRef.current = 0
+    setIsUnavailable(false)
   }, [projectId])
 
-  return { logs, isConnected, error }
+  return {
+    logs,
+    isConnected,
+    isUnavailable,
+    streamStatus,
+    error,
+    retry,
+  }
 }

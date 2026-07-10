@@ -16,12 +16,14 @@ import {
   Mail,
   BarChart3,
   ScrollText,
+  Send,
 } from "lucide-react";
 
 const navItems = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/projects", label: "Projects", icon: FolderGit2 },
+  { href: "/admin/notifications", label: "Notifications", icon: Send },
   { href: "/admin/plans", label: "Pricing plans", icon: Tags },
   { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard },
   { href: "/admin/invoices", label: "Invoices", icon: Receipt },

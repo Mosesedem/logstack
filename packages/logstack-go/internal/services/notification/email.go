@@ -169,6 +169,11 @@ func (e *EmailNotifier) Send(ctx context.Context, rule *models.AlertRule, log *m
 }
 
 // SendTestEmail delivers a test message through the provider chain (Brevo → Resend → …).
+// SendDirect sends an arbitrary HTML email (admin notifications, system mail).
+func (e *EmailNotifier) SendDirect(ctx context.Context, to, toName, subject, htmlBody string) error {
+	return e.sendEmail(ctx, to, toName, subject, htmlBody)
+}
+
 func (e *EmailNotifier) SendTestEmail(ctx context.Context, to string) error {
 	subject := "[Logstack] Test email"
 	htmlBody := `<h2>Logstack test email</h2>

@@ -76,6 +76,7 @@
 
 | Date       | Change                                                                                                                                                                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-10 | **Swift fixes:** live stream no longer infinite reconnect (mobile+web); Android biometrics (FlutterFragmentActivity + permissions); brand icons resynced from `assets/`; admin push/email compose at `/admin/notifications`. |
 | 2026-07-10 | **Admin full platform CRUD:** DB-backed pricing plans (seeded); admin APIs + UI for plans, subscriptions, invoices, orgs/members, alerts, invites, usage, audit (plus users/projects); public pricing reads from DB. |
 | 2026-07-10 | **Admin dashboard:** auto-seed `ADMIN_EMAILS` (default `mosesedem81@gmail.com`) on API startup; role in session + auth redirects; admin UI with create/edit/delete. |
 | 2026-07-10 | **Web dashboard loading states:** shared shimmer skeletons (`components/loading/*`) matching real layouts for logs, overview, projects, alerts, billing, settings/team/audit, admin; log list distinguishes initial skeleton vs “load more” spinner. |

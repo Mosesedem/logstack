@@ -60,7 +60,12 @@ class AppLockService {
 
   Future<bool> isBiometricAvailable() async {
     try {
-      return await _auth.canCheckBiometrics || await _auth.isDeviceSupported();
+      final canCheck = await _auth.canCheckBiometrics;
+      final supported = await _auth.isDeviceSupported();
+      if (!canCheck && !supported) return false;
+      // On Android, canCheckBiometrics can be true with no enrolled biometrics.
+      final enrolled = await _auth.getAvailableBiometrics();
+      return enrolled.isNotEmpty || supported;
     } catch (_) {
       return false;
     }
@@ -79,11 +84,16 @@ class AppLockService {
     if (!await isBiometricAvailable()) return false;
     biometricAuthInProgress = true;
     try {
+      // biometricOnly:false allows Android device credential fallback when the
+      // user dismisses biometrics or has none enrolled but has a screen lock.
+      // stickyAuth keeps the prompt alive across brief activity pauses (Android).
       return await _auth.authenticate(
         localizedReason: reason,
         options: const AuthenticationOptions(
-          biometricOnly: true,
+          biometricOnly: false,
           stickyAuth: true,
+          useErrorDialogs: true,
+          sensitiveTransaction: true,
         ),
       );
     } catch (_) {

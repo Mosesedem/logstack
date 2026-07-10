@@ -224,7 +224,11 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 			admin.Use(middleware.AdminOnly(cfg.DB))
 			{
 				adminHandler := handlers.NewAdminHandler(cfg.DB)
+				adminHandler.SetNotifier(cfg.NotificationService)
 				admin.GET("/stats", adminHandler.GetSystemStats)
+
+				// Direct push + email from admin dashboard
+				admin.POST("/notifications", adminHandler.SendNotification)
 
 				// Users
 				admin.GET("/users", adminHandler.GetUsers)

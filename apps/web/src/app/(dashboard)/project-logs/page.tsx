@@ -74,7 +74,12 @@ export default function LogsPage() {
   });
 
   // Live stream for the selected project.
-  const { logs: realtimeLogs, isConnected } = useWebSocket({ projectId });
+  const {
+    logs: realtimeLogs,
+    isConnected,
+    isUnavailable: streamUnavailable,
+    retry: retryStream,
+  } = useWebSocket({ projectId });
 
   // Merge realtime + paginated logs, dedupe by id (realtime wins), apply the
   // active filters to realtime entries too, sort newest-first, and cap.
@@ -118,14 +123,33 @@ export default function LogsPage() {
         </div>
         <div
           className="flex items-center gap-2 text-sm text-muted-foreground"
-          title={isConnected ? "Live stream connected" : "Reconnecting…"}
+          title={
+            isConnected
+              ? "Live stream connected"
+              : streamUnavailable
+                ? "Live stream unavailable"
+                : "Reconnecting…"
+          }
         >
           {isConnected ? (
             <Wifi className="h-4 w-4 text-green-500" />
           ) : (
             <WifiOff className="h-4 w-4 text-muted-foreground" />
           )}
-          {isConnected ? "Live" : "Offline"}
+          {isConnected
+            ? "Live"
+            : streamUnavailable
+              ? "Stream offline"
+              : "Reconnecting…"}
+          {streamUnavailable ? (
+            <button
+              type="button"
+              className="underline text-xs"
+              onClick={retryStream}
+            >
+              Retry
+            </button>
+          ) : null}
         </div>
       </div>
 

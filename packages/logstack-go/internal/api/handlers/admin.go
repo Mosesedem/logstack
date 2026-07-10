@@ -10,15 +10,22 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/mosesedem/logstack/internal/models"
+	"github.com/mosesedem/logstack/internal/services/notification"
 	"gorm.io/gorm"
 )
 
 type AdminHandler struct {
-	db *gorm.DB
+	db       *gorm.DB
+	notifier *notification.Service
 }
 
 func NewAdminHandler(db *gorm.DB) *AdminHandler {
 	return &AdminHandler{db: db}
+}
+
+// SetNotifier attaches email/push delivery for admin broadcast endpoints.
+func (h *AdminHandler) SetNotifier(n *notification.Service) {
+	h.notifier = n
 }
 
 // ---------- Stats ----------

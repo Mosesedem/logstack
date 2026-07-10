@@ -90,7 +90,9 @@ export default function LogsPage() {
   const {
     logs: realtimeLogs,
     isConnected,
+    isUnavailable: streamUnavailable,
     error: streamError,
+    retry: retryStream,
   } = useWebSocket({ projectId });
 
   // Merge realtime + paginated logs, dedupe by id (realtime wins), apply the
@@ -169,8 +171,10 @@ export default function LogsPage() {
             title={
               isConnected
                 ? "Live stream connected"
-                : streamError?.message ||
-                  "Reconnecting to live stream… (check NEXT_PUBLIC_WS_URL is wss://api…/v1, not /api/v1)"
+                : streamUnavailable
+                  ? streamError?.message ||
+                    "Live stream unavailable — REST logs still work"
+                  : streamError?.message || "Reconnecting to live stream…"
             }
           >
             {isConnected ? (
@@ -178,7 +182,22 @@ export default function LogsPage() {
             ) : (
               <WifiOff className="h-4 w-4 text-muted-foreground" />
             )}
-            {isConnected ? "Live" : "Reconnecting"}
+            {isConnected
+              ? "Live"
+              : streamUnavailable
+                ? "Stream offline"
+                : "Reconnecting…"}
+            {streamUnavailable ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                onClick={retryStream}
+              >
+                <RefreshCw className="mr-1 h-3 w-3" />
+                Retry
+              </Button>
+            ) : null}
           </div>
 
           <Button variant="outline" size="sm" onClick={sendTestLog}>

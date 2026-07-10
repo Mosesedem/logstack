@@ -27,7 +27,9 @@ final logStreamServiceProvider = Provider<LogStreamService>((ref) {
 class LogStreamService {
   LogStreamService(this._storage, this._authService);
 
-  static const _maxFastRetries = 5;
+  /// After this many consecutive open failures, stop spinning and show
+  /// "unavailable" until the user taps Retry (or a 90s background retry).
+  static const _maxFastRetries = 4;
 
   final StorageService _storage;
   final AuthService _authService;
@@ -269,20 +271,109 @@ class LogStreamService {
     _attempt++;
     _consecutiveFailures++;
     if (_consecutiveFailures >= _maxFastRetries) {
+      // Stop the infinite "Reconnecting…" loop. REST logs still work.
       _emitStatus(StreamConnectionStatus.unavailable);
       _reconnectTimer?.cancel();
-      _reconnectTimer = Timer(const Duration(seconds: 60), () {
-        _consecutiveFailures = 0;
+      // Quiet background retry only — does not flip UI back to "Reconnecting…"
+      // until the socket actually connects (or user taps Retry).
+      _reconnectTimer = Timer(const Duration(seconds: 90), () {
+        if (_projectId == null) return;
+        // Keep consecutiveFailures high so failed background opens stay unavailable
+        // rather than thrashing the banner; only a successful _markLive resets it.
         _attempt = 0;
-        _open();
+        unawaited(_openQuiet());
       });
       return;
     }
 
-    _emitStatus(StreamConnectionStatus.disconnected);
+    // Show connecting (not ambiguous disconnected) so the banner can time out.
+    _emitStatus(StreamConnectionStatus.connecting);
     _reconnectTimer?.cancel();
-    final delay = Duration(seconds: (1 << _attempt.clamp(0, 4)).clamp(1, 16));
-    _reconnectTimer = Timer(delay, _open);
+    final delay = Duration(seconds: (1 << (_attempt - 1).clamp(0, 3)).clamp(1, 8));
+    _reconnectTimer = Timer(delay, () {
+      unawaited(_open());
+    });
+  }
+
+  /// Background re-open while UI already shows "unavailable". Does not emit
+  /// connecting (avoids bouncing the banner), only connected or stay unavailable.
+  Future<void> _openQuiet() async {
+    final projectId = _projectId;
+    if (projectId == null || _connecting) return;
+
+    final token = await _resolveAccessToken();
+    if (token == null || token.isEmpty) {
+      _emitStatus(StreamConnectionStatus.unavailable);
+      return;
+    }
+
+    final generation = ++_connectGeneration;
+    _connecting = true;
+
+    final url = AppConfig.logStreamUrl(projectId: projectId, token: token);
+    try {
+      final channel = IOWebSocketChannel.connect(
+        Uri.parse(url),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      _channel = channel;
+      _subscription = channel.stream.listen(
+        (event) {
+          if (generation != _connectGeneration) return;
+          _onMessage(event);
+        },
+        onError: (_) {
+          if (generation != _connectGeneration) return;
+          _connecting = false;
+          _emitStatus(StreamConnectionStatus.unavailable);
+          _scheduleQuietRetry();
+        },
+        onDone: () {
+          if (generation != _connectGeneration) return;
+          _connecting = false;
+          _emitStatus(StreamConnectionStatus.unavailable);
+          _scheduleQuietRetry();
+        },
+        cancelOnError: true,
+      );
+
+      unawaited(
+        channel.ready.timeout(const Duration(seconds: 15)).then((_) {
+          if (generation != _connectGeneration || _projectId != projectId) {
+            return;
+          }
+          _connecting = false;
+          _markLive();
+        }).catchError((_) {
+          if (generation != _connectGeneration || _projectId != projectId) {
+            return;
+          }
+          _connecting = false;
+          if (_emittedLiveForCurrent) {
+            _startKeepAlive();
+            return;
+          }
+          _emitStatus(StreamConnectionStatus.unavailable);
+          _scheduleQuietRetry();
+        }),
+      );
+    } catch (_) {
+      _connecting = false;
+      _channel = null;
+      if (generation == _connectGeneration) {
+        _emitStatus(StreamConnectionStatus.unavailable);
+        _scheduleQuietRetry();
+      }
+    }
+  }
+
+  void _scheduleQuietRetry() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(const Duration(seconds: 90), () {
+      if (_projectId != null && !_emittedLiveForCurrent) {
+        unawaited(_openQuiet());
+      }
+    });
   }
 
   void dispose() {
