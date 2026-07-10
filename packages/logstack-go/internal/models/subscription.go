@@ -166,114 +166,14 @@ func (s *Subscription) ToResponse() SubscriptionResponse {
 	}
 }
 
-// PricingTier represents the pricing information for a tier
+// PricingTier represents the pricing information for a tier (public API shape).
+// Editable catalogue lives in PricingPlan; see DefaultPricingTiers / LoadPricingTiers.
 type PricingTier struct {
-	Tier        SubscriptionTier `json:"tier"`
-	Name        string           `json:"name"`
-	Description string           `json:"description"`
-	LogLimit    int64            `json:"logLimit"`
-	Features    []string         `json:"features"`
-	Prices      map[string]int   `json:"prices"` // Currency -> amount in cents
+	Tier        SubscriptionTier  `json:"tier"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	LogLimit    int64             `json:"logLimit"`
+	Features    []string          `json:"features"`
+	Prices      map[string]int    `json:"prices"` // Currency -> amount in cents
 	Limits      map[string]string `json:"limits"` // Human-readable limits
-}
-
-// GetPricingTiers returns all available pricing tiers
-func GetPricingTiers() []PricingTier {
-	return []PricingTier{
-		{
-			Tier:        TierFree,
-			Name:        "Free",
-			Description: "Perfect for personal projects and getting started",
-			LogLimit:    10_000,
-			Features: []string{
-				"10,000 logs per month",
-				"7-day log retention",
-				"1 project",
-				"Email alerts",
-				"Community support",
-			},
-			Prices: map[string]int{
-				"USD": 0,
-				"NGN": 0,
-			},
-			Limits: map[string]string{
-				"logs":      "10,000/month",
-				"retention": "7 days",
-				"projects":  "1 project",
-			},
-		},
-		{
-			Tier:        TierStarter,
-			Name:        "Starter",
-			Description: "For small teams and growing applications",
-			LogLimit:    500_000,
-			Features: []string{
-				"500,000 logs per month",
-				"30-day log retention",
-				"3 projects",
-				"Up to 3 team members",
-				"Email & Slack alerts",
-				"Priority support",
-				"API access",
-			},
-			Prices: map[string]int{
-				"USD": 1500,  // $15.00
-				"NGN": 12000, // ₦12,000
-			},
-			Limits: map[string]string{
-				"logs":      "500,000/month",
-				"retention": "30 days",
-				"projects":  "3 projects",
-			},
-		},
-		{
-			Tier:        TierPro,
-			Name:        "Pro",
-			Description: "For larger teams with advanced needs",
-			LogLimit:    5_000_000,
-			Features: []string{
-				"5,000,000 logs per month",
-				"90-day log retention",
-				"Unlimited projects",
-				"Up to 10 team members",
-				"All alert channels",
-				"Custom dashboards",
-				"Team collaboration",
-				"Priority support",
-			},
-			Prices: map[string]int{
-				"USD": 4900,  // $49.00
-				"NGN": 38000, // ₦38,000
-			},
-			Limits: map[string]string{
-				"logs":      "5M/month",
-				"retention": "90 days",
-				"projects":  "Unlimited",
-			},
-		},
-		{
-			Tier:        TierEnterprise,
-			Name:        "Enterprise",
-			Description: "Custom solutions for large organizations",
-			LogLimit:    -1, // Unlimited
-			Features: []string{
-				"Unlimited logs",
-				"Custom retention",
-				"Unlimited projects",
-				"SSO & SAML",
-				"Dedicated support",
-				"SLA guarantee",
-				"On-premise option",
-			},
-			Prices: map[string]int{
-				"USD": -1, // Contact sales
-				"NGN": -1,
-			},
-			Limits: map[string]string{
-				"logs":      "Unlimited",
-				"retention": "Custom",
-				"projects":  "Unlimited",
-			},
-		},
-	}
 }

@@ -32,7 +32,7 @@ func NewBillingHandler(billingService *services.BillingService, usageSyncWorker 
 // GetPricing returns the pricing tiers (public).
 // GET /v1/billing/pricing
 func (h *BillingHandler) GetPricing(c *gin.Context) {
-	tiers := models.GetPricingTiers()
+	tiers := models.LoadPricingTiers(h.db)
 	c.JSON(http.StatusOK, gin.H{
 		"tiers": tiers,
 		"currencies": []gin.H{
@@ -65,7 +65,7 @@ func (h *BillingHandler) GetBillingContext(c *gin.Context) {
 	}
 
 	ctx := h.billingService.GetBillingContext(&user)
-	tiers := services.FilterPricingTiersForCurrency(models.GetPricingTiers(), ctx.Currency)
+	tiers := services.FilterPricingTiersForCurrency(models.LoadPricingTiers(h.db), ctx.Currency)
 
 	c.JSON(http.StatusOK, gin.H{
 		"context": ctx,

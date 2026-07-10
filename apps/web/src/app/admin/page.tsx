@@ -9,6 +9,10 @@ import {
   FileText,
   CreditCard,
   Shield,
+  Tags,
+  Building2,
+  Bell,
+  Receipt,
 } from "lucide-react";
 import { apiClient, ApiClientError } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
@@ -16,17 +20,28 @@ import {
   PageHeaderSkeleton,
   StatsGridSkeleton,
 } from "@/components/loading";
-import type { AdminSystemStats } from "@/types";
+
+interface SystemStats {
+  totalUsers: number;
+  totalProjects: number;
+  totalLogs: number;
+  activeSubscriptions?: number;
+  adminUsers?: number;
+  totalOrganizations?: number;
+  totalInvoices?: number;
+  totalAlerts?: number;
+  pricingPlans?: number;
+}
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<AdminSystemStats | null>(null);
+  const [stats, setStats] = useState<SystemStats | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     async function loadStats() {
       try {
-        const data = await apiClient.get<AdminSystemStats>("/admin/stats");
+        const data = await apiClient.get<SystemStats>("/admin/stats");
         setStats(data);
       } catch (e: unknown) {
         console.error(e);
@@ -44,14 +59,14 @@ export default function AdminDashboard() {
     return (
       <div className="space-y-6 p-2" role="status" aria-label="Loading admin">
         <PageHeaderSkeleton withAction={false} />
-        <StatsGridSkeleton count={5} />
+        <StatsGridSkeleton count={9} />
       </div>
     );
   }
 
   const cards = [
     {
-      title: "Total Users",
+      title: "Users",
       value: stats?.totalUsers,
       icon: Users,
       href: "/admin/users",
@@ -69,14 +84,39 @@ export default function AdminDashboard() {
       href: "/admin/projects",
     },
     {
-      title: "Total Logs",
-      value: stats?.totalLogs,
-      icon: FileText,
+      title: "Pricing plans",
+      value: stats?.pricingPlans,
+      icon: Tags,
+      href: "/admin/plans",
     },
     {
-      title: "Paid Subs",
+      title: "Paid subs",
       value: stats?.activeSubscriptions,
       icon: CreditCard,
+      href: "/admin/subscriptions",
+    },
+    {
+      title: "Invoices",
+      value: stats?.totalInvoices,
+      icon: Receipt,
+      href: "/admin/invoices",
+    },
+    {
+      title: "Organizations",
+      value: stats?.totalOrganizations,
+      icon: Building2,
+      href: "/admin/organizations",
+    },
+    {
+      title: "Alerts",
+      value: stats?.totalAlerts,
+      icon: Bell,
+      href: "/admin/alerts",
+    },
+    {
+      title: "Total logs",
+      value: stats?.totalLogs,
+      icon: FileText,
     },
   ];
 
@@ -85,11 +125,11 @@ export default function AdminDashboard() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Admin Overview</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Platform-wide management. You have full CRUD access to users and
-          projects.
+          Full platform CRUD: users, projects, pricing, subscriptions, invoices,
+          organizations, alerts, invites, usage, and audit.
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {
           const Icon = card.icon;
           const content = (

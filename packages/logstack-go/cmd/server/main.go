@@ -51,6 +51,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Seed pricing catalogue if empty (admin-editable thereafter)
+	if err := redisdb.SeedPricingPlans(db); err != nil {
+		slog.Error("Failed to seed pricing plans", "error", err)
+		os.Exit(1)
+	}
+
 	// Connect to Redis
 	rdb, err := redisdb.NewRedis(cfg.RedisURL, cfg.RedisPoolSize)
 	if err != nil {

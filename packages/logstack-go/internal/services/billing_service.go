@@ -242,7 +242,7 @@ func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req
 		return nil, fmt.Errorf("currency %s is not available for your region; use %s", req.Currency, billingCtx.Currency)
 	}
 
-	tiers := models.GetPricingTiers()
+	tiers := models.LoadPricingTiers(s.db)
 	var amount int
 	var found bool
 	for _, tier := range tiers {
@@ -907,7 +907,7 @@ func (s *BillingService) HandlePolarWebhook(ctx context.Context, body []byte, we
 	return s.polar.HandleWebhook(ctx, body, webhookID, webhookTimestamp, webhookSignature)
 }
 
-// GetPricingTiers returns all available pricing tiers
+// GetPricingTiers returns all available pricing tiers (DB-backed when seeded).
 func (s *BillingService) GetPricingTiers() []models.PricingTier {
-	return models.GetPricingTiers()
+	return models.LoadPricingTiers(s.db)
 }

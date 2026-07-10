@@ -11,6 +11,32 @@ import (
 	"gorm.io/gorm"
 )
 
+// SeedPricingPlans inserts default plans when the catalogue is empty.
+// Existing rows are left untouched so admin edits persist across restarts.
+func SeedPricingPlans(db *gorm.DB) error {
+	var count int64
+	if err := db.Model(&models.PricingPlan{}).Count(&count).Error; err != nil {
+		return fmt.Errorf("count pricing plans: %w", err)
+	}
+	if count > 0 {
+		slog.Info("Pricing plans already seeded", "count", count)
+		return nil
+	}
+
+	defaults := models.DefaultPricingTiers()
+	for i, t := range defaults {
+		plan, err := models.PricingPlanFromTier(t, i)
+		if err != nil {
+			return fmt.Errorf("build pricing plan %s: %w", t.Tier, err)
+		}
+		if err := db.Create(&plan).Error; err != nil {
+			return fmt.Errorf("create pricing plan %s: %w", t.Tier, err)
+		}
+	}
+	slog.Info("Seeded default pricing plans", "count", len(defaults))
+	return nil
+}
+
 // SeedAdmins ensures every email in adminEmails has role=admin and is verified.
 // Existing users are promoted; missing users are created with a seed password
 // (adminSeedPassword when set, otherwise a one-time random password logged once).

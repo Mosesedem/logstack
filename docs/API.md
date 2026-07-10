@@ -618,16 +618,16 @@ clients. Requires JWT auth via the `Authorization` header.
 ## Admin
 
 All admin endpoints require JWT auth and platform `role: "admin"`.
-Admins have full CRUD over users and projects.
+Admins have **full CRUD** across the platform (users, projects, pricing plans,
+subscriptions, invoices, organizations/members, alerts, invites, usage, audit).
 
-On API startup, emails in `ADMIN_EMAILS` (default `mosesedem81@gmail.com`) are
-auto-seeded as admins (promoted if they exist, created if not).
+On API startup:
+- emails in `ADMIN_EMAILS` (default `mosesedem81@gmail.com`) are seeded as admins
+- empty `pricing_plans` table is seeded from default Free/Starter/Pro/Enterprise
+
+Public `GET /billing/pricing` reads active plans from the DB.
 
 ### GET /admin/stats
-
-System-wide statistics.
-
-**Response `200`:**
 
 ```json
 {
@@ -635,45 +635,32 @@ System-wide statistics.
   "totalProjects": 3287,
   "totalLogs": 45234567,
   "activeSubscriptions": 234,
-  "adminUsers": 2
+  "adminUsers": 2,
+  "totalOrganizations": 120,
+  "totalInvoices": 890,
+  "totalAlerts": 410,
+  "pricingPlans": 4
 }
 ```
 
-### GET /admin/users
+### Resource CRUD
 
-List users. Query: `offset`, `limit`, `search`, `role` (`user`|`admin`).
+| Resource | List / Create | Get / Update / Delete |
+|----------|---------------|------------------------|
+| Users | `GET\|POST /admin/users` | `GET\|PUT\|DELETE /admin/users/:id` |
+| Projects | `GET /admin/projects` | `GET\|PUT\|DELETE /admin/projects/:id` |
+| Pricing plans | `GET\|POST /admin/plans` | `GET\|PUT\|DELETE /admin/plans/:id` |
+| Subscriptions | `GET\|POST /admin/subscriptions` | `GET\|PUT\|DELETE /admin/subscriptions/:id` |
+| Invoices | `GET\|POST /admin/invoices` | `GET\|PUT\|DELETE /admin/invoices/:id` |
+| Organizations | `GET\|POST /admin/organizations` | `GET\|PUT\|DELETE /admin/organizations/:id` |
+| Org members | `GET\|POST /admin/organizations/:id/members` | `PUT\|DELETE .../members/:memberId` |
+| Alerts | `GET\|POST /admin/alerts` | `GET\|PUT\|DELETE /admin/alerts/:id` |
+| Invites | `GET\|POST /admin/invites` | `PUT\|DELETE /admin/invites/:id` |
+| Usage | `GET /admin/usage` | `PUT\|DELETE /admin/usage/:id` |
+| Audit | `GET /admin/audit` | `DELETE /admin/audit/:id` |
 
-**Response `200`:** `{ "users": [...], "total", "limit", "offset" }`
-
-### POST /admin/users
-
-Create a user. Body: `{ email, name, password, role?, emailVerified? }`
-
-### GET /admin/users/:id
-
-### PUT /admin/users/:id
-
-Update name, email, role, emailVerified, and optional password.
-
-### DELETE /admin/users/:id
-
-Deletes the user and owned projects. Cannot delete self or the last admin.
-
-### GET /admin/projects
-
-List projects. Query: `offset`, `limit`, `search`.
-
-**Response `200`:** `{ "projects": [...], "total", "limit", "offset" }`
-
-### GET /admin/projects/:id
-
-### PUT /admin/projects/:id
-
-Update name, environment, ownerId.
-
-### DELETE /admin/projects/:id
-
-Deletes the project and dependent logs/alerts/usage.
+List endpoints accept common query params: `limit`, `offset`, plus resource-specific
+filters (`search`, `status`, `tier`, `role`, `userId`, `projectId`, `organizationId`).
 
 ---
 

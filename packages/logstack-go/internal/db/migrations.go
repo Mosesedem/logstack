@@ -265,7 +265,7 @@ func RunMigrations(db *gorm.DB) error {
 	// AutoMigrate creates missing tables/columns for all models.
 	// We guard this with a version key so it only runs when the schema version changes,
 	// not on every startup (which would hammer a remote DB with 100+ inspection queries).
-	const autoMigrateVersion = "automigrate_v3"
+	const autoMigrateVersion = "automigrate_v4"
 	applied, err := appliedVersions(db)
 	if err != nil {
 		return err
@@ -284,6 +284,7 @@ func RunMigrations(db *gorm.DB) error {
 			&models.AlertHistory{},
 			&models.Subscription{},
 			&models.UsageLog{},
+			&models.PricingPlan{},
 			// Invite, Invoice, MobileRefreshToken are owned by numbered SQL migrations above.
 		); err != nil {
 			return err

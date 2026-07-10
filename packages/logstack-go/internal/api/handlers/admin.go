@@ -25,11 +25,15 @@ func NewAdminHandler(db *gorm.DB) *AdminHandler {
 
 func (h *AdminHandler) GetSystemStats(c *gin.Context) {
 	var stats struct {
-		TotalUsers           int64 `json:"totalUsers"`
-		TotalProjects        int64 `json:"totalProjects"`
-		TotalLogs            int64 `json:"totalLogs"`
-		ActiveSubscriptions  int64 `json:"activeSubscriptions"`
-		AdminUsers           int64 `json:"adminUsers"`
+		TotalUsers          int64 `json:"totalUsers"`
+		TotalProjects       int64 `json:"totalProjects"`
+		TotalLogs           int64 `json:"totalLogs"`
+		ActiveSubscriptions int64 `json:"activeSubscriptions"`
+		AdminUsers          int64 `json:"adminUsers"`
+		TotalOrganizations  int64 `json:"totalOrganizations"`
+		TotalInvoices       int64 `json:"totalInvoices"`
+		TotalAlerts         int64 `json:"totalAlerts"`
+		PricingPlans        int64 `json:"pricingPlans"`
 	}
 
 	h.db.Model(&models.User{}).Count(&stats.TotalUsers)
@@ -40,6 +44,10 @@ func (h *AdminHandler) GetSystemStats(c *gin.Context) {
 		Where("status = ?", "active").
 		Where("tier <> ?", "free").
 		Count(&stats.ActiveSubscriptions)
+	h.db.Model(&models.Organization{}).Count(&stats.TotalOrganizations)
+	h.db.Model(&models.Invoice{}).Count(&stats.TotalInvoices)
+	h.db.Model(&models.AlertRule{}).Count(&stats.TotalAlerts)
+	h.db.Model(&models.PricingPlan{}).Count(&stats.PricingPlans)
 
 	c.JSON(http.StatusOK, stats)
 }

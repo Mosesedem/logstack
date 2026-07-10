@@ -219,23 +219,79 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 				audit.GET("/:resource_type/:resource_id", auditHandler.GetResourceAuditLogs)
 			}
 
-			// Admin routes — platform role=admin only; full CRUD over users & projects
+			// Admin routes — platform role=admin only; full CRUD across the platform
 			admin := protected.Group("/admin")
 			admin.Use(middleware.AdminOnly(cfg.DB))
 			{
 				adminHandler := handlers.NewAdminHandler(cfg.DB)
 				admin.GET("/stats", adminHandler.GetSystemStats)
 
+				// Users
 				admin.GET("/users", adminHandler.GetUsers)
 				admin.POST("/users", adminHandler.CreateUser)
 				admin.GET("/users/:id", adminHandler.GetUser)
 				admin.PUT("/users/:id", adminHandler.UpdateUser)
 				admin.DELETE("/users/:id", adminHandler.DeleteUser)
 
+				// Projects
 				admin.GET("/projects", adminHandler.GetProjects)
 				admin.GET("/projects/:id", adminHandler.GetProject)
 				admin.PUT("/projects/:id", adminHandler.UpdateProject)
 				admin.DELETE("/projects/:id", adminHandler.DeleteProject)
+
+				// Pricing plans
+				admin.GET("/plans", adminHandler.ListPricingPlans)
+				admin.POST("/plans", adminHandler.CreatePricingPlan)
+				admin.GET("/plans/:id", adminHandler.GetPricingPlan)
+				admin.PUT("/plans/:id", adminHandler.UpdatePricingPlan)
+				admin.DELETE("/plans/:id", adminHandler.DeletePricingPlan)
+
+				// Subscriptions
+				admin.GET("/subscriptions", adminHandler.ListSubscriptions)
+				admin.POST("/subscriptions", adminHandler.CreateSubscription)
+				admin.GET("/subscriptions/:id", adminHandler.GetSubscription)
+				admin.PUT("/subscriptions/:id", adminHandler.UpdateSubscription)
+				admin.DELETE("/subscriptions/:id", adminHandler.DeleteSubscription)
+
+				// Invoices / transactions
+				admin.GET("/invoices", adminHandler.ListInvoices)
+				admin.POST("/invoices", adminHandler.CreateInvoice)
+				admin.GET("/invoices/:id", adminHandler.GetInvoice)
+				admin.PUT("/invoices/:id", adminHandler.UpdateInvoice)
+				admin.DELETE("/invoices/:id", adminHandler.DeleteInvoice)
+
+				// Organizations + members
+				admin.GET("/organizations", adminHandler.ListOrganizations)
+				admin.POST("/organizations", adminHandler.CreateOrganization)
+				admin.GET("/organizations/:id", adminHandler.GetOrganization)
+				admin.PUT("/organizations/:id", adminHandler.UpdateOrganization)
+				admin.DELETE("/organizations/:id", adminHandler.DeleteOrganization)
+				admin.GET("/organizations/:id/members", adminHandler.ListOrgMembers)
+				admin.POST("/organizations/:id/members", adminHandler.CreateOrgMember)
+				admin.PUT("/organizations/:id/members/:memberId", adminHandler.UpdateOrgMember)
+				admin.DELETE("/organizations/:id/members/:memberId", adminHandler.DeleteOrgMember)
+
+				// Alert rules
+				admin.GET("/alerts", adminHandler.ListAlerts)
+				admin.POST("/alerts", adminHandler.CreateAlert)
+				admin.GET("/alerts/:id", adminHandler.GetAlert)
+				admin.PUT("/alerts/:id", adminHandler.UpdateAlert)
+				admin.DELETE("/alerts/:id", adminHandler.DeleteAlert)
+
+				// Invites
+				admin.GET("/invites", adminHandler.ListInvites)
+				admin.POST("/invites", adminHandler.CreateInvite)
+				admin.PUT("/invites/:id", adminHandler.UpdateInvite)
+				admin.DELETE("/invites/:id", adminHandler.DeleteInvite)
+
+				// Usage metering
+				admin.GET("/usage", adminHandler.ListUsage)
+				admin.PUT("/usage/:id", adminHandler.UpdateUsage)
+				admin.DELETE("/usage/:id", adminHandler.DeleteUsage)
+
+				// Audit trail
+				admin.GET("/audit", adminHandler.ListAuditLogs)
+				admin.DELETE("/audit/:id", adminHandler.DeleteAuditLog)
 			}
 		}
 
