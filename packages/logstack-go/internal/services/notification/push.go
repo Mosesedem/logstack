@@ -89,9 +89,9 @@ func normalizeDeviceType(deviceType models.DeviceType) models.DeviceType {
 
 // buildFCMMessage constructs a per-platform Firebase message.
 //
-// iOS: notification-only — identical to Firebase Console's test composer. Adding
-// Data or custom APNS blocks caused FCM to accept the message while APNs never
-// displayed it on device.
+// iOS: notification-only — byte-for-byte the same shape Firebase Console uses.
+// Do not add Data or APNS overrides; FCM maps Notification → APNs and custom
+// blocks caused "FCM accepted, nothing on device" on iOS.
 //
 // Android: notification + data + high-priority channel for reliable delivery.
 func buildFCMMessage(
@@ -101,16 +101,12 @@ func buildFCMMessage(
 ) *messaging.Message {
 	deviceType = normalizeDeviceType(deviceType)
 
-	displayTitle := title
-	displayBody := body
 	if deviceType == models.DeviceTypeIOS {
-		displayTitle = truncateUTF8Bytes(title, 200)
-		displayBody = truncateUTF8Bytes(body, 1500)
 		return &messaging.Message{
 			Token: token,
 			Notification: &messaging.Notification{
-				Title: displayTitle,
-				Body:  displayBody,
+				Title: truncateUTF8Bytes(title, 200),
+				Body:  truncateUTF8Bytes(body, 1500),
 			},
 		}
 	}
@@ -213,6 +209,7 @@ func (p *PushNotifier) SendDirectDetailed(
 	if err := p.db.Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
 		return reportErr(fmt.Errorf("failed to fetch push tokens: %w", err))
 	}
+	tokens = latestTokensPerDevice(tokens)
 	result.TokensFound = len(tokens)
 	if len(tokens) == 0 {
 		return reportErr(fmt.Errorf("no push tokens for user %d — open the Logstack mobile app signed in as this user, grant notification permission, and confirm Settings shows push registered", userID))
@@ -335,8 +332,16 @@ func (p *PushNotifier) Send(ctx context.Context, rule *models.AlertRule, log *mo
 // resolveUserID returns the push recipient user ID. When the rule recipient is
 // an email address (common for multi-channel rules), fall back to the project owner.
 func (p *PushNotifier) resolveUserID(rule *models.AlertRule, log *models.Log) (uint, error) {
-	if id, err := strconv.ParseUint(rule.Recipient, 10, 32); err == nil {
+	if id, err := strconv.ParseUint(strings.TrimSpace(rule.Recipient), 10, 32); err == nil {
 		return uint(id), nil
+	}
+
+	recipient := strings.TrimSpace(rule.Recipient)
+	if strings.Contains(recipient, "@") {
+		var user models.User
+		if err := p.db.Where("LOWER(email) = ?", strings.ToLower(recipient)).First(&user).Error; err == nil {
+			return user.ID, nil
+		}
 	}
 
 	var project models.Project
@@ -345,6 +350,31 @@ func (p *PushNotifier) resolveUserID(rule *models.AlertRule, log *models.Log) (u
 	}
 
 	return project.OwnerID, nil
+}
+
+// latestTokensPerDevice keeps only the newest token per platform so stale iOS
+// tokens (e.g. from an old debug build) do not shadow the current TestFlight token.
+func latestTokensPerDevice(tokens []models.PushToken) []models.PushToken {
+	if len(tokens) <= 1 {
+		return tokens
+	}
+
+	latest := make(map[models.DeviceType]models.PushToken)
+	for _, token := range tokens {
+		dt := normalizeDeviceType(token.DeviceType)
+		token.DeviceType = dt
+		prev, ok := latest[dt]
+		if !ok || token.UpdatedAt.After(prev.UpdatedAt) ||
+			(token.UpdatedAt.Equal(prev.UpdatedAt) && token.CreatedAt.After(prev.CreatedAt)) {
+			latest[dt] = token
+		}
+	}
+
+	out := make([]models.PushToken, 0, len(latest))
+	for _, token := range latest {
+		out = append(out, token)
+	}
+	return out
 }
 
 func truncate(s string, maxLen int) string {

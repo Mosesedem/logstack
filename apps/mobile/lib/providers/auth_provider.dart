@@ -46,6 +46,7 @@ class AuthState {
   final bool hasPersistedSession;
   final String? error;
   final String? pushToken;
+  final String? backendMaskedToken;
   final PushRegistrationStatus pushStatus;
 
   AuthState({
@@ -55,6 +56,7 @@ class AuthState {
     this.hasPersistedSession = false,
     this.error,
     this.pushToken,
+    this.backendMaskedToken,
     this.pushStatus = PushRegistrationStatus.notConfigured,
   });
 
@@ -67,6 +69,7 @@ class AuthState {
     bool? hasPersistedSession,
     String? error,
     String? pushToken,
+    String? backendMaskedToken,
     PushRegistrationStatus? pushStatus,
     bool clearError = false,
   }) {
@@ -77,6 +80,7 @@ class AuthState {
       hasPersistedSession: hasPersistedSession ?? this.hasPersistedSession,
       error: clearError ? null : (error ?? this.error),
       pushToken: pushToken ?? this.pushToken,
+      backendMaskedToken: backendMaskedToken ?? this.backendMaskedToken,
       pushStatus: pushStatus ?? this.pushStatus,
     );
   }
@@ -350,13 +354,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Re-syncs the device FCM token with the API after app resume (iOS tokens rotate).
+  /// Sends a test push via the API to this user's registered tokens.
+  Future<Map<String, dynamic>> sendApiPushTest() async {
+    if (!state.isAuthenticated || state.isOfflineAuth) {
+      throw StateError('Sign in and go online to test API push');
+    }
+    final token = await NotificationService.instance.fetchFCMToken();
+    if (token != null) {
+      await _registerPushToken(token);
+    }
+    final response = await _apiClient.post<Map<String, dynamic>>(
+      '/mobile/push-test',
+      data: const {},
+    );
+    return response;
+  }
+
   Future<void> syncPushTokenOnResume() async {
     if (!state.isAuthenticated || state.isOfflineAuth) return;
     if (!await NotificationService.instance.hasPushPermission()) return;
 
-    final token = Platform.isIOS
-        ? await NotificationService.instance.refreshFCMToken()
-        : NotificationService.instance.fcmToken;
+    final token = await NotificationService.instance.fetchFCMToken();
     if (token == null || token == _currentFcmToken) return;
 
     _currentFcmToken = token;
@@ -387,12 +405,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     const maxRetries = 3;
     for (int attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        await _apiClient.post<void>('/mobile/push-token', data: {
-          'token': token,
-          'deviceType': Platform.isIOS ? 'ios' : 'android',
-        });
+        final response = await _apiClient.post<Map<String, dynamic>>(
+          '/mobile/push-token',
+          data: {
+            'token': token,
+            'deviceType': Platform.isIOS ? 'ios' : 'android',
+          },
+        );
+        final masked = response['maskedToken'] as String?;
         state = state.copyWith(
           pushToken: token,
+          backendMaskedToken: masked,
           pushStatus: PushRegistrationStatus.registered,
         );
         return;

@@ -18,6 +18,7 @@ class PushDebugCard extends ConsumerStatefulWidget {
 
 class _PushDebugCardState extends ConsumerState<PushDebugCard> {
   bool _isRetrying = false;
+  bool _isTestingApi = false;
   StreamSubscription<String>? _tokenSubscription;
 
   @override
@@ -100,13 +101,29 @@ class _PushDebugCardState extends ConsumerState<PushDebugCard> {
                   ? LogstackColors.warnAmber
                   : LogstackColors.liveGreen,
             ),
+          if (authState.user != null)
+            _DebugRow(
+              label: 'User ID',
+              value: '${authState.user!.id}',
+              valueColor: LogstackColors.textPrimary,
+              monospace: true,
+            ),
           _DebugRow(
             label: 'Backend',
             value: _backendStatusLabel(status),
             valueColor: _statusColor(status),
           ),
+          if (authState.backendMaskedToken != null)
+            _DebugRow(
+              label: 'API token',
+              value: authState.backendMaskedToken!,
+              valueColor: _tokenMatchesBackend(token, authState.backendMaskedToken!)
+                  ? LogstackColors.liveGreen
+                  : LogstackColors.warnAmber,
+              monospace: true,
+            ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(
               children: [
                 Expanded(
@@ -137,6 +154,27 @@ class _PushDebugCardState extends ConsumerState<PushDebugCard> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _isTestingApi ||
+                        !authState.isAuthenticated ||
+                        authState.isOfflineAuth
+                    ? null
+                    : () => _sendApiPushTest(context),
+                icon: _isTestingApi
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_outlined, size: 18),
+                label: Text(_isTestingApi ? 'Sending API test…' : 'Send API test push'),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -153,6 +191,29 @@ class _PushDebugCardState extends ConsumerState<PushDebugCard> {
     }
   }
 
+  Future<void> _sendApiPushTest(BuildContext context) async {
+    setState(() => _isTestingApi = true);
+    try {
+      final response = await ref.read(authProvider.notifier).sendApiPushTest();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_formatApiTestResult(response)),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('API test push failed: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isTestingApi = false);
+      }
+    }
+  }
+
   Future<void> _copyToken(BuildContext context, String token) async {
     await Clipboard.setData(ClipboardData(text: token));
     if (!context.mounted) return;
@@ -164,6 +225,45 @@ class _PushDebugCardState extends ConsumerState<PushDebugCard> {
   static String _truncateToken(String token) {
     if (token.length <= 28) return token;
     return '${token.substring(0, 14)}…${token.substring(token.length - 10)}';
+  }
+
+  static String _maskToken(String token) {
+    if (token.length <= 20) return '***';
+    return '${token.substring(0, 10)}...${token.substring(token.length - 10)}';
+  }
+
+  static bool _tokenMatchesBackend(String? token, String masked) {
+    if (token == null) return false;
+    return _maskToken(token) == masked;
+  }
+
+  static String _formatApiTestResult(Map<String, dynamic> response) {
+    final results = response['results'];
+    if (results is! Map) {
+      return 'API test: ${response['message'] ?? response['error'] ?? response}';
+    }
+
+    final iosTokens = results['iosTokens'];
+    final iosSent = results['iosSent'];
+    final iosFailed = results['iosFailed'];
+    final errors = results['errors'];
+
+    if (Platform.isIOS) {
+      if (iosTokens == 0) {
+        return 'API found no iOS token for your user — tap Re-register, then retry';
+      }
+      if (iosSent == 1) {
+        return 'FCM accepted iOS delivery (iosSent=1). If no banner, check Focus/DND and notification settings for Logstack.';
+      }
+      if (iosFailed != null && iosFailed > 0) {
+        final detail = errors is List && errors.isNotEmpty
+            ? errors.first.toString()
+            : response['error']?.toString();
+        return 'iOS push failed: $detail';
+      }
+    }
+
+    return 'API test: ${response['message'] ?? response['error'] ?? results}';
   }
 
   static String _backendStatusLabel(PushRegistrationStatus status) {

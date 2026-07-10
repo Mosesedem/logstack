@@ -37,6 +37,12 @@ interface NotifyResults {
   pushFailed?: number;
   pushTokensFound?: number;
   pushDevicesSent?: number;
+  pushIOSTokens?: number;
+  pushIOSSent?: number;
+  pushIOSFailed?: number;
+  pushAndroidTokens?: number;
+  pushAndroidSent?: number;
+  pushAndroidFailed?: number;
   recipients?: number;
   fcmEnabled?: boolean;
   errors?: string[];
@@ -502,11 +508,20 @@ function DeliveryResults({ results }: { results: NotifyResults }) {
   const pushFailed = Number(results.pushFailed ?? 0);
   const pushTokensFound = Number(results.pushTokensFound ?? 0);
   const pushDevicesSent = Number(results.pushDevicesSent ?? 0);
+  const pushIOSTokens = Number(results.pushIOSTokens ?? 0);
+  const pushIOSSent = Number(results.pushIOSSent ?? 0);
+  const pushIOSFailed = Number(results.pushIOSFailed ?? 0);
+  const pushAndroidTokens = Number(results.pushAndroidTokens ?? 0);
+  const pushAndroidSent = Number(results.pushAndroidSent ?? 0);
+  const pushAndroidFailed = Number(results.pushAndroidFailed ?? 0);
   const recipients = Number(results.recipients ?? 0);
   const fcmEnabled = results.fcmEnabled !== false;
   const totalOk = emailSent + pushSent;
   const totalFail = emailFailed + pushFailed;
   const allGood = totalFail === 0 && totalOk > 0;
+  const iosTone = pushIOSFailed > 0 ? ("danger" as const) : ("success" as const);
+  const androidTone =
+    pushAndroidFailed > 0 ? ("danger" as const) : ("success" as const);
 
   const stats = [
     {
@@ -544,6 +559,35 @@ function DeliveryResults({ results }: { results: NotifyResults }) {
       icon: Bell,
       tone: "neutral" as const,
     },
+    ...(pushIOSTokens > 0
+      ? [
+          {
+            key: "pushIOSSent",
+            label: "iOS delivered",
+            value: pushIOSSent,
+            icon: Bell,
+            tone: iosTone,
+          },
+          {
+            key: "pushIOSFailed",
+            label: "iOS failed",
+            value: pushIOSFailed,
+            icon: Bell,
+            tone: "danger" as const,
+          },
+        ]
+      : []),
+    ...(pushAndroidTokens > 0
+      ? [
+          {
+            key: "pushAndroidSent",
+            label: "Android delivered",
+            value: pushAndroidSent,
+            icon: Bell,
+            tone: androidTone,
+          },
+        ]
+      : []),
     {
       key: "pushFailed",
       label: "Push failed",

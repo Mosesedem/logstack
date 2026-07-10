@@ -1,0 +1,11 @@
+# 2026/07/10 19:31:16.353109 [TestInvalidTokenCleanup] [rapid] draw tokenCount: 2
+# 2026/07/10 19:31:16.356237 [TestInvalidTokenCleanup] [rapid] draw invalid-tok-0: true
+# 2026/07/10 19:31:16.356243 [TestInvalidTokenCleanup] [rapid] draw invalid-tok-1: false
+# 2026/07/10 19:31:16.356496 [TestInvalidTokenCleanup] expected invalid token "tok-0" to be deleted from DB, but it still exists
+# 
+v0.4.8#16107683214568304996
+0x0
+0x0
+0x1
+0x1
+0x0

@@ -3,23 +3,27 @@ package handlers
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/mosesedem/logstack/internal/models"
+	"github.com/mosesedem/logstack/internal/services/notification"
 	ws "github.com/mosesedem/logstack/internal/websocket"
 	"gorm.io/gorm"
 )
 
 type MobileHandler struct {
-	db  *gorm.DB
-	hub *ws.Hub
+	db       *gorm.DB
+	hub      *ws.Hub
+	notifier *notification.Service
 }
 
-func NewMobileHandler(db *gorm.DB, hub *ws.Hub) *MobileHandler {
+func NewMobileHandler(db *gorm.DB, hub *ws.Hub, notifier *notification.Service) *MobileHandler {
 	return &MobileHandler{
-		db:  db,
-		hub: hub,
+		db:       db,
+		hub:      hub,
+		notifier: notifier,
 	}
 }
 
@@ -50,28 +54,42 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		return
 	}
 
-	// Check if token already exists
+	now := time.Now()
+
+	// One active token per platform per user — stale iOS tokens from old builds
+	// are the #1 cause of "Firebase Console works, API doesn't".
+	if err := h.db.
+		Where("user_id = ? AND device_type = ? AND token <> ?", userID, req.DeviceType, req.Token).
+		Delete(&models.PushToken{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	var existing models.PushToken
 	if err := h.db.Where("token = ?", req.Token).First(&existing).Error; err == nil {
-		// Update existing token
 		existing.UserID = userID
 		existing.DeviceType = req.DeviceType
+		existing.UpdatedAt = now
 		if err := h.db.Save(&existing).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"message": "push token updated"})
+		c.JSON(http.StatusOK, gin.H{
+			"message":     "push token updated",
+			"deviceType":  req.DeviceType,
+			"maskedToken": maskPushToken(req.Token),
+		})
 		return
 	}
 
-	// Create new token
 	token := models.PushToken{
 		UserID:     userID,
 		Token:      req.Token,
 		DeviceType: req.DeviceType,
+		UpdatedAt:  now,
+		CreatedAt:  now,
 	}
 
-	// Enforce 10-token cap: evict oldest token before inserting a new one
 	var tokenCount int64
 	h.db.Model(&models.PushToken{}).Where("user_id = ?", userID).Count(&tokenCount)
 	if tokenCount >= 10 {
@@ -86,7 +104,68 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "push token registered"})
+	c.JSON(http.StatusCreated, gin.H{
+		"message":     "push token registered",
+		"deviceType":  req.DeviceType,
+		"maskedToken": maskPushToken(req.Token),
+	})
+}
+
+func maskPushToken(token string) string {
+	if len(token) <= 20 {
+		return "***"
+	}
+	return token[:10] + "..." + token[len(token)-10:]
+}
+
+// TestPush handles POST /v1/mobile/push-test — sends a test notification to the
+// authenticated user's registered device tokens (same path as admin/alerts).
+func (h *MobileHandler) TestPush(c *gin.Context) {
+	if h.notifier == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "notification service unavailable"})
+		return
+	}
+	pushN := h.notifier.GetPushNotifier()
+	if pushN == nil || !pushN.IsEnabled() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "FCM not configured on API"})
+		return
+	}
+
+	userID := c.MustGet("userID").(uint)
+	detail, err := pushN.SendDirectDetailed(
+		c.Request.Context(),
+		userID,
+		"Logstack API Test",
+		"If you see this, server push delivery is working on your device.",
+		map[string]string{"type": "test"},
+	)
+	results := gin.H{}
+	if detail != nil {
+		results = gin.H{
+			"tokensFound":     detail.TokensFound,
+			"devicesSent":     detail.Sent,
+			"devicesFailed":   detail.Failed,
+			"iosTokens":       detail.IOSTokens,
+			"iosSent":         detail.IOSSent,
+			"iosFailed":       detail.IOSFailed,
+			"androidTokens":   detail.AndroidTokens,
+			"androidSent":     detail.AndroidSent,
+			"androidFailed":   detail.AndroidFailed,
+			"errors":          detail.Errors,
+		}
+	}
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error":   err.Error(),
+			"results": results,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Test push sent",
+		"results": results,
+	})
 }
 
 // DeletePushToken handles DELETE /v1/mobile/push-token

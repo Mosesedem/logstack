@@ -110,7 +110,7 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		// mobile-namespaced /mobile/stream route below is kept for native clients.
 		v1.GET("/stream",
 			middleware.WSAuth(cfg.AuthService),
-			mobilehandlers.NewMobileHandler(cfg.DB, cfg.Hub).Stream,
+			mobilehandlers.NewMobileHandler(cfg.DB, cfg.Hub, cfg.NotificationService).Stream,
 		)
 
 		// Public pricing (landing page + marketing)
@@ -313,9 +313,10 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 		{
 			// Push token registration (JWT auth)
 			mobile.Use(middleware.JWTAuth(cfg.AuthService))
-			mobileHandler := mobilehandlers.NewMobileHandler(cfg.DB, cfg.Hub)
+			mobileHandler := mobilehandlers.NewMobileHandler(cfg.DB, cfg.Hub, cfg.NotificationService)
 			mobile.POST("/push-token", mobileHandler.RegisterPushToken)
 			mobile.DELETE("/push-token", mobileHandler.DeletePushToken)
+			mobile.POST("/push-test", mobileHandler.TestPush)
 			
 			// WebSocket stream
 			mobile.GET("/stream", mobileHandler.Stream)

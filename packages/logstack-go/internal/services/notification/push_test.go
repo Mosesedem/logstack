@@ -80,13 +80,25 @@ func newTestPushNotifier(db *gorm.DB, mock *mockFCMClient) *PushNotifier {
 
 func seedTokens(db *gorm.DB, userID uint, tokens []string) {
 	for i, tok := range tokens {
+		deviceType := models.DeviceTypeAndroid
+		if i%2 == 1 {
+			deviceType = models.DeviceTypeIOS
+		}
+		stamp := time.Now().Add(time.Duration(i) * time.Millisecond)
 		db.Create(&models.PushToken{
 			UserID:     userID,
 			Token:      tok,
-			DeviceType: models.DeviceTypeAndroid,
-			CreatedAt:  time.Now().Add(time.Duration(i) * time.Millisecond),
+			DeviceType: deviceType,
+			CreatedAt:  stamp,
+			UpdatedAt:  stamp,
 		})
 	}
+}
+
+func activeTokensForUser(db *gorm.DB, userID uint) []models.PushToken {
+	var tokens []models.PushToken
+	db.Where("user_id = ?", userID).Find(&tokens)
+	return latestTokensPerDevice(tokens)
 }
 
 func makeAlertRule(recipient string) *models.AlertRule {
@@ -160,8 +172,9 @@ func TestFCMSendAttemptsMatchTokenCount(t *testing.T) {
 		log := makeLog()
 		_ = p.Send(context.Background(), rule, log)
 
-		if got := mock.Calls(); got != n {
-			t.Fatalf("expected exactly %d FCM Send() calls for %d tokens, got %d", n, n, got)
+		expected := len(activeTokensForUser(db, 1))
+		if got := mock.Calls(); got != expected {
+			t.Fatalf("expected %d FCM Send() calls for %d stored tokens (%d active per platform), got %d", expected, n, expected, got)
 		}
 	})
 }
@@ -192,13 +205,13 @@ func TestFCMMessagePayloadStructure(t *testing.T) {
 			t.Fatal("iOS message must include top-level notification for FCM APNS conversion")
 		}
 		if len(iosMsg.Data) > 0 {
-			t.Fatal("iOS message must be notification-only (no data payload)")
+			t.Fatal("iOS message must not include data payload")
 		}
 		if iosMsg.Android != nil {
 			t.Fatal("iOS message must not include Android overrides")
 		}
 		if iosMsg.APNS != nil {
-			t.Fatal("iOS message must rely on FCM notification conversion (no custom APNS block)")
+			t.Fatal("iOS message must not include APNS overrides — FCM maps Notification automatically")
 		}
 	})
 }
@@ -209,18 +222,24 @@ func TestFCMMessagePayloadStructure(t *testing.T) {
 // Validates: Requirement 3.6
 func TestInvalidTokenCleanup(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		n := rapid.IntRange(1, 10).Draw(t, "tokenCount")
 		db := newPushTestDB(t)
 		mock := newMockFCMClient()
 		p := newTestPushNotifier(db, mock)
 
-		tokens := make([]string, n)
-		for i := range tokens {
-			tokens[i] = fmt.Sprintf("tok-%d", i)
-		}
-		seedTokens(db, 1, tokens)
+		// One active token per platform — mirrors production Send behaviour.
+		androidTok := fmt.Sprintf("android-%d", rapid.IntRange(0, 9999).Draw(t, "android"))
+		iosTok := fmt.Sprintf("ios-%d", rapid.IntRange(0, 9999).Draw(t, "ios"))
+		stamp := time.Now()
+		db.Create(&models.PushToken{
+			UserID: 1, Token: androidTok, DeviceType: models.DeviceTypeAndroid,
+			CreatedAt: stamp, UpdatedAt: stamp,
+		})
+		db.Create(&models.PushToken{
+			UserID: 1, Token: iosTok, DeviceType: models.DeviceTypeIOS,
+			CreatedAt: stamp.Add(time.Millisecond), UpdatedAt: stamp.Add(time.Millisecond),
+		})
 
-		// Mark a random subset as invalid
+		tokens := []string{androidTok, iosTok}
 		invalidSet := make(map[string]bool)
 		for _, tok := range tokens {
 			if rapid.Bool().Draw(t, "invalid-"+tok) {
@@ -237,15 +256,11 @@ func TestInvalidTokenCleanup(t *testing.T) {
 			var found models.PushToken
 			err := db.Where("token = ?", tok).First(&found).Error
 			if invalidSet[tok] {
-				// Invalid tokens must have been deleted
 				if err == nil {
 					t.Fatalf("expected invalid token %q to be deleted from DB, but it still exists", tok)
 				}
-			} else {
-				// Valid tokens must still be present
-				if err != nil {
-					t.Fatalf("expected valid token %q to remain in DB, but got error: %v", tok, err)
-				}
+			} else if err != nil {
+				t.Fatalf("expected valid token %q to remain in DB, but got error: %v", tok, err)
 			}
 		}
 	})

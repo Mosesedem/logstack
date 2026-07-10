@@ -64,9 +64,32 @@ class NotificationService {
     await _initializeFCM();
   }
 
+  /// Returns the current FCM token without rotating it.
+  Future<String?> fetchFCMToken() async {
+    if (!DefaultFirebaseOptions.isConfigured) {
+      return null;
+    }
+    if (!await hasPushPermission()) {
+      return null;
+    }
+
+    await _ensureIOSRemoteNotificationRegistration();
+
+    try {
+      final token = await _messaging.getToken();
+      if (token != null && token != _fcmToken) {
+        _fcmToken = token;
+        _tokenController.add(token);
+      }
+      return token ?? _fcmToken;
+    } catch (error, stackTrace) {
+      _logger.w('FCM getToken failed', error: error, stackTrace: stackTrace);
+      return _fcmToken;
+    }
+  }
+
   /// Forces a new FCM token from Firebase and emits it on [tokenStream].
-  /// Use before backend registration so the API targets the same token Firebase
-  /// Console tests with (stale DB tokens are a common cause of "Console works, API doesn't").
+  /// Use only from explicit "Re-register" — not on resume or API test.
   Future<String?> refreshFCMToken() async {
     if (!DefaultFirebaseOptions.isConfigured) {
       return null;
