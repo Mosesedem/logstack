@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/mosesedem/logstack/internal/models"
@@ -265,11 +267,16 @@ func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req
 		if !s.IsPolarConfigured() {
 			return nil, errors.New("international billing is not configured")
 		}
-		successURL := req.CallbackURL
+		// Polar requires absolute https URLs (relative paths like "/billing" → 422).
+		successURL := strings.TrimSpace(req.CallbackURL)
 		if successURL == "" {
-			successURL = "/billing?success=true"
+			successURL = "https://www.logstack.tech/billing?success=true"
 		}
-		resp, err := s.polar.InitializeCheckout(ctx, &user, req.Tier, successURL, "/billing")
+		successURL, returnURL, err := absolutePolarCheckoutURLs(successURL)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := s.polar.InitializeCheckout(ctx, &user, req.Tier, successURL, returnURL)
 		if err != nil {
 			return nil, err
 		}
@@ -277,6 +284,27 @@ func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req
 	}
 
 	return s.initializePaystackSubscription(ctx, &user, req, amount)
+}
+
+// absolutePolarCheckoutURLs ensures Polar success_url / return_url are absolute.
+// Polar rejects relative paths ("relative URL without a base").
+func absolutePolarCheckoutURLs(successURL string) (success string, returnURL string, err error) {
+	u, parseErr := url.Parse(strings.TrimSpace(successURL))
+	if parseErr != nil || u.Scheme == "" || u.Host == "" {
+		return "", "", fmt.Errorf("callbackUrl must be an absolute URL (got %q)", successURL)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", "", fmt.Errorf("callbackUrl must use http or https (got %q)", successURL)
+	}
+
+	success = u.String()
+
+	// Back button on Polar checkout → billing page on the same origin.
+	ret := *u
+	ret.Path = "/billing"
+	ret.RawQuery = ""
+	ret.Fragment = ""
+	return success, ret.String(), nil
 }
 
 // initializePaystackSubscription sets up a Paystack plan + subscription authorization.
