@@ -13,9 +13,9 @@ build/
 *.dylib
 
 # Environment files
-.env
-.env.local
-.env.*.local
+# .env
+# .env.local
+# .env.*.local
 
 # IDE
 .idea/
@@ -53,8 +53,8 @@ apps/mobile/ios/.symlinks/
 packages/logstack-go/tmp/
 
 # Misc
-*.pem
-*.key
+# *.pem
+# *.key
 
 logstack-design-guide.md
 
@@ -69,6 +69,6 @@ progress.txt
 .source
 
 *.env
-secrets/
+# secrets/
 
 
