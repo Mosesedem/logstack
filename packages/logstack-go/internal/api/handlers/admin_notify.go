@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mosesedem/logstack/internal/models"
+	"github.com/mosesedem/logstack/internal/services/notification"
 )
 
 type adminNotifyRequest struct {
@@ -209,16 +210,17 @@ func (h *AdminHandler) SendNotification(c *gin.Context) {
 				emailFail++
 				failures = append(failures, "email: notifier not configured")
 			} else {
-				htmlBody := fmt.Sprintf(
-					`<div style="font-family:system-ui,sans-serif;line-height:1.5">
-  <h2 style="margin:0 0 12px">%s</h2>
-  <p style="white-space:pre-wrap">%s</p>
-  <hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0"/>
-  <p style="color:#888;font-size:12px">Sent from Logstack Admin</p>
-</div>`,
-					html.EscapeString(title),
-					html.EscapeString(message),
-				)
+				htmlBody := notification.BuildStandardEmailHTML(notification.StandardEmail{
+					Title:     title,
+					FirstName: t.name,
+					Greeting:  html.EscapeString(title),
+					MessageHTML: fmt.Sprintf(
+						`<div style="white-space:pre-wrap;">%s</div>`,
+						html.EscapeString(message),
+					),
+					HighlightTitle: "Admin notification",
+					HighlightHTML:  `<p style="margin:0;color:#666666;line-height:1.7;">Sent from Logstack Admin.</p>`,
+				})
 				if err := emailN.SendDirect(c.Request.Context(), to, t.name, title, htmlBody); err != nil {
 					emailFail++
 					failures = append(failures, fmt.Sprintf("email %s: %v", to, err))

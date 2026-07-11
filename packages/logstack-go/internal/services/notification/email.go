@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -154,31 +155,69 @@ func maskEmail(addr string) string {
 
 func (e *EmailNotifier) Send(ctx context.Context, rule *models.AlertRule, log *models.Log) error {
 	subject := fmt.Sprintf("[Logstack Alert] %s - %s", rule.Name, log.Level)
-	htmlBody := fmt.Sprintf(`
-		<h2>Logstack Alert: %s</h2>
-		<p><strong>Level:</strong> %s</p>
-		<p><strong>Message:</strong> %s</p>
-		<p><strong>Source:</strong> %s</p>
-		<p><strong>Time:</strong> %s</p>
-		<hr>
-		<p>This alert was triggered by rule: <strong>%s</strong></p>
-		<p>Pattern: <code>%s</code></p>
-	`, rule.Name, log.Level, log.Message, log.Source, log.CreatedAt.Format("2006-01-02 15:04:05 MST"), rule.Name, rule.TriggerPattern)
+	dashboardURL := fmt.Sprintf("%s/alerts", e.baseURL)
+
+	highlight := fmt.Sprintf(
+		`<table style="width:100%%;border-collapse:collapse;font-size:15px;color:#555555;">
+<tr><td style="padding:8px 0;border-bottom:1px solid #eeeeee;"><strong style="color:#111;">Level</strong></td>
+<td style="padding:8px 0;border-bottom:1px solid #eeeeee;text-align:right;">%s</td></tr>
+<tr><td style="padding:8px 0;border-bottom:1px solid #eeeeee;"><strong style="color:#111;">Source</strong></td>
+<td style="padding:8px 0;border-bottom:1px solid #eeeeee;text-align:right;">%s</td></tr>
+<tr><td style="padding:8px 0;border-bottom:1px solid #eeeeee;"><strong style="color:#111;">Time</strong></td>
+<td style="padding:8px 0;border-bottom:1px solid #eeeeee;text-align:right;">%s</td></tr>
+<tr><td style="padding:8px 0;"><strong style="color:#111;">Pattern</strong></td>
+<td style="padding:8px 0;text-align:right;"><code style="font-size:13px;">%s</code></td></tr>
+</table>
+<p style="margin:16px 0 0;color:#555555;line-height:1.7;"><strong style="color:#111;">Message:</strong><br>%s</p>`,
+		html.EscapeString(string(log.Level)),
+		html.EscapeString(log.Source),
+		html.EscapeString(log.CreatedAt.Format("2006-01-02 15:04:05 MST")),
+		html.EscapeString(rule.TriggerPattern),
+		html.EscapeString(log.Message),
+	)
+
+	htmlBody := BuildStandardEmailHTML(StandardEmail{
+		Title:          subject,
+		Greeting:       "Alert triggered",
+		MessageHTML: pHTML(
+			fmt.Sprintf("Your alert rule “%s” matched a log event.", rule.Name),
+			"Open the dashboard to investigate and manage this rule.",
+		),
+		ButtonURL:      dashboardURL,
+		ButtonText:     "View alerts",
+		HighlightTitle: rule.Name,
+		HighlightHTML:  highlight,
+	})
 
 	return e.sendEmail(ctx, rule.Recipient, "", subject, htmlBody)
 }
 
-// SendTestEmail delivers a test message through the provider chain (Brevo → Resend → …).
-// SendDirect sends an arbitrary HTML email (admin notifications, system mail).
+// SendDirect sends an arbitrary HTML email. Prefer wrapping content with
+// BuildStandardEmailHTML so all mail shares the same design.
 func (e *EmailNotifier) SendDirect(ctx context.Context, to, toName, subject, htmlBody string) error {
 	return e.sendEmail(ctx, to, toName, subject, htmlBody)
 }
 
+// SendStandard delivers a message using the shared Logstack HTML layout.
+func (e *EmailNotifier) SendStandard(ctx context.Context, to, toName, subject string, content StandardEmail) error {
+	if content.Title == "" {
+		content.Title = subject
+	}
+	return e.sendEmail(ctx, to, toName, subject, BuildStandardEmailHTML(content))
+}
+
 func (e *EmailNotifier) SendTestEmail(ctx context.Context, to string) error {
 	subject := "[Logstack] Test email"
-	htmlBody := `<h2>Logstack test email</h2>
-<p>If you received this, your email provider chain is working.</p>
-<p>Providers are tried in order: Mailcow → Brevo → Resend → Zoho. The first success wins.</p>`
+	htmlBody := BuildStandardEmailHTML(StandardEmail{
+		Title:    subject,
+		Greeting: "Test email",
+		MessageHTML: pHTML(
+			"If you received this, your email provider chain is working.",
+			"Providers are tried in order: Mailcow → Brevo → Resend → Zoho. The first success wins.",
+		),
+		ButtonURL:  e.baseURL,
+		ButtonText: "Open Logstack",
+	})
 	return e.sendEmail(ctx, to, "", subject, htmlBody)
 }
 
@@ -187,37 +226,19 @@ func (e *EmailNotifier) SendVerificationEmail(ctx context.Context, email, name, 
 	verifyURL := fmt.Sprintf("%s/verify-email?token=%s", e.baseURL, token)
 
 	subject := "Verify your Logstack account"
-	htmlBody := fmt.Sprintf(`
-		<!DOCTYPE html>
-		<html>
-		<head>
-			<meta charset="utf-8">
-			<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		</head>
-		<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-			<div style="text-align: center; margin-bottom: 30px;">
-				<h1 style="color: #4F46E5; margin: 0;">Logstack</h1>
-			</div>
-			
-			<h2>Welcome, %s!</h2>
-			
-			<p>Thanks for signing up for Logstack. Please verify your email address by clicking the button below:</p>
-			
-			<div style="text-align: center; margin: 30px 0;">
-				<a href="%s" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">Verify Email</a>
-			</div>
-			
-			<p style="color: #666; font-size: 14px;">Or copy and paste this link into your browser:</p>
-			<p style="color: #4F46E5; word-break: break-all; font-size: 14px;">%s</p>
-			
-			<p style="color: #666; font-size: 14px;">This link will expire in 24 hours.</p>
-			
-			<hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-			
-			<p style="color: #999; font-size: 12px;">If you didn't create an account with Logstack, you can safely ignore this email.</p>
-		</body>
-		</html>
-	`, name, verifyURL, verifyURL)
+	htmlBody := BuildStandardEmailHTML(StandardEmail{
+		Title:     subject,
+		FirstName: name,
+		MessageHTML: pHTML(
+			"Thanks for signing up for Logstack. Please verify your email address by clicking the button below.",
+			"This link will expire in 24 hours.",
+			"If you didn’t create an account with Logstack, you can safely ignore this email.",
+		) + linkFallbackHTML(verifyURL),
+		ButtonURL:  verifyURL,
+		ButtonText: "Verify Email",
+		HighlightTitle: "You’re almost in",
+		HighlightHTML:  `<p style="margin:0;color:#666666;line-height:1.7;">Confirming your email keeps your account secure and unlocks project setup, alerts, and billing.</p>`,
+	})
 
 	return e.sendEmail(ctx, email, name, subject, htmlBody)
 }
@@ -225,77 +246,50 @@ func (e *EmailNotifier) SendVerificationEmail(ctx context.Context, email, name, 
 // SendUsageAlert sends a usage alert email when thresholds are reached
 func (e *EmailNotifier) SendUsageAlert(ctx context.Context, email, name string, summary *models.UserUsageSummary, thresholdPercentage float64) error {
 	dashboardURL := fmt.Sprintf("%s/billing", e.baseURL)
-	
-	var alertLevel, alertColor, actionText string
+
+	var alertLevel, actionText string
 	if thresholdPercentage >= 100 {
 		alertLevel = "Critical"
-		alertColor = "#DC2626" // red
 		actionText = "Your log ingestion has been limited. Please upgrade your plan to continue logging."
 	} else {
 		alertLevel = "Warning"
-		alertColor = "#F59E0B" // orange
 		actionText = "Consider upgrading your plan to avoid hitting your limit."
 	}
 
 	subject := fmt.Sprintf("Logstack Usage Alert: %v%% of Monthly Limit Reached", thresholdPercentage)
-	htmlBody := fmt.Sprintf(`
-		<!DOCTYPE html>
-		<html>
-		<head>
-			<meta charset="utf-8">
-			<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		</head>
-		<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-			<div style="text-align: center; margin-bottom: 30px;">
-				<h1 style="color: #4F46E5; margin: 0;">Logstack</h1>
-			</div>
-			
-			<div style="background-color: %s; color: white; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
-				<h2 style="margin: 0; font-size: 18px;">%s: Usage Alert</h2>
-			</div>
-			
-			<p>Hi %s,</p>
-			
-			<p>Your Logstack account has reached <strong>%v%%</strong> of your monthly log quota.</p>
-			
-			<div style="background-color: #F3F4F6; padding: 20px; border-radius: 6px; margin: 20px 0;">
-				<h3 style="margin-top: 0; color: #4F46E5;">Usage Summary</h3>
-				<table style="width: 100%%; border-collapse: collapse;">
-					<tr>
-						<td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;"><strong>Current Plan:</strong></td>
-						<td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB; text-align: right;">%s</td>
-					</tr>
-					<tr>
-						<td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;"><strong>Logs Ingested:</strong></td>
-						<td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB; text-align: right;">%s / %s</td>
-					</tr>
-					<tr>
-						<td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;"><strong>Usage:</strong></td>
-						<td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB; text-align: right;">%v%%</td>
-					</tr>
-					<tr>
-						<td style="padding: 8px 0;"><strong>Active Projects:</strong></td>
-						<td style="padding: 8px 0; text-align: right;">%d</td>
-					</tr>
-				</table>
-			</div>
-			
-			<p style="background-color: #FEF3C7; border-left: 4px solid %s; padding: 12px; margin: 20px 0;">
-				<strong>Action Required:</strong> %s
-			</p>
-			
-			<div style="text-align: center; margin: 30px 0;">
-				<a href="%s" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">View Dashboard</a>
-			</div>
-			
-			<hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-			
-			<p style="color: #999; font-size: 12px;">You're receiving this email because your Logstack usage has crossed an important threshold. To adjust your notification preferences, visit your account settings.</p>
-		</body>
-		</html>
-	`, alertColor, alertLevel, name, thresholdPercentage, 
-	   summary.Tier, formatNumber(summary.TotalLogCount), formatNumber(summary.LogLimit), 
-	   summary.UsagePercentage, summary.ActiveProjects, alertColor, actionText, dashboardURL)
+
+	highlight := fmt.Sprintf(
+		`<table style="width:100%%;border-collapse:collapse;font-size:15px;color:#555555;">
+<tr><td style="padding:8px 0;border-bottom:1px solid #eeeeee;"><strong style="color:#111;">Current plan</strong></td>
+<td style="padding:8px 0;border-bottom:1px solid #eeeeee;text-align:right;">%s</td></tr>
+<tr><td style="padding:8px 0;border-bottom:1px solid #eeeeee;"><strong style="color:#111;">Logs ingested</strong></td>
+<td style="padding:8px 0;border-bottom:1px solid #eeeeee;text-align:right;">%s / %s</td></tr>
+<tr><td style="padding:8px 0;border-bottom:1px solid #eeeeee;"><strong style="color:#111;">Usage</strong></td>
+<td style="padding:8px 0;border-bottom:1px solid #eeeeee;text-align:right;">%v%%</td></tr>
+<tr><td style="padding:8px 0;"><strong style="color:#111;">Active projects</strong></td>
+<td style="padding:8px 0;text-align:right;">%d</td></tr>
+</table>
+<p style="margin:16px 0 0;color:#666666;line-height:1.7;"><strong style="color:#111;">Action required:</strong> %s</p>`,
+		html.EscapeString(string(summary.Tier)),
+		html.EscapeString(formatNumber(summary.TotalLogCount)),
+		html.EscapeString(formatNumber(summary.LogLimit)),
+		summary.UsagePercentage,
+		summary.ActiveProjects,
+		html.EscapeString(actionText),
+	)
+
+	htmlBody := BuildStandardEmailHTML(StandardEmail{
+		Title:     subject,
+		FirstName: name,
+		MessageHTML: pHTML(
+			fmt.Sprintf("Your Logstack account has reached %v%% of your monthly log quota (%s).", thresholdPercentage, alertLevel),
+			"You’re receiving this because usage crossed an important threshold. Manage plans and limits from billing.",
+		),
+		ButtonURL:      dashboardURL,
+		ButtonText:     "View billing",
+		HighlightTitle: fmt.Sprintf("%s · usage summary", alertLevel),
+		HighlightHTML:  highlight,
+	})
 
 	return e.sendEmail(ctx, email, name, subject, htmlBody)
 }
@@ -304,52 +298,28 @@ func (e *EmailNotifier) SendUsageAlert(ctx context.Context, email, name string, 
 func (e *EmailNotifier) SendUsageWarningEmail(ctx context.Context, email, name string, usagePct float64) error {
 	dashboardURL := fmt.Sprintf("%s/billing", e.baseURL)
 
-	var alertLevel, alertColor, actionText string
+	var alertLevel, actionText string
 	if usagePct >= 100 {
 		alertLevel = "Critical"
-		alertColor = "#DC2626"
 		actionText = "Your log ingestion has been limited. Please upgrade your plan to continue logging."
 	} else {
 		alertLevel = "Warning"
-		alertColor = "#F59E0B"
-		actionText = "You're approaching your monthly limit. Consider upgrading your plan to avoid disruption."
+		actionText = "You’re approaching your monthly limit. Consider upgrading your plan to avoid disruption."
 	}
 
 	subject := fmt.Sprintf("Logstack Usage Alert: %.0f%% of Monthly Limit Reached", usagePct)
-	htmlBody := fmt.Sprintf(`
-		<!DOCTYPE html>
-		<html>
-		<head>
-			<meta charset="utf-8">
-			<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		</head>
-		<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-			<div style="text-align: center; margin-bottom: 30px;">
-				<h1 style="color: #4F46E5; margin: 0;">Logstack</h1>
-			</div>
-
-			<div style="background-color: %s; color: white; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
-				<h2 style="margin: 0; font-size: 18px;">%s: Usage Alert</h2>
-			</div>
-
-			<p>Hi %s,</p>
-
-			<p>Your Logstack account has reached <strong>%.0f%%</strong> of your monthly log quota.</p>
-
-			<p style="background-color: #FEF3C7; border-left: 4px solid %s; padding: 12px; margin: 20px 0;">
-				<strong>Action Required:</strong> %s
-			</p>
-
-			<div style="text-align: center; margin: 30px 0;">
-				<a href="%s" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">View Dashboard</a>
-			</div>
-
-			<hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-
-			<p style="color: #999; font-size: 12px;">You're receiving this email because your Logstack usage has crossed an important threshold.</p>
-		</body>
-		</html>
-	`, alertColor, alertLevel, name, usagePct, alertColor, actionText, dashboardURL)
+	htmlBody := BuildStandardEmailHTML(StandardEmail{
+		Title:     subject,
+		FirstName: name,
+		MessageHTML: pHTML(
+			fmt.Sprintf("Your Logstack account has reached %.0f%% of your monthly log quota.", usagePct),
+			actionText,
+		),
+		ButtonURL:      dashboardURL,
+		ButtonText:     "View billing",
+		HighlightTitle: fmt.Sprintf("%s usage alert", alertLevel),
+		HighlightHTML:  fmt.Sprintf(`<p style="margin:0;color:#666666;line-height:1.7;">Current usage: <strong style="color:#111;">%.0f%%</strong> of your monthly limit.</p>`, usagePct),
+	})
 
 	return e.sendEmail(ctx, email, name, subject, htmlBody)
 }
@@ -367,44 +337,25 @@ func formatNumber(n int64) string {
 	}
 	return fmt.Sprintf("%.1fB", float64(n)/1000000000)
 }
+
 // SendPasswordResetEmail sends a password reset link to the user
 func (e *EmailNotifier) SendPasswordResetEmail(ctx context.Context, email, name, token string) error {
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", e.baseURL, token)
 
 	subject := "Reset your Logstack password"
-	htmlBody := fmt.Sprintf(`
-		<!DOCTYPE html>
-		<html>
-		<head>
-			<meta charset="utf-8">
-			<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		</head>
-		<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-			<div style="text-align: center; margin-bottom: 30px;">
-				<h1 style="color: #4F46E5; margin: 0;">Logstack</h1>
-			</div>
-			
-			<h2>Password Reset Request</h2>
-			
-			<p>Hi %s,</p>
-			
-			<p>We received a request to reset your password. Click the button below to create a new password:</p>
-			
-			<div style="text-align: center; margin: 30px 0;">
-				<a href="%s" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">Reset Password</a>
-			</div>
-			
-			<p style="color: #666; font-size: 14px;">Or copy and paste this link into your browser:</p>
-			<p style="color: #4F46E5; word-break: break-all; font-size: 14px;">%s</p>
-			
-			<p style="color: #666; font-size: 14px;">This link will expire in 1 hour.</p>
-			
-			<hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-			
-			<p style="color: #999; font-size: 12px;">If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
-		</body>
-		</html>
-	`, name, resetURL, resetURL)
+	htmlBody := BuildStandardEmailHTML(StandardEmail{
+		Title:     subject,
+		FirstName: name,
+		MessageHTML: pHTML(
+			"We received a request to reset your password. Click the button below to create a new password.",
+			"This link will expire in 1 hour.",
+			"If you didn’t request a password reset, you can safely ignore this email. Your password will remain unchanged.",
+		) + linkFallbackHTML(resetURL),
+		ButtonURL:      resetURL,
+		ButtonText:     "Reset Password",
+		HighlightTitle: "Security tip",
+		HighlightHTML:  `<p style="margin:0;color:#666666;line-height:1.7;">Never share this link. Logstack staff will never ask for your password.</p>`,
+	})
 
 	return e.sendEmail(ctx, email, name, subject, htmlBody)
 }
@@ -412,39 +363,20 @@ func (e *EmailNotifier) SendPasswordResetEmail(ctx context.Context, email, name,
 // SendInviteEmail sends an organization invite email to the specified address
 func (e *EmailNotifier) SendInviteEmail(ctx context.Context, email, orgName, role, inviteURL string) error {
 	subject := fmt.Sprintf("You've been invited to join %s on Logstack", orgName)
-	htmlBody := fmt.Sprintf(`
-		<!DOCTYPE html>
-		<html>
-		<head>
-			<meta charset="utf-8">
-			<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		</head>
-		<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-			<div style="text-align: center; margin-bottom: 30px;">
-				<h1 style="color: #4F46E5; margin: 0;">Logstack</h1>
-			</div>
-
-			<h2>You've been invited!</h2>
-
-			<p>You've been invited to join <strong>%s</strong> on Logstack as a <strong>%s</strong>.</p>
-
-			<p>Click the button below to accept the invitation and get started:</p>
-
-			<div style="text-align: center; margin: 30px 0;">
-				<a href="%s" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">Accept Invitation</a>
-			</div>
-
-			<p style="color: #666; font-size: 14px;">Or copy and paste this link into your browser:</p>
-			<p style="color: #4F46E5; word-break: break-all; font-size: 14px;">%s</p>
-
-			<p style="color: #666; font-size: 14px;">This invitation will expire in 48 hours.</p>
-
-			<hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-
-			<p style="color: #999; font-size: 12px;">If you weren't expecting this invitation, you can safely ignore this email.</p>
-		</body>
-		</html>
-	`, orgName, role, inviteURL, inviteURL)
+	htmlBody := BuildStandardEmailHTML(StandardEmail{
+		Title:    subject,
+		Greeting: "You’ve been invited",
+		MessageHTML: pHTML(
+			fmt.Sprintf("You’ve been invited to join %s on Logstack as a %s.", orgName, role),
+			"Click the button below to accept the invitation and get started.",
+			"This invitation will expire in 48 hours.",
+			"If you weren’t expecting this invitation, you can safely ignore this email.",
+		) + linkFallbackHTML(inviteURL),
+		ButtonURL:      inviteURL,
+		ButtonText:     "Accept Invitation",
+		HighlightTitle: orgName,
+		HighlightHTML:  fmt.Sprintf(`<p style="margin:0;color:#666666;line-height:1.7;">Role: <strong style="color:#111;">%s</strong></p>`, html.EscapeString(role)),
+	})
 
 	return e.sendEmail(ctx, email, "", subject, htmlBody)
 }

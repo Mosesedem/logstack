@@ -63,12 +63,15 @@ func ReportPushFailure(
 		}
 	}
 
-	htmlBody := fmt.Sprintf(`<div style="font-family:system-ui,sans-serif;line-height:1.5">
-<h2>Push notification delivery failed</h2>
-<ul>%s</ul>
-<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0"/>
-<p style="color:#888;font-size:12px">Logstack push ops alert</p>
-</div>`, strings.Join(detailLines, ""))
+	htmlBody := BuildStandardEmailHTML(StandardEmail{
+		Title:    subject,
+		Greeting: "Push delivery failed",
+		MessageHTML: pHTML(
+			"A push notification could not be delivered. Details are below.",
+		),
+		HighlightTitle: "Diagnostics",
+		HighlightHTML:  "<ul style=\"margin:0;padding-left:20px;color:#555555;line-height:1.7;\">" + strings.Join(detailLines, "") + "</ul>",
+	})
 
 	if sendErr := email.SendDirect(ctx, pushOpsAlertEmail, "", subject, htmlBody); sendErr != nil {
 		slog.Warn("failed to send push failure ops alert email",
