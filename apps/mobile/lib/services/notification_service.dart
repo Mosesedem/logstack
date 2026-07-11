@@ -46,6 +46,21 @@ class NotificationService {
 
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     await _initializeLocalNotifications();
+
+    // Apply before permission / FCM setup so foreground banners work as soon as
+    // the first remote notification arrives after the user grants access.
+    if (Platform.isIOS) {
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    }
+
+    // Attach message handlers early so cold-start + already-granted sessions
+    // still surface foreground alerts (token setup may happen later).
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
   }
 
   Future<NotificationSettings> requestPermission() async {
@@ -256,11 +271,12 @@ class NotificationService {
 
   String _activeAndroidChannelId = 'logstack_alerts_default';
 
+  bool _fcmHandlersReady = false;
+
   Future<void> _initializeFCM() async {
     bool apnsReady = true;
 
-    // iOS: show alerts while app is in the foreground (system banner).
-    // Without this, admin/alert pushes often appear to "not work" when open.
+    // Reinforce foreground presentation (also set in [initialize]).
     if (Platform.isIOS) {
       await _messaging.setForegroundNotificationPresentationOptions(
         alert: true,
@@ -320,25 +336,20 @@ class NotificationService {
       _logger.i('No FCM token yet on iOS (expected until APNS is ready / Firebase APNs key is configured).');
     }
 
-    // Always attach refresh + message handlers. Early return previously prevented this
-    // on iOS when the first APNS probe failed, breaking later recovery.
-    _messaging.onTokenRefresh.listen((token) {
-      _fcmToken = token;
-      _tokenController.add(token);
-      _logger.i('FCM Token refreshed: $token');
-    });
-
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
+    // Token refresh only once per process (message handlers attach in initialize).
+    if (!_fcmHandlersReady) {
+      _messaging.onTokenRefresh.listen((token) {
+        _fcmToken = token;
+        _tokenController.add(token);
+        _logger.i('FCM Token refreshed: $token');
+      });
+      _fcmHandlersReady = true;
+    }
 
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
       _handleInitialMessage(initialMessage);
     }
-
-    // Listeners are attached. On iOS the native AppDelegate calls registerForRemoteNotifications()
-    // after launch + after permission grant. That + the onTokenRefresh listener give us the best
-    // chance of obtaining a usable FCM token even if the first APNS probe was slow.
   }
 
   void _handleForegroundMessage(RemoteMessage message) {
@@ -350,8 +361,8 @@ class NotificationService {
     debugPrint(trace);
     _logger.i(trace);
 
-    // Prefer system notification payload; fall back to data keys (admin + alert
-    // pushes always include title/body in data for foreground display).
+    // Prefer system notification payload; fall back to data keys.
+    final hasSystemNotification = message.notification != null;
     final title = message.notification?.title ??
         message.data['title'] ??
         'Logstack';
@@ -364,12 +375,20 @@ class NotificationService {
       return;
     }
 
-    // Always show a local notification in the foreground so admin dashboard
-    // pushes and alerts are visible even when the app is open.
-    _showLocalNotification(
-      title: title,
-      body: body,
-      payload: message.data.toString(),
+    // iOS: remote notification banners are presented by AppDelegate
+    // userNotificationCenter:willPresent: when [notification] is present.
+    // Showing a local copy would double-fire. Use local only for data-only
+    // messages (or Android, where system may not surface foreground alerts).
+    if (Platform.isIOS && hasSystemNotification) {
+      return;
+    }
+
+    unawaited(
+      _showLocalNotification(
+        title: title,
+        body: body,
+        payload: message.data.isEmpty ? null : message.data.toString(),
+      ),
     );
   }
 
