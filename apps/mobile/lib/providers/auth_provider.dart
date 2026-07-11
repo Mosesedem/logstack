@@ -97,6 +97,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   StreamSubscription<String>? _tokenSubscription;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   String? _currentFcmToken;
+  /// User id the FCM token was last successfully registered for (multi-account).
+  int? _pushBoundUserId;
 
   AuthNotifier(
     this._authService,
@@ -142,6 +144,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (refreshToken != null) {
         final refreshed = await _tryRefreshAccessToken(refreshToken);
         if (refreshed == _RefreshResult.revoked) {
+          _tokenSubscription?.cancel();
+          _tokenSubscription = null;
+          _currentFcmToken = null;
+          _pushBoundUserId = null;
           await _appLock.clearPin();
           await _appLock.setBiometricEnabled(false);
           await _storage.clearSession();
@@ -248,35 +254,55 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> loginWithEmail(String email, String password) async {
+    // Drop any prior session binding before attaching the new account.
+    _tokenSubscription?.cancel();
+    _tokenSubscription = null;
+    _currentFcmToken = null;
+    _pushBoundUserId = null;
+
     final response = await _authService.login(
       email: email,
       password: password,
     );
     await _onSecurityChanged();
     state = AuthState(user: response.user, hasPersistedSession: true);
+    // Always re-bind this device's FCM token to the new user_id.
     unawaited(_setupPushIfPermitted());
   }
 
   Future<void> logout() async {
+    // Unbind this account's push while the JWT is still valid so the previous
+    // user stops receiving alerts. The FCM device token itself stays (same app
+    // install); the next login re-registers it for the new user_id.
+    final fcmToken =
+        _currentFcmToken ?? NotificationService.instance.fcmToken;
+    if (fcmToken != null) {
+      try {
+        await _apiClient.delete(
+          '/mobile/push-token?token=${Uri.encodeComponent(fcmToken)}',
+        );
+      } catch (_) {
+        // Offline or already signed out server-side — next register reassigns.
+      }
+    }
+
     final refreshToken = await _storage.getRefreshToken();
     if (refreshToken != null) {
       await _authService.revokeRefreshToken(refreshToken);
     }
 
-    if (_currentFcmToken != null) {
-      try {
-        await _apiClient.delete(
-          '/mobile/push-token?token=${Uri.encodeComponent(_currentFcmToken!)}',
-        );
-      } catch (_) {}
-    }
     _tokenSubscription?.cancel();
     _tokenSubscription = null;
+    // Keep device FCM token in NotificationService; clear only our session
+    // registration pointer so the next account always re-POSTs the token.
     _currentFcmToken = null;
+    _pushBoundUserId = null;
+
     await _cacheService.clearAll();
     await _appLock.clearPin();
     await _appLock.setBiometricEnabled(false);
-    await _authService.logout();
+    await _authService.logout(); // clearSession: tokens, user, project id
+
     state = AuthState(pushStatus: _initialPushStatus());
   }
 
@@ -385,9 +411,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (!await NotificationService.instance.hasPushPermission()) return;
 
     final token = await NotificationService.instance.fetchFCMToken();
-    if (token == null || token == _currentFcmToken) return;
+    if (token == null) return;
 
-    _currentFcmToken = token;
+    final userId = state.user?.id;
+    final alreadyBound = token == _currentFcmToken &&
+        userId != null &&
+        _pushBoundUserId == userId &&
+        state.pushStatus == PushRegistrationStatus.registered;
+    if (alreadyBound) return;
+
     state = state.copyWith(
       pushToken: token,
       pushStatus: PushRegistrationStatus.registering,
@@ -412,6 +444,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
+    final userId = state.user?.id;
+    // Skip only if this exact token is already bound to this user.
+    if (userId != null &&
+        _pushBoundUserId == userId &&
+        _currentFcmToken == token &&
+        state.pushStatus == PushRegistrationStatus.registered) {
+      return;
+    }
+
     const maxRetries = 3;
     for (int attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -423,6 +464,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           },
         );
         final masked = response['maskedToken'] as String?;
+        _currentFcmToken = token;
+        _pushBoundUserId = userId;
         state = state.copyWith(
           pushToken: token,
           backendMaskedToken: masked,
@@ -450,6 +493,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> setTokensFromPair(TokenPair pair) async {
+    _tokenSubscription?.cancel();
+    _tokenSubscription = null;
+    _currentFcmToken = null;
+    _pushBoundUserId = null;
+
     await _storage.setToken(pair.accessToken);
     await _storage.setRefreshToken(pair.refreshToken);
     User? user;

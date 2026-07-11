@@ -61,7 +61,14 @@ class StorageService {
 
   Future<String?> getCurrentProject() async {
     final prefs = await _prefs;
-    return prefs.getString(_projectKey);
+    final id = prefs.getString(_projectKey);
+    if (id == null || id.isEmpty) return null;
+    return id;
+  }
+
+  Future<void> clearCurrentProject() async {
+    final prefs = await _prefs;
+    await prefs.remove(_projectKey);
   }
 
   /// Clears auth session and security credentials. Preserves device-level prefs
@@ -70,6 +77,7 @@ class StorageService {
     final prefs = await _prefs;
     final onboardingComplete = prefs.getBool(_onboardingCompleteKey);
     final lockMode = prefs.getString(_appLockModeKey);
+    final notificationTone = prefs.getString('notification_tone');
 
     await prefs.clear();
     if (onboardingComplete != null) {
@@ -78,7 +86,11 @@ class StorageService {
     if (lockMode != null) {
       await prefs.setString(_appLockModeKey, lockMode);
     }
+    if (notificationTone != null) {
+      await prefs.setString('notification_tone', notificationTone);
+    }
     // session_security_complete intentionally not restored — re-prompt after next login
+    // current_project is NOT restored — next account must pick its own projects
 
     await _secureStorage.delete(key: _refreshTokenKey);
     await _secureStorage.delete(key: _tokenKey);

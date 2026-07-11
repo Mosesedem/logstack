@@ -192,7 +192,8 @@ class LogsNotifier extends StateNotifier<LogsState> {
   void onProjectChanged(String? projectId) {
     if (_projectId == projectId) return;
     _projectId = projectId;
-    if (projectId == null) {
+    if (projectId == null || projectId.isEmpty) {
+      // Logout / account switch — drop stream + any "access denied" error UI.
       _streamService.disconnect();
       _setState(const LogsState());
       return;
