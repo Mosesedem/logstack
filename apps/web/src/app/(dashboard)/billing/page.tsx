@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { PricingTable } from "@/components/billing/pricing-table";
+import { BillingRegionCard } from "@/components/billing/billing-region-card";
 import { UsageProgressBar } from "@/components/billing/usage-progress-bar";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
@@ -36,6 +37,7 @@ import type {
   PricingResponse,
   SubscriptionTier,
   Invoice,
+  User,
 } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/v1";
@@ -84,9 +86,11 @@ function BillingPageContent() {
   const [billingContextData, setBillingContextData] =
     useState<BillingContextResponse | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [isSavingRegion, setIsSavingRegion] = useState(false);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [planPickerOpen, setPlanPickerOpen] = useState(false);
   const [pricingLoadError, setPricingLoadError] = useState(false);
+  const [profileCountry, setProfileCountry] = useState("");
   const pricingRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -119,9 +123,10 @@ function BillingPageContent() {
         setIsLoading(true);
       }
 
-      const [subResult, contextResult] = await Promise.allSettled([
+      const [subResult, contextResult, profileResult] = await Promise.allSettled([
         api.get<Subscription>("/billing/subscription"),
         api.get<BillingContextResponse>("/billing/context"),
+        api.get<User>("/users/me"),
       ]);
 
       const usageResult = await Promise.allSettled([
@@ -139,9 +144,16 @@ function BillingPageContent() {
         });
       }
 
+      if (profileResult.status === "fulfilled") {
+        setProfileCountry(profileResult.value.country ?? "");
+      }
+
       if (contextResult.status === "fulfilled") {
         setBillingContextData(contextResult.value);
         setPricingLoadError(false);
+        if (contextResult.value.context.country) {
+          setProfileCountry(contextResult.value.context.country);
+        }
       } else {
         console.error("Failed to load billing context:", contextResult.reason);
         try {
@@ -182,6 +194,34 @@ function BillingPageContent() {
     });
   };
 
+  const handleSaveRegion = async (country: string) => {
+    try {
+      setIsSavingRegion(true);
+      await api.put<User>("/users/me", { country });
+      setProfileCountry(country);
+      toast({
+        title: "Billing region saved",
+        description:
+          country === "NG"
+            ? "You'll pay in NGN via Paystack."
+            : "You'll pay in USD via Polar.",
+      });
+      await loadBillingData({ silent: true });
+    } catch (error) {
+      console.error("Failed to save billing region:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to save country. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingRegion(false);
+    }
+  };
+
   const handleSelectTier = async (tier: SubscriptionTier, currency: string) => {
     if (tier === "enterprise") {
       window.open(
@@ -191,22 +231,37 @@ function BillingPageContent() {
       return;
     }
 
+    if (billingContext?.countryRequired || !billingContext?.country) {
+      toast({
+        title: "Set your country first",
+        description:
+          "Choose your billing country above so we can charge you in NGN (Paystack) or USD (Polar).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const chargeCurrency = billingContext.currency || currency;
+
     try {
       setIsInitializing(true);
       const response = await api.post<{ authorizationUrl: string; provider: string }>(
         "/billing/initialize",
         {
           tier,
-          currency,
+          currency: chargeCurrency,
           callbackUrl: `${window.location.origin}/billing?success=true`,
         },
       );
 
+      if (!response.authorizationUrl) {
+        throw new Error("Payment provider did not return a checkout URL");
+      }
       window.location.href = response.authorizationUrl;
     } catch (error) {
       console.error("Failed to initialize payment:", error);
       toast({
-        title: "Error",
+        title: "Payment failed",
         description:
           error instanceof Error
             ? error.message
@@ -288,7 +343,7 @@ function BillingPageContent() {
         <p className="text-muted-foreground">
           Manage your subscription, billing details, and view invoices.
         </p>
-        {billingContext && (
+        {billingContext && !billingContext.countryRequired && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <CreditCard className="h-4 w-4" />
             <span>
@@ -297,14 +352,18 @@ function BillingPageContent() {
                 ? " (Nigeria)"
                 : " (International)"}
             </span>
-            <Button variant="link" className="h-auto p-0 text-xs" asChild>
-              <a href="/settings">Change country</a>
-            </Button>
           </div>
         )}
       </div>
 
       <div className="grid gap-8">
+        <BillingRegionCard
+          billingContext={billingContext}
+          initialCountry={profileCountry || billingContext?.country || ""}
+          onSave={handleSaveRegion}
+          isSaving={isSavingRegion}
+        />
+
         <div className="grid gap-4">
           <h2 className="text-xl font-medium">Usage</h2>
           <Card>

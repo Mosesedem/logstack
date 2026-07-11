@@ -89,7 +89,14 @@ func (h *UsersHandler) UpdateCurrentUser(c *gin.Context) {
 		user.Email = email
 	}
 	if req.Country != "" {
-		country := strings.ToUpper(strings.TrimSpace(req.Country))
+		country := services.NormalizeCountryCode(req.Country)
+		if len(country) != 2 {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Code:    "VALIDATION_ERROR",
+				Message: "country must be a 2-letter ISO code (e.g. NG, US)",
+			})
+			return
+		}
 		user.Country = &country
 	}
 

@@ -163,8 +163,14 @@ func (h *BillingHandler) InitializePayment(c *gin.Context) {
 			})
 			return
 		}
-		if strings.Contains(errMsg, "not available for your region") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		if strings.Contains(errMsg, "set your country") ||
+			strings.Contains(errMsg, "not available for country") ||
+			strings.Contains(errMsg, "not available for your region") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg, "code": "BILLING_COUNTRY_REQUIRED"})
+			return
+		}
+		if strings.Contains(errMsg, "paystack error") {
+			c.JSON(http.StatusBadGateway, gin.H{"error": errMsg, "code": "PAYSTACK_ERROR"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})

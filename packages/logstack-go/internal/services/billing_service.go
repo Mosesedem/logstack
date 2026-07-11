@@ -232,7 +232,7 @@ type InitializePaymentResponse struct {
 	Provider         string `json:"provider"`
 }
 
-// InitializePayment creates a checkout session routed by user country.
+// InitializePayment creates a checkout session routed by user country/currency.
 func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req InitializePaymentRequest) (*InitializePaymentResponse, error) {
 	var user models.User
 	if err := s.db.WithContext(ctx).First(&user, userID).Error; err != nil {
@@ -240,8 +240,22 @@ func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req
 	}
 
 	billingCtx := ResolveBillingContext(user.Country)
+	if billingCtx.CountryRequired {
+		return nil, errors.New("set your country in Billing or Settings before checkout so we can charge in the correct currency")
+	}
+	// Normalize currency; if client omits or mismatches, prefer region currency.
+	req.Currency = strings.ToUpper(strings.TrimSpace(req.Currency))
+	if req.Currency == "" {
+		req.Currency = billingCtx.Currency
+	}
 	if req.Currency != billingCtx.Currency {
-		return nil, fmt.Errorf("currency %s is not available for your region; use %s", req.Currency, billingCtx.Currency)
+		return nil, fmt.Errorf(
+			"currency %s is not available for country %s; use %s (%s)",
+			req.Currency,
+			billingCtx.Country,
+			billingCtx.Currency,
+			billingCtx.PaymentLabel,
+		)
 	}
 
 	tiers := models.LoadPricingTiers(s.db)
@@ -261,6 +275,11 @@ func (s *BillingService) InitializePayment(ctx context.Context, userID uint, req
 	}
 	if amount <= 0 {
 		return nil, errors.New("cannot initialize payment for free tier or enterprise (contact sales)")
+	}
+
+	// Ensure local subscription row exists before provider redirects.
+	if _, err := s.GetSubscription(ctx, userID); err != nil {
+		return nil, fmt.Errorf("subscription: %w", err)
 	}
 
 	if billingCtx.Provider == BillingProviderPolar {
@@ -307,11 +326,14 @@ func absolutePolarCheckoutURLs(successURL string) (success string, returnURL str
 	return success, ret.String(), nil
 }
 
-// initializePaystackSubscription sets up a Paystack plan + subscription authorization.
-// Amount is 0 on the initial transaction — Paystack charges via the attached plan.
+// initializePaystackSubscription sets up a Paystack plan + first authorization charge.
+// Amount is the plan price in kobo/cents (Paystack requires a positive amount with plan).
 func (s *BillingService) initializePaystackSubscription(ctx context.Context, user *models.User, req InitializePaymentRequest, amount int) (*InitializePaymentResponse, error) {
 	if !s.IsPaystackConfigured() {
 		return nil, errors.New("paystack billing is not configured")
+	}
+	if amount <= 0 {
+		return nil, errors.New("invalid paystack amount")
 	}
 
 	customerCode, err := s.getOrCreatePaystackCustomer(ctx, user)
@@ -324,48 +346,64 @@ func (s *BillingService) initializePaystackSubscription(ctx context.Context, use
 		return nil, fmt.Errorf("paystack plan: %w", err)
 	}
 
-	// Ensure subscription row has customer code before redirect
-	_ = s.db.WithContext(ctx).
+	// Persist customer + pending plan so webhooks can resolve the user.
+	if err := s.db.WithContext(ctx).
 		Model(&models.Subscription{}).
 		Where("user_id = ?", user.ID).
 		Updates(map[string]interface{}{
 			"paystack_customer_code": customerCode,
+			"paystack_plan_code":     planCode,
 			"billing_provider":       BillingProviderPaystack,
 			"currency":               req.Currency,
+			"amount_cents":           amount,
 			"updated_at":             time.Now().UTC(),
-		})
+		}).Error; err != nil {
+		return nil, fmt.Errorf("update subscription for paystack: %w", err)
+	}
+
+	callback := strings.TrimSpace(req.CallbackURL)
+	if callback == "" {
+		callback = "https://www.logstack.tech/billing?success=true"
+	}
 
 	paystackReq := PaystackInitializeRequest{
-		Email:    user.Email,
-		Amount:   0,
-		Currency: req.Currency,
-		Plan:     planCode,
+		Email:       user.Email,
+		Amount:      amount, // kobo/cents — must match plan for subscription checkout
+		Currency:    req.Currency,
+		Plan:        planCode,
+		CallbackURL: callback,
 		Metadata: map[string]string{
 			"user_id":         fmt.Sprintf("%d", user.ID),
 			"tier":            string(req.Tier),
 			"plan_code":       planCode,
+			"customer_code":   customerCode,
 			"is_subscription": "true",
+			"currency":        req.Currency,
 		},
 		Channels: []string{"card", "bank", "ussd", "bank_transfer"},
-	}
-	if req.CallbackURL != "" {
-		paystackReq.CallbackURL = req.CallbackURL
 	}
 
 	resp, err := s.doRequest(ctx, "POST", "/transaction/initialize", paystackReq)
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
 	var initResp PaystackInitializeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&initResp); err != nil {
-		resp.Body.Close()
-		return nil, err
+	if err := json.Unmarshal(body, &initResp); err != nil {
+		return nil, fmt.Errorf("paystack initialize decode: %w (body=%s)", err, truncatePaystackBody(body))
 	}
-	resp.Body.Close()
 
-	if !initResp.Status {
-		return nil, fmt.Errorf("paystack error: %s", initResp.Message)
+	if resp.StatusCode >= 300 || !initResp.Status {
+		msg := initResp.Message
+		if msg == "" {
+			msg = truncatePaystackBody(body)
+		}
+		return nil, fmt.Errorf("paystack error: %s", msg)
+	}
+	if initResp.Data.AuthorizationURL == "" {
+		return nil, errors.New("paystack error: missing authorization_url")
 	}
 
 	return &InitializePaymentResponse{
@@ -374,6 +412,15 @@ func (s *BillingService) initializePaystackSubscription(ctx context.Context, use
 		AccessCode:       initResp.Data.AccessCode,
 		Provider:         BillingProviderPaystack,
 	}, nil
+}
+
+func truncatePaystackBody(b []byte) string {
+	const max = 400
+	s := strings.TrimSpace(string(b))
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }
 
 // getOrCreatePaystackCustomer fetches an existing customer by email or creates one.
@@ -385,17 +432,19 @@ func (s *BillingService) getOrCreatePaystackCustomer(ctx context.Context, user *
 		}
 	}
 
-	// Try fetch by email
-	fetchResp, fetchErr := s.doRequest(ctx, "GET", "/customer/"+user.Email, nil)
+	// Paystack fetch-by-email requires a path-encoded address.
+	fetchPath := "/customer/" + url.PathEscape(user.Email)
+	fetchResp, fetchErr := s.doRequest(ctx, "GET", fetchPath, nil)
 	if fetchErr == nil {
 		defer fetchResp.Body.Close()
+		body, _ := io.ReadAll(fetchResp.Body)
 		var existing struct {
 			Status bool `json:"status"`
 			Data   struct {
 				CustomerCode string `json:"customer_code"`
 			} `json:"data"`
 		}
-		if json.NewDecoder(fetchResp.Body).Decode(&existing) == nil && existing.Status {
+		if json.Unmarshal(body, &existing) == nil && existing.Status && existing.Data.CustomerCode != "" {
 			return existing.Data.CustomerCode, nil
 		}
 	}
@@ -413,12 +462,17 @@ func (s *BillingService) getOrCreatePaystackCustomer(ctx context.Context, user *
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
 	var customerResp PaystackCustomerResponse
-	if err := json.NewDecoder(resp.Body).Decode(&customerResp); err != nil {
-		return "", err
+	if err := json.Unmarshal(body, &customerResp); err != nil {
+		return "", fmt.Errorf("create customer decode: %w", err)
 	}
-	if !customerResp.Status {
-		return "", fmt.Errorf("failed to create customer: %s", customerResp.Message)
+	if !customerResp.Status || customerResp.Data.CustomerCode == "" {
+		msg := customerResp.Message
+		if msg == "" {
+			msg = truncatePaystackBody(body)
+		}
+		return "", fmt.Errorf("failed to create customer: %s", msg)
 	}
 	return customerResp.Data.CustomerCode, nil
 }

@@ -25,20 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { BillingContextResponse, User } from "@/types";
 import { LinkMobileDialog } from "@/components/auth/link-mobile-dialog";
 import { SettingsPageSkeleton } from "@/components/loading";
-
-const COUNTRIES = [
-  { code: "NG", name: "Nigeria" },
-  { code: "US", name: "United States" },
-  { code: "GB", name: "United Kingdom" },
-  { code: "CA", name: "Canada" },
-  { code: "DE", name: "Germany" },
-  { code: "FR", name: "France" },
-  { code: "IN", name: "India" },
-  { code: "AU", name: "Australia" },
-  { code: "GH", name: "Ghana" },
-  { code: "KE", name: "Kenya" },
-  { code: "ZA", name: "South Africa" },
-];
+import { BILLING_COUNTRIES } from "@/components/billing/billing-region-card";
 
 function detectDefaultCountry(): string {
   if (typeof navigator === "undefined") return "US";
@@ -171,16 +158,16 @@ export default function SettingsPage() {
                   <SelectValue placeholder="Select country" />
                 </SelectTrigger>
                 <SelectContent>
-                  {COUNTRIES.map((c) => (
+                  {BILLING_COUNTRIES.map((c) => (
                     <SelectItem key={c.code} value={c.code}>
-                      {c.name}
+                      {c.name} · {c.currency}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Nigerian customers are billed in NGN via Paystack. All other
-                countries are billed in USD via Polar.
+                Nigeria → NGN via Paystack. All other countries → USD via Polar.
+                You can also change this on the Billing page.
               </p>
             </div>
             {billingContext && (
@@ -191,6 +178,9 @@ export default function SettingsPage() {
                 <span className="font-medium">
                   {billingContext.paymentLabel}
                 </span>
+                {billingContext.countryRequired
+                  ? " — set a country to enable checkout"
+                  : ""}
               </div>
             )}
             <Button

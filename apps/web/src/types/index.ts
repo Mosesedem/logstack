@@ -62,6 +62,8 @@ export interface BillingContext {
   country: string;
   isNigeria: boolean;
   paymentLabel: string;
+  /** True when the user has not saved a country yet. */
+  countryRequired?: boolean;
 }
 
 export interface BillingContextResponse {

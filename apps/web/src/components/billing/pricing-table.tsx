@@ -54,12 +54,23 @@ export function PricingTable({
     <div className="space-y-6">
       {billingContext && (
         <p className="text-center text-sm text-muted-foreground">
-          Billing in{" "}
-          <span className="font-medium text-foreground">{currency}</span> via{" "}
-          <span className="font-medium text-foreground">{providerLabel}</span>
-          {billingContext.isNigeria
-            ? " — Nigerian customers"
-            : " — international customers"}
+          {billingContext.countryRequired ? (
+            <>
+              Set your billing country above before upgrading — that chooses{" "}
+              <span className="font-medium text-foreground">NGN / Paystack</span>{" "}
+              or{" "}
+              <span className="font-medium text-foreground">USD / Polar</span>.
+            </>
+          ) : (
+            <>
+              Billing in{" "}
+              <span className="font-medium text-foreground">{currency}</span> via{" "}
+              <span className="font-medium text-foreground">{providerLabel}</span>
+              {billingContext.isNigeria
+                ? " — Nigerian customers"
+                : " — international customers"}
+            </>
+          )}
         </p>
       )}
 
