@@ -98,7 +98,7 @@ func seedTokens(db *gorm.DB, userID uint, tokens []string) {
 func activeTokensForUser(db *gorm.DB, userID uint) []models.PushToken {
 	var tokens []models.PushToken
 	db.Where("user_id = ?", userID).Find(&tokens)
-	return latestTokensPerDevice(tokens)
+	return uniqueTokensByValue(tokens)
 }
 
 func makeAlertRule(recipient string) *models.AlertRule {
@@ -174,7 +174,7 @@ func TestFCMSendAttemptsMatchTokenCount(t *testing.T) {
 
 		expected := len(activeTokensForUser(db, 1))
 		if got := mock.Calls(); got != expected {
-			t.Fatalf("expected %d FCM Send() calls for %d stored tokens (%d active per platform), got %d", expected, n, expected, got)
+			t.Fatalf("expected %d FCM Send() calls for %d stored tokens (%d unique), got %d", expected, n, expected, got)
 		}
 	})
 }
@@ -226,20 +226,25 @@ func TestInvalidTokenCleanup(t *testing.T) {
 		mock := newMockFCMClient()
 		p := newTestPushNotifier(db, mock)
 
-		// One active token per platform — mirrors production Send behaviour.
+		// Multiple tokens same platform are allowed (multi-device).
 		androidTok := fmt.Sprintf("android-%d", rapid.IntRange(0, 9999).Draw(t, "android"))
-		iosTok := fmt.Sprintf("ios-%d", rapid.IntRange(0, 9999).Draw(t, "ios"))
+		iosTokA := fmt.Sprintf("ios-a-%d", rapid.IntRange(0, 9999).Draw(t, "ios-a"))
+		iosTokB := fmt.Sprintf("ios-b-%d", rapid.IntRange(0, 9999).Draw(t, "ios-b"))
 		stamp := time.Now()
 		db.Create(&models.PushToken{
 			UserID: 1, Token: androidTok, DeviceType: models.DeviceTypeAndroid,
 			CreatedAt: stamp, UpdatedAt: stamp,
 		})
 		db.Create(&models.PushToken{
-			UserID: 1, Token: iosTok, DeviceType: models.DeviceTypeIOS,
+			UserID: 1, Token: iosTokA, DeviceType: models.DeviceTypeIOS,
 			CreatedAt: stamp.Add(time.Millisecond), UpdatedAt: stamp.Add(time.Millisecond),
 		})
+		db.Create(&models.PushToken{
+			UserID: 1, Token: iosTokB, DeviceType: models.DeviceTypeIOS,
+			CreatedAt: stamp.Add(2 * time.Millisecond), UpdatedAt: stamp.Add(2 * time.Millisecond),
+		})
 
-		tokens := []string{androidTok, iosTok}
+		tokens := []string{androidTok, iosTokA, iosTokB}
 		invalidSet := make(map[string]bool)
 		for _, tok := range tokens {
 			if rapid.Bool().Draw(t, "invalid-"+tok) {

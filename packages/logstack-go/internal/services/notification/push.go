@@ -209,8 +209,9 @@ func (p *PushNotifier) SendDirectDetailed(
 	if err := p.db.Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
 		return reportErr(fmt.Errorf("failed to fetch push tokens: %w", err))
 	}
-	storedCount := len(tokens)
-	tokens = latestTokensPerDevice(tokens)
+	// All registered devices for this user (phone, tablet, device upgrade, etc.).
+	// Deduplicate by token string only — the same FCM token should not be sent twice.
+	tokens = uniqueTokensByValue(tokens)
 	result.TokensFound = len(tokens)
 
 	RecordPushTrace(PushTraceEvent{
@@ -218,7 +219,7 @@ func (p *PushNotifier) SendDirectDetailed(
 		Source: source,
 		UserID: userID,
 		Title:  title,
-		Detail: fmt.Sprintf("stored=%d active=%d", storedCount, result.TokensFound),
+		Detail: fmt.Sprintf("tokens=%d", result.TokensFound),
 	})
 
 	if len(tokens) == 0 {
@@ -444,27 +445,29 @@ func (p *PushNotifier) resolveUserID(rule *models.AlertRule, log *models.Log) (u
 	return project.OwnerID, nil
 }
 
-// latestTokensPerDevice keeps only the newest token per platform so stale iOS
-// tokens (e.g. from an old debug build) do not shadow the current TestFlight token.
-func latestTokensPerDevice(tokens []models.PushToken) []models.PushToken {
+// uniqueTokensByValue keeps one row per FCM token string (last wins) and
+// normalizes device type. Multiple devices per user/platform are intentional.
+func uniqueTokensByValue(tokens []models.PushToken) []models.PushToken {
 	if len(tokens) <= 1 {
+		for i := range tokens {
+			tokens[i].DeviceType = normalizeDeviceType(tokens[i].DeviceType)
+		}
 		return tokens
 	}
 
-	latest := make(map[models.DeviceType]models.PushToken)
+	byToken := make(map[string]models.PushToken, len(tokens))
+	order := make([]string, 0, len(tokens))
 	for _, token := range tokens {
-		dt := normalizeDeviceType(token.DeviceType)
-		token.DeviceType = dt
-		prev, ok := latest[dt]
-		if !ok || token.UpdatedAt.After(prev.UpdatedAt) ||
-			(token.UpdatedAt.Equal(prev.UpdatedAt) && token.CreatedAt.After(prev.CreatedAt)) {
-			latest[dt] = token
+		token.DeviceType = normalizeDeviceType(token.DeviceType)
+		if _, seen := byToken[token.Token]; !seen {
+			order = append(order, token.Token)
 		}
+		byToken[token.Token] = token
 	}
 
-	out := make([]models.PushToken, 0, len(latest))
-	for _, token := range latest {
-		out = append(out, token)
+	out := make([]models.PushToken, 0, len(order))
+	for _, key := range order {
+		out = append(out, byToken[key])
 	}
 	return out
 }

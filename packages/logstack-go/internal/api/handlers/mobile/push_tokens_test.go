@@ -62,7 +62,7 @@ func TestPushTokenCapInvariant(t *testing.T) {
 			var oldestTokenBefore string
 			if countBefore >= 10 {
 				var oldest models.PushToken
-				if err := db.Where("user_id = ?", userID).Order("created_at ASC").First(&oldest).Error; err == nil {
+				if err := db.Where("user_id = ?", userID).Order("updated_at ASC, created_at ASC").First(&oldest).Error; err == nil {
 					oldestTokenBefore = oldest.Token
 				}
 			}
@@ -78,7 +78,7 @@ func TestPushTokenCapInvariant(t *testing.T) {
 				t.Fatalf("token count %d exceeds cap of 10 after inserting token %q", countAfter, token)
 			}
 
-			// Assert oldest was evicted when cap was triggered
+			// Assert least-recently-updated was evicted when cap was triggered
 			if countBefore >= 10 && oldestTokenBefore != "" {
 				var evicted models.PushToken
 				result := db.Where("user_id = ? AND token = ?", userID, oldestTokenBefore).First(&evicted)
@@ -86,6 +86,23 @@ func TestPushTokenCapInvariant(t *testing.T) {
 					t.Fatalf("expected oldest token %q to be evicted but it still exists in DB", oldestTokenBefore)
 				}
 			}
+
+			// Newest registration must remain (multi-device; no per-platform purge)
+			var newest models.PushToken
+			if err := db.Where("user_id = ? AND token = ?", userID, token).First(&newest).Error; err != nil {
+				t.Fatalf("expected newly registered token %q to exist: %v", token, err)
+			}
+		}
+
+		// After many same-platform registrations, multiple tokens should coexist (up to cap)
+		var finalCount int64
+		db.Model(&models.PushToken{}).Where("user_id = ?", userID).Count(&finalCount)
+		expected := n
+		if expected > 10 {
+			expected = 10
+		}
+		if int(finalCount) != expected {
+			t.Fatalf("expected %d tokens after multi-device register, got %d", expected, finalCount)
 		}
 	})
 }

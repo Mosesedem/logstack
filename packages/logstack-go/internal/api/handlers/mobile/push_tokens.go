@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -67,32 +66,10 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 
 	now := time.Now()
 
-	// One active token per platform per user — stale iOS tokens from old builds
-	// are the #1 cause of "Firebase Console works, API doesn't".
-	purge := h.db.
-		Where("user_id = ? AND device_type = ? AND token <> ?", userID, req.DeviceType, req.Token).
-		Delete(&models.PushToken{})
-	if purge.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": purge.Error.Error()})
-		return
-	}
-	if purge.RowsAffected > 0 {
-		slog.Info("push_trace",
-			"event", "push_trace",
-			"phase", "register_purge",
-			"source", "mobile_register",
-			"userId", userID,
-			"deviceType", req.DeviceType,
-			"purged", purge.RowsAffected,
-		)
-		notification.RecordPushTrace(notification.PushTraceEvent{
-			Phase:      "register_purge",
-			Source:     "mobile_register",
-			UserID:     userID,
-			DeviceType: string(req.DeviceType),
-			Detail:     fmt.Sprintf("purged=%d stale tokens", purge.RowsAffected),
-		})
-	}
+	// Multiple devices per user are allowed (phone + tablet, device upgrade, etc.).
+	// Token string is unique globally; re-registering the same FCM token updates the row.
+	// Stale tokens are removed when FCM reports them unregistered/invalid on send.
+	// Soft cap of 10 tokens per user evicts the least-recently-updated rows.
 
 	var existing models.PushToken
 	if err := h.db.Where("token = ?", req.Token).First(&existing).Error; err == nil {
@@ -119,21 +96,35 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		return
 	}
 
+	// Cap before insert so concurrent devices never leave unbounded rows.
+	var tokenCount int64
+	h.db.Model(&models.PushToken{}).Where("user_id = ?", userID).Count(&tokenCount)
+	for tokenCount >= 10 {
+		var oldest models.PushToken
+		if err := h.db.Where("user_id = ?", userID).Order("updated_at ASC, created_at ASC").First(&oldest).Error; err != nil {
+			break
+		}
+		if err := h.db.Delete(&oldest).Error; err != nil {
+			slog.Warn("failed to evict oldest push token", "userId", userID, "error", err)
+			break
+		}
+		tokenCount--
+		notification.RecordPushTrace(notification.PushTraceEvent{
+			Phase:       "register_evict",
+			Source:      "mobile_register",
+			UserID:      userID,
+			DeviceType:  string(oldest.DeviceType),
+			MaskedToken: maskPushToken(oldest.Token),
+			Detail:      "evicted least-recently-updated token (cap 10)",
+		})
+	}
+
 	token := models.PushToken{
 		UserID:     userID,
 		Token:      req.Token,
 		DeviceType: req.DeviceType,
 		UpdatedAt:  now,
 		CreatedAt:  now,
-	}
-
-	var tokenCount int64
-	h.db.Model(&models.PushToken{}).Where("user_id = ?", userID).Count(&tokenCount)
-	if tokenCount >= 10 {
-		var oldest models.PushToken
-		if err := h.db.Where("user_id = ?", userID).Order("created_at ASC").First(&oldest).Error; err == nil {
-			h.db.Delete(&oldest)
-		}
 	}
 
 	if err := h.db.Create(&token).Error; err != nil {
