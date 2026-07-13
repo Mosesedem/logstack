@@ -73,12 +73,10 @@ class _LogDetailScreenState extends ConsumerState<LogDetailScreen> {
     }
 
     try {
-      final result = await SharePlus.instance.share(
-        ShareParams(
-          text: formatLogForShare(log),
-          subject: 'Logstack log #${log.id}',
-          sharePositionOrigin: origin,
-        ),
+      final result = await Share.share(
+        formatLogForShare(log),
+        subject: 'Logstack log #${log.id}',
+        sharePositionOrigin: origin,
       );
 
       if (!mounted) return;
