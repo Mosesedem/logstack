@@ -422,9 +422,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   Icons.open_in_new,
                   color: LogstackColors.textSecondary,
                 ),
-                title: const Text('Manage on web'),
+                title: const Text('Manage your Projects'),
                 subtitle: const Text(
-                  'Billing, alerts, API keys — logstack.tech',
+                  'Usage, alerts, API keys — logstack.tech',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => launchUrl(
@@ -442,14 +442,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'Sign out',
                   style: TextStyle(color: LogstackColors.errorRed),
                 ),
-                subtitle: const Text('Clears session and cached logs on this device'),
+                subtitle: const Text('Logout from this device.'),
                 onTap: () async {
                   final confirmed = await showDialog<bool>(
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text('Sign out?'),
                       content: const Text(
-                        'Your session and cached logs on this device will be cleared.',
+                        'You will be logged out of this device.',
                       ),
                       actions: [
                         TextButton(
