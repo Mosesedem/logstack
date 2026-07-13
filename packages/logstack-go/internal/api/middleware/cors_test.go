@@ -16,6 +16,7 @@ func TestCORS(t *testing.T) {
 		allowedOrigins []string
 		origin         string
 		method         string
+		path           string
 		wantOrigin     string
 		wantVary       string
 		wantStatus     int
@@ -65,20 +66,67 @@ func TestCORS(t *testing.T) {
 			wantVary:       "Origin",
 			wantStatus:     http.StatusNoContent,
 		},
+		{
+			name:           "allows log ingestion from any origin (explicit check)",
+			allowedOrigins: []string{"https://app.logstack.tech"},
+			origin:         "https://another-domain.com",
+			method:         http.MethodPost,
+			path:           "/v1/logs",
+			wantOrigin:     "https://another-domain.com",
+			wantVary:       "Origin",
+			wantStatus:     http.StatusOK,
+		},
+		{
+			name:           "allows log ingestion preflight from any origin",
+			allowedOrigins: []string{"https://app.logstack.tech"},
+			origin:         "https://another-domain.com",
+			method:         http.MethodOptions,
+			path:           "/v1/logs",
+			wantOrigin:     "https://another-domain.com",
+			wantVary:       "Origin",
+			wantStatus:     http.StatusNoContent,
+		},
+		{
+			name:           "allows log ingestion subpath preflight from any origin",
+			allowedOrigins: []string{"https://app.logstack.tech"},
+			origin:         "https://another-domain.com",
+			method:         http.MethodOptions,
+			path:           "/v1/logs/123",
+			wantOrigin:     "https://another-domain.com",
+			wantVary:       "Origin",
+			wantStatus:     http.StatusNoContent,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			path := tt.path
+			if path == "" {
+				path = "/"
+			}
+
 			router := gin.New()
 			router.Use(CORS(tt.allowedOrigins))
-			router.GET("/", func(c *gin.Context) {
-				c.Status(http.StatusOK)
+			
+			// Setup route handler dynamically based on path
+			router.Any(path, func(c *gin.Context) {
+				if c.Request.Method == http.MethodOptions {
+					c.Status(http.StatusNoContent)
+				} else {
+					c.Status(http.StatusOK)
+				}
 			})
-			router.OPTIONS("/", func(c *gin.Context) {
-				c.Status(http.StatusNoContent)
-			})
+			if path != "/" {
+				router.Any("/", func(c *gin.Context) {
+					if c.Request.Method == http.MethodOptions {
+						c.Status(http.StatusNoContent)
+					} else {
+						c.Status(http.StatusOK)
+					}
+				})
+			}
 
-			req := httptest.NewRequest(tt.method, "/", nil)
+			req := httptest.NewRequest(tt.method, path, nil)
 			req.Header.Set("Origin", tt.origin)
 			rec := httptest.NewRecorder()
 

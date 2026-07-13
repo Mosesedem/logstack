@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -8,13 +10,25 @@ import (
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
+		path := c.Request.URL.Path
 
 		// Check if origin is allowed
 		allowed := false
-		for _, allowedOrigin := range allowedOrigins {
-			if allowedOrigin == "*" || allowedOrigin == origin {
-				allowed = true
-				break
+
+		// Ingestion endpoints (/v1/logs or /api/v1/logs) must allow any origin (e.g. from users' sites/apps)
+		isLogsEndpoint := path == "/v1/logs" ||
+			strings.HasPrefix(path, "/v1/logs/") ||
+			path == "/api/v1/logs" ||
+			strings.HasPrefix(path, "/api/v1/logs/")
+
+		if isLogsEndpoint {
+			allowed = true
+		} else {
+			for _, allowedOrigin := range allowedOrigins {
+				if allowedOrigin == "*" || allowedOrigin == origin {
+					allowed = true
+					break
+				}
 			}
 		}
 
