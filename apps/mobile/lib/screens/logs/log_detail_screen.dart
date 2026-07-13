@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,8 +63,41 @@ class _LogDetailScreenState extends ConsumerState<LogDetailScreen> {
     }
   }
 
-  Future<void> _shareLog(Log log) async {
-    await Share.share(formatLogForShare(log), subject: 'Logstack log #${log.id}');
+  Future<void> _shareLog(Log log, BuildContext ctx) async {
+    // Resolve the share button's position for the iPad share popover anchor.
+    Rect? origin;
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize) {
+      final position = box.localToGlobal(Offset.zero);
+      origin = position & box.size;
+    }
+
+    try {
+      final result = await SharePlus.instance.share(
+        ShareParams(
+          text: formatLogForShare(log),
+          subject: 'Logstack log #${log.id}',
+          sharePositionOrigin: origin,
+        ),
+      );
+
+      if (!mounted) return;
+
+      // Show feedback based on the share result.
+      if (result.status == ShareResultStatus.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Log shared successfully')),
+        );
+      } else if (result.status == ShareResultStatus.dismissed) {
+        // User dismissed the share sheet — no action needed.
+      }
+    } catch (e) {
+      if (!mounted) return;
+      if (kDebugMode) debugPrint('Share failed: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open share sheet')),
+      );
+    }
   }
 
   Future<void> _copyRawJson(Log log) async {
@@ -131,10 +165,12 @@ class _LogDetailScreenState extends ConsumerState<LogDetailScreen> {
         title: const Text('Log detail'),
         actions: [
           if (_log != null) ...[
-            IconButton(
-              icon: const Icon(Icons.share_outlined),
-              tooltip: 'Share',
-              onPressed: () => _shareLog(_log!),
+            Builder(
+              builder: (buttonCtx) => IconButton(
+                icon: const Icon(Icons.share_outlined),
+                tooltip: 'Share',
+                onPressed: () => _shareLog(_log!, buttonCtx),
+              ),
             ),
             IconButton(
               icon: const Icon(Icons.copy_outlined),
