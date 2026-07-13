@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
@@ -16,9 +17,12 @@ import 'package:logstack_mobile/screens/onboarding/security_setup_screen.dart';
 import 'package:logstack_mobile/screens/onboarding/splash_screen.dart';
 import 'package:logstack_mobile/screens/settings/settings_screen.dart';
 
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
   // Create GoRouter once — never recreate when auth/onboarding changes (that crashes).
   final router = GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
     redirect: (context, state) {
       final onboarding = ref.read(onboardingProvider);

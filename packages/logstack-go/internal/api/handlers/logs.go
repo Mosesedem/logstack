@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -371,7 +373,7 @@ func (h *ProjectLogsHandler) Escalate(c *gin.Context) {
 	}
 
 	var project models.Project
-	if err := h.db.Select("owner_id").First(&project, "id = ?", projectID).Error; err != nil {
+	if err := h.db.Preload("Owner").First(&project, "id = ?", projectID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Code:    "INTERNAL_ERROR",
 			Message: "Failed to resolve project owner",
@@ -380,21 +382,64 @@ func (h *ProjectLogsHandler) Escalate(c *gin.Context) {
 	}
 
 	notified := []string{}
-	if h.notifier != nil && h.notifier.GetPushNotifier() != nil {
-		title := "Logstack: log escalated"
-		body := fmt.Sprintf("[%s] %s", log.Level, truncateEscalationMessage(log.Message))
-		data := map[string]string{
-			"logId":     fmt.Sprintf("%d", log.ID),
-			"projectId": log.ProjectID.String(),
-			"level":     string(log.Level),
-			"type":      "escalation",
+	if h.notifier != nil {
+		// 1. Push notification
+		if h.notifier.GetPushNotifier() != nil {
+			title := "Logstack: log escalated"
+			body := fmt.Sprintf("[%s] %s", log.Level, truncateEscalationMessage(log.Message))
+			data := map[string]string{
+				"logId":     fmt.Sprintf("%d", log.ID),
+				"projectId": log.ProjectID.String(),
+				"level":     string(log.Level),
+				"type":      "escalation",
+			}
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+			defer cancel()
+			if err := h.notifier.GetPushNotifier().SendDirect(ctx, project.OwnerID, title, body, data); err == nil {
+				notified = append(notified, "push")
+			} else {
+				slog.Warn("escalation push failed", "error", err, "ownerId", project.OwnerID)
+			}
 		}
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-		defer cancel()
-		if err := h.notifier.GetPushNotifier().SendDirect(ctx, project.OwnerID, title, body, data); err == nil {
-			notified = append(notified, "push")
-		} else {
-			slog.Warn("escalation push failed", "error", err, "ownerId", project.OwnerID)
+
+		// 2. Email notification
+		if h.notifier.GetEmailNotifier() != nil {
+			recipientEmail := project.Owner.EscalationEmail
+			if recipientEmail == "" {
+				recipientEmail = project.Owner.Email
+			}
+			if recipientEmail != "" {
+				ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+				defer cancel()
+				if err := h.notifier.CheckAndIncrementEmailLimit(ctx, project.OwnerID); err != nil {
+					slog.Warn("escalation email blocked by limit", "error", err, "ownerId", project.OwnerID)
+				} else {
+					subject := "Logstack Escalation Alert"
+					content := notification.StandardEmail{
+						Title:    subject,
+						Greeting: fmt.Sprintf("Hello %s,", project.Owner.Name),
+						MessageHTML: fmt.Sprintf(
+							`<p>A log has been escalated in your project <strong>%s</strong>:</p>
+							<p><strong>Level:</strong> %s<br>
+							<strong>Source:</strong> %s<br>
+							<strong>Time:</strong> %s</p>
+							<p><strong>Message:</strong><br><code style="font-size:13px;background-color:#f5f5f5;padding:8px;display:block;border-radius:4px;white-space:pre-wrap;">%s</code></p>`,
+							html.EscapeString(project.Name),
+							html.EscapeString(string(log.Level)),
+							html.EscapeString(log.Source),
+							html.EscapeString(log.CreatedAt.Format("2006-01-02 15:04:05 MST")),
+							html.EscapeString(log.Message),
+						),
+						ButtonURL:  fmt.Sprintf("%s/logs?projectId=%s", h.notifier.GetEmailNotifier().BaseURL(), project.ID.String()),
+						ButtonText: "View Logs",
+					}
+					if err := h.notifier.GetEmailNotifier().SendStandard(ctx, recipientEmail, project.Owner.Name, subject, content); err == nil {
+						notified = append(notified, "email")
+					} else {
+						slog.Warn("escalation email failed", "error", err, "ownerId", project.OwnerID)
+					}
+				}
+			}
 		}
 	}
 
@@ -414,7 +459,7 @@ func truncateEscalationMessage(msg string) string {
 
 func escalationSuccessMessage(notified []string) string {
 	if len(notified) == 0 {
-		return "Log escalated. Install the mobile app and enable push on the project owner account for instant alerts."
+		return "Log escalated. Install the mobile app and enable push on the project owner account, or configure email, for instant alerts."
 	}
-	return fmt.Sprintf("Log escalated. Notified via %s.", notified[0])
+	return fmt.Sprintf("Log escalated. Notified via %s.", strings.Join(notified, " and "))
 }

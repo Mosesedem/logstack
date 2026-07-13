@@ -144,6 +144,10 @@ func (e *EmailNotifier) hasConfiguredProvider() bool {
 	return false
 }
 
+func (e *EmailNotifier) BaseURL() string {
+	return e.baseURL
+}
+
 func maskEmail(addr string) string {
 	at := strings.LastIndex(addr, "@")
 	if at < 0 {

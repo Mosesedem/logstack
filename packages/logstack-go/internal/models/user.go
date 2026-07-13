@@ -14,6 +14,7 @@ type User struct {
 	PasswordHash       string     `gorm:"size:255;not null" json:"-"`
 	Name               string     `gorm:"size:100" json:"name"`
 	Country            *string    `gorm:"size:2" json:"country,omitempty"`
+	EscalationEmail    string     `gorm:"size:255" json:"escalationEmail"`
 	Role               string     `gorm:"size:20;not null;default:'user'" json:"role"`
 	EmailVerified      bool       `gorm:"not null;default:false" json:"emailVerified"`
 	VerificationToken  *string    `gorm:"size:64" json:"-"`
@@ -74,6 +75,7 @@ type UserResponse struct {
 	Email         string    `json:"email"`
 	Name          string    `json:"name"`
 	Country       *string   `json:"country,omitempty"`
+	EscalationEmail string  `json:"escalationEmail"`
 	Role          string    `json:"role"`
 	EmailVerified bool      `json:"emailVerified"`
 	CreatedAt     time.Time `json:"createdAt"`
@@ -89,6 +91,7 @@ func (u *User) ToResponse() UserResponse {
 		Email:         u.Email,
 		Name:          u.Name,
 		Country:       u.Country,
+		EscalationEmail: u.EscalationEmail,
 		Role:          role,
 		EmailVerified: u.EmailVerified,
 		CreatedAt:     u.CreatedAt,

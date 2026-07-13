@@ -17,6 +17,7 @@ export interface User {
   email: string;
   name: string;
   country?: string;
+  escalationEmail?: string;
   role?: PlatformRole | string;
   emailVerified?: boolean;
   createdAt: string;

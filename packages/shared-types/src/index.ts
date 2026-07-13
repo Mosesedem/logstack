@@ -40,6 +40,7 @@ export interface LogQuery {
 export interface User {
   id: string;
   email: string;
+  escalationEmail?: string;
   createdAt: string;
 }
 

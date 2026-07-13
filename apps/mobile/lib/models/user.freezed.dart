@@ -23,6 +23,7 @@ mixin _$User {
   int get id => throw _privateConstructorUsedError;
   String get email => throw _privateConstructorUsedError;
   String? get name => throw _privateConstructorUsedError;
+  String? get escalationEmail => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -35,7 +36,7 @@ abstract class $UserCopyWith<$Res> {
   factory $UserCopyWith(User value, $Res Function(User) then) =
       _$UserCopyWithImpl<$Res, User>;
   @useResult
-  $Res call({int id, String email, String? name, DateTime createdAt});
+  $Res call({int id, String email, String? name, String? escalationEmail, DateTime createdAt});
 }
 
 /// @nodoc
@@ -54,6 +55,7 @@ class _$UserCopyWithImpl<$Res, $Val extends User>
     Object? id = null,
     Object? email = null,
     Object? name = freezed,
+    Object? escalationEmail = freezed,
     Object? createdAt = null,
   }) {
     return _then(_value.copyWith(
@@ -68,6 +70,10 @@ class _$UserCopyWithImpl<$Res, $Val extends User>
       name: freezed == name
           ? _value.name
           : name // ignore: cast_nullable_to_non_nullable
+              as String?,
+      escalationEmail: freezed == escalationEmail
+          ? _value.escalationEmail
+          : escalationEmail // ignore: cast_nullable_to_non_nullable
               as String?,
       createdAt: null == createdAt
           ? _value.createdAt
@@ -84,7 +90,7 @@ abstract class _$$UserImplCopyWith<$Res> implements $UserCopyWith<$Res> {
       __$$UserImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({int id, String email, String? name, DateTime createdAt});
+  $Res call({int id, String email, String? name, String? escalationEmail, DateTime createdAt});
 }
 
 /// @nodoc
@@ -100,6 +106,7 @@ class __$$UserImplCopyWithImpl<$Res>
     Object? id = null,
     Object? email = null,
     Object? name = freezed,
+    Object? escalationEmail = freezed,
     Object? createdAt = null,
   }) {
     return _then(_$UserImpl(
@@ -114,6 +121,10 @@ class __$$UserImplCopyWithImpl<$Res>
       name: freezed == name
           ? _value.name
           : name // ignore: cast_nullable_to_non_nullable
+              as String?,
+      escalationEmail: freezed == escalationEmail
+          ? _value.escalationEmail
+          : escalationEmail // ignore: cast_nullable_to_non_nullable
               as String?,
       createdAt: null == createdAt
           ? _value.createdAt
@@ -130,6 +141,7 @@ class _$UserImpl implements _User {
       {required this.id,
       required this.email,
       this.name,
+      this.escalationEmail,
       required this.createdAt});
 
   factory _$UserImpl.fromJson(Map<String, dynamic> json) =>
@@ -142,11 +154,13 @@ class _$UserImpl implements _User {
   @override
   final String? name;
   @override
+  final String? escalationEmail;
+  @override
   final DateTime createdAt;
 
   @override
   String toString() {
-    return 'User(id: $id, email: $email, name: $name, createdAt: $createdAt)';
+    return 'User(id: $id, email: $email, name: $name, escalationEmail: $escalationEmail, createdAt: $createdAt)';
   }
 
   @override
@@ -157,13 +171,15 @@ class _$UserImpl implements _User {
             (identical(other.id, id) || other.id == id) &&
             (identical(other.email, email) || other.email == email) &&
             (identical(other.name, name) || other.name == name) &&
+            (identical(other.escalationEmail, escalationEmail) ||
+                other.escalationEmail == escalationEmail) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, id, email, name, createdAt);
+  int get hashCode => Object.hash(runtimeType, id, email, name, escalationEmail, createdAt);
 
   @JsonKey(ignore: true)
   @override
@@ -184,6 +200,7 @@ abstract class _User implements User {
       {required final int id,
       required final String email,
       final String? name,
+      final String? escalationEmail,
       required final DateTime createdAt}) = _$UserImpl;
 
   factory _User.fromJson(Map<String, dynamic> json) = _$UserImpl.fromJson;
@@ -194,6 +211,8 @@ abstract class _User implements User {
   String get email;
   @override
   String? get name;
+  @override
+  String? get escalationEmail;
   @override
   DateTime get createdAt;
   @override

@@ -24,9 +24,10 @@ func NewUsersHandler(db *gorm.DB, authService *services.AuthService) *UsersHandl
 }
 
 type UpdateUserRequest struct {
-	Name    string `json:"name" binding:"omitempty,min=1,max=100"`
-	Email   string `json:"email" binding:"omitempty,email"`
-	Country string `json:"country" binding:"omitempty,len=2"`
+	Name            string  `json:"name" binding:"omitempty,min=1,max=100"`
+	Email           string  `json:"email" binding:"omitempty,email"`
+	Country         string  `json:"country" binding:"omitempty,len=2"`
+	EscalationEmail *string `json:"escalationEmail" binding:"omitempty"`
 }
 
 type UpdatePasswordRequest struct {
@@ -98,6 +99,9 @@ func (h *UsersHandler) UpdateCurrentUser(c *gin.Context) {
 			return
 		}
 		user.Country = &country
+	}
+	if req.EscalationEmail != nil {
+		user.EscalationEmail = strings.TrimSpace(*req.EscalationEmail)
 	}
 
 	if err := h.db.Save(&user).Error; err != nil {

@@ -84,25 +84,49 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
     }
 
     if (logsState.error != null && logsState.logs.isEmpty) {
-      return EmptyState(
-        icon: Icons.error_outline,
-        title: 'Could not load logs',
-        subtitle: logsState.error,
-        action: FilledButton(
-          onPressed: () => ref.read(logsProvider.notifier).loadLogs(),
-          child: const Text('Retry'),
+      return RefreshIndicator(
+        onRefresh: () => ref.read(logsProvider.notifier).refresh(),
+        color: LogstackColors.accentBlue,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: EmptyState(
+                icon: Icons.error_outline,
+                title: 'Could not load logs',
+                subtitle: logsState.error,
+                action: FilledButton(
+                  onPressed: () => ref.read(logsProvider.notifier).loadLogs(),
+                  child: const Text('Retry'),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
 
     if (logsState.logs.isEmpty) {
       final searching = logsState.searchQuery?.isNotEmpty == true;
-      return EmptyState(
-        icon: searching ? Icons.search_off : Icons.terminal,
-        title: searching ? 'No matching logs' : 'No logs yet',
-        subtitle: searching
-            ? 'Try a different search or clear filters.'
-            : 'Send logs from your SDK or wait for the live stream.',
+      return RefreshIndicator(
+        onRefresh: () => ref.read(logsProvider.notifier).refresh(),
+        color: LogstackColors.accentBlue,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: EmptyState(
+                icon: searching ? Icons.search_off : Icons.terminal,
+                title: searching ? 'No matching logs' : 'No logs yet',
+                subtitle: searching
+                    ? 'Try a different search or clear filters.'
+                    : 'Send logs from your SDK or wait for the live stream.',
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -110,6 +134,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
       onRefresh: () => ref.read(logsProvider.notifier).refresh(),
       color: LogstackColors.accentBlue,
       child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         itemCount: logsState.logs.length + (logsState.hasMore ? 1 : 0),
         itemBuilder: (context, index) {

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/firebase_options.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/services/app_lock_service.dart';
+import 'package:logstack_mobile/services/auth_service.dart';
 import 'package:logstack_mobile/services/notification_service.dart';
 import 'package:logstack_mobile/services/notification_tone_service.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
@@ -407,6 +408,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ],
                 ),
         ),
+        const SizedBox(height: 24),
+        const _SectionHeader(
+          icon: Icons.warning_amber_outlined,
+          title: 'Escalation',
+          subtitle: 'Email recipient for escalated log alerts',
+        ),
+        const SizedBox(height: 8),
+        _EscalationSettingsCard(),
         const SizedBox(height: 24),
         _SectionHeader(
           icon: Icons.person_outline,
@@ -810,6 +819,160 @@ class _ChangePinSheetState extends ConsumerState<_ChangePinSheet> {
                 textAlign: TextAlign.center,
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Card widget for escalation email settings.
+class _EscalationSettingsCard extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_EscalationSettingsCard> createState() =>
+      _EscalationSettingsCardState();
+}
+
+class _EscalationSettingsCardState
+    extends ConsumerState<_EscalationSettingsCard> {
+  final _controller = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  bool _loading = true;
+  bool _saving = false;
+  String? _savedEmail;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEscalationEmail();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadEscalationEmail() async {
+    try {
+      final user = await ref.read(authServiceProvider).fetchCurrentUser();
+      if (mounted) {
+        setState(() {
+          _controller.text = user.escalationEmail ?? '';
+          _savedEmail = user.escalationEmail ?? '';
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  bool get _hasChanges => _controller.text.trim() != (_savedEmail ?? '');
+
+  String? _validateEmail(String? value) {
+    if (value == null || value.trim().isEmpty) return null; // optional field
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (!emailRegex.hasMatch(value.trim())) {
+      return 'Enter a valid email address';
+    }
+    return null;
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      final updated = await ref.read(authServiceProvider).updateProfile(
+            escalationEmail: _controller.text.trim(),
+          );
+      if (mounted) {
+        setState(() {
+          _savedEmail = updated.escalationEmail ?? '';
+          _saving = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Escalation email saved')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (_loading) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Escalation email',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'When a log is escalated, a detailed alert email will be '
+                'sent to this address. Leave empty to use your account email.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: LogstackColors.textMuted,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _controller,
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                textInputAction: TextInputAction.done,
+                validator: _validateEmail,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  hintText: 'escalation@example.com',
+                  prefixIcon: Icon(Icons.alternate_email),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: _hasChanges && !_saving ? _save : null,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.save_outlined, size: 18),
+                  label: Text(_saving ? 'Saving\u2026' : 'Save'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

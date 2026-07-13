@@ -57,6 +57,7 @@ export default function SettingsPage() {
 
   const [name, setName] = useState("");
   const [country, setCountry] = useState("US");
+  const [escalationEmail, setEscalationEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -66,14 +67,16 @@ export default function SettingsPage() {
     if (profile) {
       setName(profile.name ?? "");
       setCountry(profile.country ?? detectDefaultCountry());
+      setEscalationEmail(profile.escalationEmail ?? "");
     } else if (session?.user?.name) {
       setName(session.user.name);
       setCountry(detectDefaultCountry());
+      setEscalationEmail("");
     }
   }, [profile, session?.user?.name]);
 
   const updateProfileMutation = useMutation({
-    mutationFn: (data: { name: string; country: string }) =>
+    mutationFn: (data: { name: string; country: string; escalationEmail: string }) =>
       api.put("/users/me", data),
     onSuccess: async () => {
       await updateSession({ name });
@@ -183,8 +186,21 @@ export default function SettingsPage() {
                   : ""}
               </div>
             )}
+            <div className="space-y-2">
+              <Label htmlFor="escalationEmail">Escalation Email</Label>
+              <Input
+                id="escalationEmail"
+                type="email"
+                placeholder="escalation@example.com"
+                value={escalationEmail}
+                onChange={(e) => setEscalationEmail(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Set an escalation email address to receive immediate email alerts when logs are escalated.
+              </p>
+            </div>
             <Button
-              onClick={() => updateProfileMutation.mutate({ name, country })}
+              onClick={() => updateProfileMutation.mutate({ name, country, escalationEmail })}
               disabled={updateProfileMutation.isPending}
             >
               {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}

@@ -38,6 +38,20 @@ class AuthService {
     return user;
   }
 
+  Future<User> updateProfile({String? escalationEmail}) async {
+    final data = <String, dynamic>{};
+    if (escalationEmail != null) {
+      data['escalationEmail'] = escalationEmail;
+    }
+    final response = await _api.put<Map<String, dynamic>>(
+      '/users/me',
+      data: data,
+    );
+    final user = User.fromJson(response);
+    await _storage.setUserData(jsonEncode(user.toJson()));
+    return user;
+  }
+
   Future<void> _persistSession(AuthResponse authResponse) async {
     await _storage.setToken(authResponse.accessToken);
     if (authResponse.refreshToken.isNotEmpty) {

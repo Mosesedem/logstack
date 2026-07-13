@@ -71,7 +71,7 @@ func main() {
 	}
 
 	// Initialize notification service
-	notifier := notification.NewNotificationServiceWithDB(cfg, db)
+	notifier := notification.NewNotificationServiceWithDB(cfg, db, rdb)
 
 	// Initialize services with gorm.DB
 	ingestor := services.NewIngestor(db, rdb)

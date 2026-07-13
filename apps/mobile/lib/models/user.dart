@@ -9,6 +9,7 @@ class User with _$User {
     required int id,
     required String email,
     String? name,
+    String? escalationEmail,
     required DateTime createdAt,
   }) = _User;
 

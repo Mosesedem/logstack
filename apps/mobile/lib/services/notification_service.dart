@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:go_router/go_router.dart';
 import 'package:logger/logger.dart';
 import 'package:logstack_mobile/firebase_options.dart';
+import 'package:logstack_mobile/router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 @pragma('vm:entry-point')
@@ -387,24 +390,46 @@ class NotificationService {
       _showLocalNotification(
         title: title,
         body: body,
-        payload: message.data.isEmpty ? null : message.data.toString(),
+        payload: message.data.isEmpty ? null : jsonEncode(message.data),
       ),
     );
   }
 
+  void _navigateToLogDetail(Map<String, dynamic> data) {
+    final logId = data['logId'];
+    if (logId != null) {
+      _logger.i('Deep linking to log: $logId');
+      Future.delayed(const Duration(milliseconds: 500), () {
+        final context = rootNavigatorKey.currentContext;
+        if (context != null) {
+          GoRouter.of(context).push('/logs/$logId');
+        } else {
+          _logger.w('Could not navigate: context is null');
+        }
+      });
+    }
+  }
+
   void _handleMessageOpenedApp(RemoteMessage message) {
     _logger.i('Message opened app: ${message.messageId}');
-    // Navigate to relevant screen based on message data
+    _navigateToLogDetail(message.data);
   }
 
   void _handleInitialMessage(RemoteMessage message) {
     _logger.i('Initial message: ${message.messageId}');
-    // Navigate to relevant screen based on message data
+    _navigateToLogDetail(message.data);
   }
 
   void _onNotificationTapped(NotificationResponse response) {
     _logger.i('Notification tapped: ${response.payload}');
-    // Navigate to relevant screen based on payload
+    if (response.payload != null) {
+      try {
+        final data = jsonDecode(response.payload!) as Map<String, dynamic>;
+        _navigateToLogDetail(data);
+      } catch (error) {
+        _logger.e('Failed to parse notification payload', error: error);
+      }
+    }
   }
 
   Future<void> _showLocalNotification({
