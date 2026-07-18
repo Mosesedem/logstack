@@ -311,7 +311,7 @@ These are configured in **end-user apps**, not in the Logstack monorepo `.env`. 
 | `endpoint` / `LOGSTACK_ENDPOINT` | JS               | No                 | `https://api.logstack.tech`           |
 | `api_url`                        | Python           | No                 | `https://api.logstack.tech`           |
 | `APIURL`                         | Go               | No                 | `https://api.logstack.tech`           |
-| `environment`                    | JS · Python · Go | No                 | JS: auto from `NODE_ENV`              |
+| `environment`                    | JS · Python · Go | No                 | JS: auto from `import.meta.env` → `NODE_ENV` → localhost → `production` |
 | `disabled`                       | JS               | No                 | `false` — set `true` for console-only |
 | `NODE_ENV`                       | JS               | No                 | Auto-detects `environment`            |
 

@@ -57,7 +57,7 @@ await logstack.close();
 | `batchSize` | `100` | Auto-flush threshold |
 | `flushInterval` | `5000` | ms |
 | `captureConsole` | `true` | Forward `console.*` as `source: "console"` |
-| `environment` | from `NODE_ENV` | Batch label |
+| `environment` | auto (`import.meta.env` → `NODE_ENV` → localhost → `production`) | Batch label + console gating |
 | `disabled` | `false` | Console-only, no network |
 | `onError` | — | `(error, logs) => void` |
 

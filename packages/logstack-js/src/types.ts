@@ -73,8 +73,13 @@ export interface LogStackConfig {
   /**
    * Environment label attached to logs and used for console gating (see
    * `consoleInProduction`). Logs are sent to the server in every environment as
-   * long as an `apiKey` is set and `disabled` is not true. Auto-detected from
-   * `NODE_ENV` when omitted; defaults to 'production'.
+   * long as an `apiKey` is set and `disabled` is not true.
+   *
+   * When omitted, auto-detected in this order:
+   * 1. Vite / bundler `import.meta.env` (`MODE`, `DEV`, `PROD`)
+   * 2. `process.env.NODE_ENV` (Node and bundler define)
+   * 3. Browser local hostnames (`localhost`, `127.0.0.1`, `*.local`, …) → development
+   * 4. Otherwise `'production'`
    */
   environment?: Environment;
   /**

@@ -23,8 +23,9 @@ const logstack = createLogStack({
   endpoint: "https://api.logstack.tech",
 
   // Environment mode: 'development' | 'production' | 'staging' | 'test'
-  // Controls console output — network shipping is independent (see below)
-  environment: process.env.NODE_ENV as "development" | "production",
+  // Controls console output — network shipping is independent (see below).
+  // Omit to auto-detect (Vite import.meta.env → NODE_ENV → localhost).
+  // environment: "development",
 
   // Console-only locally when no API key is configured
   disabled: !process.env.LOGSTACK_API_KEY,
@@ -70,7 +71,8 @@ apiKey: "ls_live_abc123xyz789";
 
 ### `environment`
 
-Controls **console output only**. Network shipping is controlled separately by `apiKey` and `disabled`.
+Controls **console output** (pretty-printing for explicit SDK methods) and the `environment`
+label on each ingest batch. Network shipping is controlled separately by `apiKey` and `disabled`.
 
 | Value         | Console output                          | Ships to server (if `apiKey` set, `disabled: false`) |
 | ------------- | --------------------------------------- | ---------------------------------------------------- |
@@ -79,13 +81,29 @@ Controls **console output only**. Network shipping is controlled separately by `
 | `staging`     | Same as production                      | Yes                                                  |
 | `test`        | Console on                              | Yes                                                  |
 
-```typescript
-// Auto-detect from NODE_ENV (recommended)
-environment: process.env.NODE_ENV as 'development' | 'production',
+When omitted, the SDK auto-detects in this order:
 
-// Or explicitly set
-environment: 'production',
+1. **Vite / modern bundlers** — `import.meta.env.DEV`, `import.meta.env.MODE`, `import.meta.env.PROD`
+2. **`process.env.NODE_ENV`** — Node and bundler define (accessed so Vite can replace it)
+3. **Local browser hosts** — `localhost`, `127.0.0.1`, `[::1]`, `*.localhost`, `*.local` → `development`
+4. Otherwise **`production`**
+
+```typescript
+// Omit and let the SDK detect (recommended for Vite + Node)
+// environment: auto
+
+// Or set explicitly
+environment: "production",
+// environment: import.meta.env.MODE as "development" | "production",
 ```
+
+<Callout type="warn">
+  Older SDK versions only checked `NODE_ENV` behind a `typeof process` guard. Under Vite
+  that guard often failed in the browser, so the client defaulted to `production` and
+  **explicit `logstack.info(...)` calls shipped to the API but did not pretty-print to the
+  console**. Upgrade to **logstack-js ≥ 1.0.3**, or pass `environment: "development"` /
+  `consoleInProduction: true` explicitly.
+</Callout>
 
 <Callout type="info">
   Console and network are decoupled. Use `disabled: true` for console-only

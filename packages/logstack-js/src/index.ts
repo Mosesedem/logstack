@@ -13,7 +13,7 @@ import {
 } from "./types";
 
 /** SDK release version (matches npm package version). */
-export const VERSION = "1.0.2";
+export const VERSION = "1.0.3";
 
 const DEFAULT_ENDPOINT = "https://api.logstack.tech";
 
@@ -84,6 +84,7 @@ function isBrowserEnvironment(): boolean {
 type BrowserLocationLike = {
   href: string;
   pathname: string;
+  hostname?: string;
 };
 
 type BrowserNavigatorLike = {
@@ -142,6 +143,112 @@ function getBrowserContext(): LogContext {
   };
 }
 
+/** Vite / modern bundler `import.meta.env` shape (subset). */
+type ImportMetaEnvLike = {
+  DEV?: boolean;
+  PROD?: boolean;
+  MODE?: string;
+};
+
+/**
+ * Read bundler env signals without short-circuiting Vite's static define.
+ *
+ * Vite replaces the expression `process.env.NODE_ENV` with a string literal.
+ * Guarding with `typeof process !== "undefined"` first leaves a runtime check
+ * that fails in the browser (no `process` global), so the branch never runs and
+ * the SDK used to default to production — silencing console under Vite dev.
+ */
+function readNodeEnv(): string | undefined {
+  try {
+    // Direct access so bundlers can replace `process.env.NODE_ENV`.
+    return process.env.NODE_ENV;
+  } catch {
+    // `process` may be an undeclared free variable in bare browsers.
+    return undefined;
+  }
+}
+
+function readImportMetaEnv(): ImportMetaEnvLike | undefined {
+  try {
+    // `import.meta` is valid ESM; `.env` is populated by Vite and similar tools.
+    const meta = import.meta as ImportMeta & { env?: ImportMetaEnvLike };
+    if (meta && typeof meta.env === "object" && meta.env !== null) {
+      return meta.env;
+    }
+  } catch {
+    // import.meta unavailable or not an object in this runtime
+  }
+  return undefined;
+}
+
+function mapEnvString(value: string | undefined): Environment | undefined {
+  if (!value) return undefined;
+  const v = value.toLowerCase();
+  if (v === "development" || v === "dev") return "development";
+  if (v === "test") return "test";
+  if (v === "staging") return "staging";
+  if (v === "production" || v === "prod") return "production";
+  return undefined;
+}
+
+function isLocalHostname(hostname: string | undefined): boolean {
+  if (!hostname) return false;
+  const h = hostname.toLowerCase();
+  return (
+    h === "localhost" ||
+    h === "127.0.0.1" ||
+    h === "[::1]" ||
+    h === "0.0.0.0" ||
+    h.endsWith(".localhost") ||
+    h.endsWith(".local")
+  );
+}
+
+/**
+ * Resolve the SDK environment label used for console gating and the ingest
+ * payload. Priority:
+ * 1. Vite / bundler `import.meta.env` (MODE / DEV / PROD)
+ * 2. `process.env.NODE_ENV` (Node + bundler define)
+ * 3. Browser local hostnames → development
+ * 4. Default: production (safe for shipping builds)
+ *
+ * Exported for unit tests.
+ */
+export function resolveEnvironment(options?: {
+  importMetaEnv?: ImportMetaEnvLike;
+  nodeEnv?: string;
+  hostname?: string;
+}): Environment {
+  // When a field is present on `options`, use it (even if undefined) so unit
+  // tests can isolate signals without Vitest/Vite runtime env leaking in.
+  const meta =
+    options && "importMetaEnv" in options
+      ? options.importMetaEnv
+      : readImportMetaEnv();
+  if (meta) {
+    if (meta.DEV === true) return "development";
+    const fromMode = mapEnvString(meta.MODE);
+    if (fromMode) return fromMode;
+    if (meta.PROD === true) return "production";
+  }
+
+  const fromNode =
+    options && "nodeEnv" in options
+      ? mapEnvString(options.nodeEnv)
+      : mapEnvString(readNodeEnv());
+  if (fromNode) return fromNode;
+
+  const hostname =
+    options && "hostname" in options
+      ? options.hostname
+      : getBrowserWindow()?.location?.hostname;
+  if (isLocalHostname(hostname)) {
+    return "development";
+  }
+
+  return "production";
+}
+
 class LogStack implements LogStackClient {
   private config: Required<Omit<LogStackConfig, "onError" | "projectId">> &
     Pick<LogStackConfig, "onError" | "projectId">;
@@ -180,10 +287,10 @@ class LogStack implements LogStackClient {
       batchSize: config.batchSize || DEFAULT_BATCH_SIZE,
       flushInterval: config.flushInterval || DEFAULT_FLUSH_INTERVAL,
       maxRetries: config.maxRetries || DEFAULT_MAX_RETRIES,
-      environment: config.environment || detectedEnvironment,
-      consoleInProduction: config.consoleInProduction || false,
-      silent: config.silent || false,
-      disabled: config.disabled || false,
+      environment: config.environment ?? detectedEnvironment,
+      consoleInProduction: config.consoleInProduction ?? false,
+      silent: config.silent ?? false,
+      disabled: config.disabled ?? false,
       maxOfflineQueueSize:
         config.maxOfflineQueueSize ?? DEFAULT_MAX_OFFLINE_QUEUE,
       captureContext: config.captureContext !== false,
@@ -215,15 +322,7 @@ class LogStack implements LogStackClient {
   }
 
   private detectEnvironment(): Environment {
-    // Check common environment variables
-    if (typeof process !== "undefined" && process.env) {
-      const nodeEnv = process.env.NODE_ENV;
-      if (nodeEnv === "development" || nodeEnv === "dev") return "development";
-      if (nodeEnv === "test") return "test";
-      if (nodeEnv === "staging") return "staging";
-    }
-    // Default to production for safety
-    return "production";
+    return resolveEnvironment();
   }
 
   private setupOfflineDetection(): void {

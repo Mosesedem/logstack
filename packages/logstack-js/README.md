@@ -30,6 +30,16 @@ logstack.error("Payment failed", { orderId: "ord_123", code: 402 });
 await logstack.close();
 ```
 
+## v1.0.3
+
+- **Smarter environment auto-detect (fixes silent console under Vite).** When `environment` is
+  omitted, the SDK now checks Vite/`import.meta.env` (`DEV` / `MODE` / `PROD`), then
+  `process.env.NODE_ENV` (without a `typeof process` guard that broke Vite's define), then
+  local browser hostnames (`localhost`, `127.0.0.1`, `*.local`, …) before defaulting to
+  `production`. Explicit SDK calls again pretty-print to the console during local Vite dev
+  without setting `environment` by hand.
+- Export `resolveEnvironment` for advanced / test use.
+
 ## v1.0.2
 
 - **`captureConsole` hardened (default on).** Re-entrancy guard, `console.trace` / `console.assert`
@@ -63,7 +73,7 @@ await logstack.close();
 | ------ | ------- | ----------- |
 | `apiKey` | — | **Required.** Project API key (`ls_...`). |
 | `endpoint` | `https://api.logstack.tech` | API host; the SDK appends `/v1/logs`. |
-| `environment` | auto (`NODE_ENV`) | `development` \| `staging` \| `production` \| `test`. |
+| `environment` | auto (see below) | `development` \| `staging` \| `production` \| `test`. Detected from `import.meta.env` (Vite), then `NODE_ENV`, then local hostnames; else `production`. |
 | `batchSize` | `100` | Logs buffered before an auto-flush. |
 | `flushInterval` | `5000` | Auto-flush interval (ms). |
 | `maxRetries` | `3` | Retry attempts for `5xx` responses. |

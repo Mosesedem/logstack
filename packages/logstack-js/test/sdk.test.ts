@@ -1,9 +1,159 @@
 import { describe, it, beforeEach, expect, vi, afterEach } from "vitest";
-import { createLogStack, VERSION } from "../src/index";
+import { createLogStack, VERSION, resolveEnvironment } from "../src/index";
 
 describe("VERSION", () => {
   it("matches package release", () => {
-    expect(VERSION).toBe("1.0.2");
+    expect(VERSION).toBe("1.0.3");
+  });
+});
+
+describe("resolveEnvironment", () => {
+  it("prefers Vite import.meta.env.DEV / MODE over defaults", () => {
+    expect(resolveEnvironment({ importMetaEnv: { DEV: true } })).toBe(
+      "development",
+    );
+    expect(
+      resolveEnvironment({ importMetaEnv: { MODE: "development" } }),
+    ).toBe("development");
+    expect(resolveEnvironment({ importMetaEnv: { MODE: "staging" } })).toBe(
+      "staging",
+    );
+    expect(resolveEnvironment({ importMetaEnv: { MODE: "test" } })).toBe(
+      "test",
+    );
+    expect(
+      resolveEnvironment({
+        importMetaEnv: { PROD: true, MODE: "production" },
+      }),
+    ).toBe("production");
+  });
+
+  it("maps NODE_ENV strings (including aliases)", () => {
+    // Pass empty importMetaEnv so Vitest's own import.meta.env does not win.
+    const base = { importMetaEnv: {} as const };
+    expect(resolveEnvironment({ ...base, nodeEnv: "development" })).toBe(
+      "development",
+    );
+    expect(resolveEnvironment({ ...base, nodeEnv: "dev" })).toBe("development");
+    expect(resolveEnvironment({ ...base, nodeEnv: "test" })).toBe("test");
+    expect(resolveEnvironment({ ...base, nodeEnv: "staging" })).toBe("staging");
+    expect(resolveEnvironment({ ...base, nodeEnv: "production" })).toBe(
+      "production",
+    );
+    expect(resolveEnvironment({ ...base, nodeEnv: "prod" })).toBe("production");
+  });
+
+  it("treats local browser hostnames as development when no env signal", () => {
+    const base = { importMetaEnv: {} as const, nodeEnv: undefined };
+    expect(resolveEnvironment({ ...base, hostname: "localhost" })).toBe(
+      "development",
+    );
+    expect(resolveEnvironment({ ...base, hostname: "127.0.0.1" })).toBe(
+      "development",
+    );
+    expect(resolveEnvironment({ ...base, hostname: "app.localhost" })).toBe(
+      "development",
+    );
+    expect(resolveEnvironment({ ...base, hostname: "myapp.local" })).toBe(
+      "development",
+    );
+  });
+
+  it("defaults to production when no signal matches", () => {
+    expect(
+      resolveEnvironment({
+        importMetaEnv: {},
+        nodeEnv: undefined,
+        hostname: "app.example.com",
+      }),
+    ).toBe("production");
+  });
+
+  it("does not let localhost override an explicit production NODE_ENV", () => {
+    expect(
+      resolveEnvironment({
+        importMetaEnv: {},
+        nodeEnv: "production",
+        hostname: "localhost",
+      }),
+    ).toBe("production");
+  });
+});
+
+describe("console gating vs shipping", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => ({}),
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("pretty-prints to console in development while still shipping", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const client = createLogStack({
+      apiKey: "test-key",
+      environment: "development",
+      captureConsole: false,
+    });
+
+    client.info("visible in dev");
+    await client.flush();
+    await client.close();
+
+    expect(logSpy).toHaveBeenCalled();
+    expect(vi.mocked(fetch)).toHaveBeenCalled();
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(body.environment).toBe("development");
+    expect(body.logs[0].message).toBe("visible in dev");
+  });
+
+  it("ships in production without console pretty-print (silent console)", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const client = createLogStack({
+      apiKey: "test-key",
+      environment: "production",
+      captureConsole: false,
+      consoleInProduction: false,
+    });
+
+    client.info("prod ship only");
+    await client.flush();
+    await client.close();
+
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(vi.mocked(fetch)).toHaveBeenCalled();
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(body.environment).toBe("production");
+    expect(body.logs[0].message).toBe("prod ship only");
+  });
+
+  it("logs to console in production when consoleInProduction is true", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const client = createLogStack({
+      apiKey: "test-key",
+      environment: "production",
+      captureConsole: false,
+      consoleInProduction: true,
+    });
+
+    client.info("prod with console");
+    await client.flush();
+    await client.close();
+
+    expect(logSpy).toHaveBeenCalled();
   });
 });
 

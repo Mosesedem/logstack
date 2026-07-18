@@ -21,6 +21,12 @@ class LocalStorageMock {
 // Simple window mock with addEventListener support
 class WindowMock {
   navigator = { onLine: false };
+  // Non-local hostname so resolveEnvironment does not force "development"
+  location = {
+    href: "https://app.example.com/",
+    pathname: "/",
+    hostname: "app.example.com",
+  };
   listeners: Record<string, Function[]> = { online: [], offline: [] };
 
   addEventListener(event: string, callback: Function) {
@@ -40,10 +46,10 @@ class WindowMock {
 }
 
 beforeEach(() => {
-  // Setup a browser-like global with proper mocks
+  // Setup a browser-like global with proper mocks.
+  // Do not assign globalThis.navigator — it is a read-only getter in modern Node.
   const windowMock = new WindowMock();
   (globalThis as any).window = windowMock;
-  (globalThis as any).navigator = windowMock.navigator;
   (globalThis as any).localStorage = new LocalStorageMock();
 });
 

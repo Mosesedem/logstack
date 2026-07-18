@@ -20,6 +20,7 @@
 | ------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `logger.ts` no longer no-ops without key                                              | ✅     | console-only (`disabled`) fallback + single warning                                                                                                                           |
 | SDK: decouple console vs send; `silent`/`disabled` flags; honor `consoleInProduction` | ✅     | sends in all envs when apiKey+endpoint set                                                                                                                                    |
+| SDK: silent console under Vite without explicit env (v1.0.3)                          | ✅     | `resolveEnvironment`: `import.meta.env` → `NODE_ENV` (no process guard) → localhost → production; tests + docs                                                                |
 | SDK: fixed wrong ingest path `/api/v1/logs` → `/v1/logs`                              | ✅     | matched backend router; was a 404                                                                                                                                             |
 | SDK: offline-queue size cap                                                           | ✅     | `maxOfflineQueueSize`, default 1000                                                                                                                                           |
 | Backend ingestor persists non-production logs                                         | ✅     | all envs queryable; usage metered prod-only                                                                                                                                   |
@@ -96,6 +97,7 @@
 | 2026-06-15 | Backend config now loads `.env` on startup and reads env-driven values instead of hardcoded fallback literals; CORS no longer panics on empty origins.                                                                                       |
 | 2026-06-19 | Fixed browser CORS wildcard handling in backend middleware so credentialed requests no longer emit invalid `*` origin headers; added focused middleware tests.                                                                               |
 | 2026-07-03 | SDK release wave: `logstack-js@1.0.2` (captureConsole hardened + `VERSION` export), `logstack-py@1.0.2` (capture_logging default on), `logstack-go-sdk@v1.0.3` (stdlib log capture). READMEs + publish docs updated.                         |
+| 2026-07-18 | `logstack-js@1.0.3` — fix silent console under Vite: `resolveEnvironment` via `import.meta.env` → `NODE_ENV` → localhost; docs + tests. Tag `logstack-js-v1.0.3`.                                                                         |
 
 ---
 
