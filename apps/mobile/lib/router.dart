@@ -8,6 +8,7 @@ import 'package:logstack_mobile/screens/auth/login_screen.dart';
 import 'package:logstack_mobile/screens/auth/email_login_screen.dart';
 import 'package:logstack_mobile/screens/auth/qr_scanner_screen.dart';
 import 'package:logstack_mobile/screens/auth/pin_login_screen.dart';
+import 'package:logstack_mobile/screens/auth/signup_screen.dart';
 import 'package:logstack_mobile/screens/home/home_screen.dart';
 import 'package:logstack_mobile/models/log.dart';
 import 'package:logstack_mobile/screens/logs/log_detail_screen.dart';
@@ -42,6 +43,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isSettingsPushRoute = location == '/settings/push';
       final isSecurityRoute = location == '/onboarding/security';
       final isAuthRoute = location == '/login' ||
+          location == '/signup' ||
           state.matchedLocation == '/qr-scanner' ||
           state.matchedLocation == '/pin-login' ||
           state.matchedLocation == '/email-login';
@@ -107,6 +109,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/signup',
+        builder: (context, state) => const SignupScreen(),
       ),
       GoRoute(
         path: '/email-login',

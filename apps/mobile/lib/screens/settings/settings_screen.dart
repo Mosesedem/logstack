@@ -10,6 +10,7 @@ import 'package:logstack_mobile/services/app_lock_service.dart';
 import 'package:logstack_mobile/services/auth_service.dart';
 import 'package:logstack_mobile/services/notification_service.dart';
 import 'package:logstack_mobile/services/notification_tone_service.dart';
+import 'package:logstack_mobile/services/storage_service.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/pin_pad.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -30,7 +31,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _hasPin = false;
   bool _loadingSecurity = true;
   AuthorizationStatus? _pushPermission;
+  bool _pushOptedIn = true;
   bool _loadingPush = true;
+  bool _togglingPush = false;
   String? _appVersion;
 
   @override
@@ -58,28 +61,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
     final status = await NotificationService.instance.getPermissionStatus();
+    final optedIn =
+        await ref.read(storageServiceProvider).isPushNotificationsEnabled();
     if (mounted) {
       setState(() {
         _pushPermission = status;
+        _pushOptedIn = optedIn;
         _loadingPush = false;
       });
     }
   }
 
-  bool get _pushEnabled =>
+  bool get _osPushGranted =>
       _pushPermission == AuthorizationStatus.authorized ||
       _pushPermission == AuthorizationStatus.provisional;
+
+  /// Toggle is on only when the user opted in and OS permission is granted.
+  bool get _pushEnabled => _pushOptedIn && _osPushGranted;
 
   String _pushPermissionLabel() {
     if (!DefaultFirebaseOptions.isConfigured) {
       return 'Not available in this build';
     }
+    if (_pushEnabled) {
+      return _pushPermission == AuthorizationStatus.provisional
+          ? 'On (quiet delivery)'
+          : 'On — alerts will notify this device';
+    }
+    if (!_pushOptedIn) {
+      return 'Off — enable anytime to receive alert pushes';
+    }
     return switch (_pushPermission) {
-      AuthorizationStatus.authorized => 'On — alerts will notify this device',
-      AuthorizationStatus.provisional => 'On (quiet delivery)',
-      AuthorizationStatus.denied => 'Off — enable in system Settings',
-      AuthorizationStatus.notDetermined => 'Not enabled yet',
-      _ => 'Unknown',
+      AuthorizationStatus.denied => 'Off — allow in system Settings first',
+      AuthorizationStatus.notDetermined => 'Off — not enabled yet',
+      _ => 'Off',
     };
   }
 
@@ -184,18 +199,60 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _onPushTileTap() async {
-    if (!DefaultFirebaseOptions.isConfigured) return;
-    if (!_pushEnabled) {
-      await context.push('/settings/push');
-      await _loadPushPermission();
+  Future<void> _onPushToggle(bool enable) async {
+    if (!DefaultFirebaseOptions.isConfigured || _togglingPush) return;
+
+    if (!enable) {
+      setState(() => _togglingPush = true);
+      try {
+        await ref.read(authProvider.notifier).disablePushNotifications();
+        if (mounted) {
+          setState(() {
+            _pushOptedIn = false;
+            _togglingPush = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Alert notifications turned off')),
+          );
+        }
+      } catch (_) {
+        if (mounted) setState(() => _togglingPush = false);
+      }
       return;
     }
-    await ref.read(authProvider.notifier).registerPushAfterPermission();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Push registration refreshed')),
-    );
+
+    // Enabling: if OS already granted, opt in and register; else request.
+    setState(() => _togglingPush = true);
+    try {
+      if (_osPushGranted) {
+        await ref.read(storageServiceProvider).setPushNotificationsEnabled(true);
+        await NotificationService.instance.completeSetupAfterPermission();
+        await ref.read(authProvider.notifier).registerPushAfterPermission();
+        if (mounted) {
+          setState(() {
+            _pushOptedIn = true;
+            _togglingPush = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Alert notifications enabled')),
+          );
+        }
+        return;
+      }
+
+      if (_pushPermission == AuthorizationStatus.denied) {
+        if (mounted) setState(() => _togglingPush = false);
+        await _openSystemNotificationSettings();
+        return;
+      }
+
+      // notDetermined or unknown — dedicated consent screen
+      if (mounted) setState(() => _togglingPush = false);
+      await context.push('/settings/push');
+      await _loadPushPermission();
+    } catch (_) {
+      if (mounted) setState(() => _togglingPush = false);
+    }
   }
 
   Future<void> _openSystemNotificationSettings() async {
@@ -330,8 +387,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ListTile(
-                      leading: Icon(
+                    SwitchListTile(
+                      secondary: Icon(
                         _pushEnabled
                             ? Icons.notifications_active_outlined
                             : Icons.notifications_off_outlined,
@@ -341,10 +398,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       title: const Text('Alert notifications'),
                       subtitle: Text(_pushPermissionLabel()),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: DefaultFirebaseOptions.isConfigured
-                          ? _onPushTileTap
-                          : null,
+                      value: _pushEnabled,
+                      onChanged: !DefaultFirebaseOptions.isConfigured ||
+                              _togglingPush
+                          ? null
+                          : _onPushToggle,
                     ),
                     if (DefaultFirebaseOptions.isConfigured && !_pushEnabled)
                       Padding(
@@ -353,7 +411,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              'Enable notifications to get alert and escalation pushes on this device.',
+                              'Notifications are optional. Turn them on to get alert and escalation pushes on this device.',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: LogstackColors.textMuted,
                               ),

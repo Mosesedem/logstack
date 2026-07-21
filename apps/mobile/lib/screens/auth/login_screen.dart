@@ -1,24 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logstack_mobile/widgets/app_logo.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-/// Entry point for mobile auth — PIN or QR only (no account creation on device).
+/// Entry point for mobile auth — PIN, QR, or email link (no account creation on device).
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
-
-  static const _webUrl = 'https://logstack.tech';
-
-  Future<void> _openWebSignup(BuildContext context) async {
-    final uri = Uri.parse('$_webUrl/signup');
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open logstack.tech')),
-        );
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +53,7 @@ class LoginScreen extends StatelessWidget {
               ),
               const SizedBox(height: 32),
               Text(
-                'Accounts are created on the web dashboard — not in this app.',
+                'Accounts are created on the web — not in this app.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -75,8 +61,8 @@ class LoginScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TextButton(
-                onPressed: () => _openWebSignup(context),
-                child: const Text('Create account at logstack.tech'),
+                onPressed: () => context.push('/signup'),
+                child: const Text('Create Account'),
               ),
               const Spacer(),
             ],

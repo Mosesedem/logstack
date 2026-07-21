@@ -16,6 +16,8 @@ class StorageService {
   static const String _appPinHashKey = 'app_pin_hash';
   static const String _onboardingCompleteKey = 'onboarding_complete';
   static const String _sessionSecurityCompleteKey = 'session_security_complete';
+  /// App-level push opt-in. Survives logout. Explicit false after skip/disable.
+  static const String _pushNotificationsEnabledKey = 'push_notifications_enabled';
 
   static const _secureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -72,12 +74,15 @@ class StorageService {
   }
 
   /// Clears auth session and security credentials. Preserves device-level prefs
-  /// (onboarding complete, lock mode, notification tone).
+  /// (onboarding complete, lock mode, notification tone, push opt-in).
   Future<void> clearSession() async {
     final prefs = await _prefs;
     final onboardingComplete = prefs.getBool(_onboardingCompleteKey);
     final lockMode = prefs.getString(_appLockModeKey);
     final notificationTone = prefs.getString('notification_tone');
+    final pushEnabled = prefs.containsKey(_pushNotificationsEnabledKey)
+        ? prefs.getBool(_pushNotificationsEnabledKey)
+        : null;
 
     await prefs.clear();
     if (onboardingComplete != null) {
@@ -88,6 +93,9 @@ class StorageService {
     }
     if (notificationTone != null) {
       await prefs.setString('notification_tone', notificationTone);
+    }
+    if (pushEnabled != null) {
+      await prefs.setBool(_pushNotificationsEnabledKey, pushEnabled);
     }
     // session_security_complete intentionally not restored — re-prompt after next login
     // current_project is NOT restored — next account must pick its own projects
@@ -159,6 +167,19 @@ class StorageService {
   Future<void> setOnboardingComplete(bool complete) async {
     final prefs = await _prefs;
     await prefs.setBool(_onboardingCompleteKey, complete);
+  }
+
+  /// Whether the user opted in to push alerts in-app (independent of OS permission).
+  /// Defaults to true when unset so existing installs keep receiving alerts.
+  Future<bool> isPushNotificationsEnabled() async {
+    final prefs = await _prefs;
+    if (!prefs.containsKey(_pushNotificationsEnabledKey)) return true;
+    return prefs.getBool(_pushNotificationsEnabledKey) ?? true;
+  }
+
+  Future<void> setPushNotificationsEnabled(bool enabled) async {
+    final prefs = await _prefs;
+    await prefs.setBool(_pushNotificationsEnabledKey, enabled);
   }
 
   /// True once the user has completed the post-login security gate this session.

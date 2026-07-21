@@ -87,16 +87,20 @@ Use `StorageService.clearSession()` — **not** `prefs.clear()` bare — on sign
 
 ## Onboarding (first install only)
 
-splash → push permission (must grant) → security setup → login → shell
+splash → push permission (optional) → security setup (post-login) → login → shell
 
-Push step: `NotificationService.requestPermission()`. Decline → stay on push screen with retry + Settings hint.
+Push step: `NotificationService.requestPermission()` only when the user taps Enable.
+Always offer **Skip — set up later** (Guideline 4.5.4). Skip sets
+`push_notifications_enabled=false` and completes onboarding.
+Decline of OS dialog → retry + system Settings hint + Skip still available.
+Settings has a working **Alert notifications** Switch (opt-in + register / opt-out + unregister).
 
 ## Audit checklist (verify before shipping)
 
 ### Navigation
 - [ ] Settings shows back affordance on iOS (`leading: BackButton` when on `/settings`)
 - [ ] Post-logout login routes to security when lock mode is immediate
-- [ ] Onboarding cannot skip push if product requires alerts
+- [ ] Onboarding push is optional (Skip / set up later); Settings toggle enable/disable
 
 ### Security
 - [ ] PIN hash cleared on logout (`clearSession` deletes `_appPinHashKey`)
@@ -120,6 +124,8 @@ Push step: `NotificationService.requestPermission()`. Decline → stay on push s
 | Stream status | `services/log_stream_service.dart`, `providers/logs_provider.dart`, `widgets/connection_banner.dart` |
 | Session security | `providers/security_provider.dart`, `services/storage_service.dart`, `providers/auth_provider.dart` |
 | Onboarding | `screens/onboarding/splash_screen.dart`, `push_permission_screen.dart`, `security_setup_screen.dart` |
+| Create account info | `screens/auth/signup_screen.dart` (docs only — no in-app form) |
+| Push opt-in pref | `storage_service.dart` (`push_notifications_enabled`) |
 | Router gates | `router.dart` |
 | Config | `config/app_config.dart` |
 

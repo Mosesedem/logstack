@@ -72,6 +72,7 @@ class AuthState {
     String? backendMaskedToken,
     PushRegistrationStatus? pushStatus,
     bool clearError = false,
+    bool clearPushToken = false,
   }) {
     return AuthState(
       user: user ?? this.user,
@@ -79,8 +80,9 @@ class AuthState {
       isOfflineAuth: isOfflineAuth ?? this.isOfflineAuth,
       hasPersistedSession: hasPersistedSession ?? this.hasPersistedSession,
       error: clearError ? null : (error ?? this.error),
-      pushToken: pushToken ?? this.pushToken,
-      backendMaskedToken: backendMaskedToken ?? this.backendMaskedToken,
+      pushToken: clearPushToken ? null : (pushToken ?? this.pushToken),
+      backendMaskedToken:
+          clearPushToken ? null : (backendMaskedToken ?? this.backendMaskedToken),
       pushStatus: pushStatus ?? this.pushStatus,
     );
   }
@@ -306,13 +308,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthState(pushStatus: _initialPushStatus());
   }
 
-  /// Registers for push only when the user has already granted OS permission.
-  /// Permission is requested from Settings via [enablePushNotifications].
+  /// Registers for push only when the user opted in and granted OS permission.
+  /// Permission is requested from onboarding or Settings — never automatically.
   Future<void> _setupPushIfPermitted() async {
     _tokenSubscription?.cancel();
 
     if (!DefaultFirebaseOptions.isConfigured) {
       state = state.copyWith(pushStatus: PushRegistrationStatus.notConfigured);
+      return;
+    }
+
+    if (!await _storage.isPushNotificationsEnabled()) {
+      state = state.copyWith(pushStatus: PushRegistrationStatus.awaitingToken);
       return;
     }
 
@@ -359,7 +366,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// push setup screen. Does not show the system permission dialog.
   Future<void> registerPushAfterPermission() async {
     if (!state.isAuthenticated) return;
+    await _storage.setPushNotificationsEnabled(true);
     await _setupPushIfPermitted();
+  }
+
+  /// Turns off in-app push: unregisters the device token and stops re-registration.
+  /// Does not change OS permission (user can re-enable later from Settings).
+  Future<void> disablePushNotifications() async {
+    await _storage.setPushNotificationsEnabled(false);
+
+    final fcmToken =
+        _currentFcmToken ?? NotificationService.instance.fcmToken;
+    if (fcmToken != null && state.isAuthenticated && !state.isOfflineAuth) {
+      try {
+        await _apiClient.delete(
+          '/mobile/push-token?token=${Uri.encodeComponent(fcmToken)}',
+        );
+      } catch (_) {
+        // Offline — local opt-out still applies; token may linger until next cleanup.
+      }
+    }
+
+    _tokenSubscription?.cancel();
+    _tokenSubscription = null;
+    _currentFcmToken = null;
+    _pushBoundUserId = null;
+
+    try {
+      await NotificationService.instance.disablePush();
+    } catch (_) {}
+
+    state = state.copyWith(
+      pushStatus: PushRegistrationStatus.awaitingToken,
+      clearPushToken: true,
+    );
   }
 
   Future<void> retryPushRegistration() async {
@@ -367,6 +407,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         pushStatus: PushRegistrationStatus.notAuthenticated,
       );
+      return;
+    }
+
+    if (!await _storage.isPushNotificationsEnabled()) {
+      state = state.copyWith(pushStatus: PushRegistrationStatus.awaitingToken);
       return;
     }
 
@@ -408,6 +453,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> syncPushTokenOnResume() async {
     if (!state.isAuthenticated || state.isOfflineAuth) return;
+    if (!await _storage.isPushNotificationsEnabled()) return;
     if (!await NotificationService.instance.hasPushPermission()) return;
 
     final token = await NotificationService.instance.fetchFCMToken();

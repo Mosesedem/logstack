@@ -192,6 +192,18 @@ class NotificationService {
     return true;
   }
 
+  /// Stops receiving FCM on this install (user turned notifications off in-app).
+  /// OS permission may remain; re-enable re-fetches a new token after grant.
+  Future<void> disablePush() async {
+    try {
+      await _messaging.deleteToken();
+    } catch (error, stackTrace) {
+      _logger.w('FCM deleteToken on disable failed', error: error, stackTrace: stackTrace);
+    }
+    _fcmToken = null;
+    _apnsToken = null;
+  }
+
   Future<void> _initializeLocalNotifications() async {
     // Use the monochrome icon for notifications (looks correct when system tints it white).
     const androidSettings = AndroidInitializationSettings(

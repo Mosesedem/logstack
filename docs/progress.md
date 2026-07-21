@@ -77,6 +77,7 @@
 
 | Date       | Change                                                                                                                                                                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-21 | **App Store 4.5.4 / 4:** mobile push optional — onboarding Skip + Settings notifications toggle; Create Account → in-app docs info screen (no external signup / no in-app form). |
 | 2026-07-10 | **Swift fixes:** live stream no longer infinite reconnect (mobile+web); Android biometrics (FlutterFragmentActivity + permissions); brand icons resynced from `assets/`; admin push/email compose at `/admin/notifications`. |
 | 2026-07-10 | **Admin full platform CRUD:** DB-backed pricing plans (seeded); admin APIs + UI for plans, subscriptions, invoices, orgs/members, alerts, invites, usage, audit (plus users/projects); public pricing reads from DB. |
 | 2026-07-10 | **Admin dashboard:** auto-seed `ADMIN_EMAILS` (default `mosesedem81@gmail.com`) on API startup; role in session + auth redirects; admin UI with create/edit/delete. |

@@ -1,17 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/app_logo.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// In-app info only — no registration form (App Store Guideline 4).
+/// Directs users to docs on the website to create an account via the dashboard.
 class SignupScreen extends StatelessWidget {
   const SignupScreen({super.key});
 
   static const _docsUrl = 'https://logstack.tech/docs';
 
-  Future<void> _openDocs() async {
+  Future<void> _openDocs(BuildContext context) async {
     final uri = Uri.parse(_docsUrl);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      throw Exception('Could not open $_docsUrl');
+    // Prefer in-app Safari View Controller so users stay in the app shell.
+    final launched = await launchUrl(
+      uri,
+      mode: LaunchMode.inAppBrowserView,
+    );
+    if (!launched && context.mounted) {
+      final fallback = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!fallback && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open logstack.tech/docs')),
+        );
+      }
     }
   }
 
@@ -37,17 +53,18 @@ class SignupScreen extends StatelessWidget {
               const Center(child: AppLogo()),
               const SizedBox(height: 16),
               Text(
-                'Create Account',
+                'Create a Logstack account',
                 textAlign: TextAlign.center,
-                style: theme.textTheme.headlineMedium?.copyWith(
+                style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
                 child: Column(
@@ -63,7 +80,7 @@ class SignupScreen extends StatelessWidget {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Account creation is disabled on mobile.',
+                            'Account creation is on the web',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w600,
                             ),
@@ -73,12 +90,20 @@ class SignupScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'New Logstack accounts can only be created through the SDK '
-                      'integration flow on the web. Install a Logstack SDK in your '
-                      'application, then sign up from the dashboard to get started.',
+                      'This companion app links to an existing Logstack account. '
+                      'To create a new account, open our documentation on the website, '
+                      'follow the setup guide, and sign up from the web dashboard.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Docs: logstack.tech/docs',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: LogstackColors.accentBlue,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -95,13 +120,13 @@ class SignupScreen extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              OutlinedButton.icon(
-                onPressed: _openDocs,
+              FilledButton.icon(
+                onPressed: () => _openDocs(context),
                 icon: const Icon(Icons.menu_book_outlined),
-                label: const Text('View SDK Documentation'),
+                label: const Text('Open documentation'),
               ),
               const SizedBox(height: 12),
-              FilledButton(
+              OutlinedButton(
                 onPressed: () => context.go('/login'),
                 child: const Text('Back to Sign In'),
               ),

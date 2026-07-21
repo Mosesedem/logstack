@@ -9,6 +9,7 @@ import 'package:logstack_mobile/firebase_options.dart';
 import 'package:logstack_mobile/providers/auth_provider.dart';
 import 'package:logstack_mobile/providers/onboarding_provider.dart';
 import 'package:logstack_mobile/services/notification_service.dart';
+import 'package:logstack_mobile/services/storage_service.dart';
 import 'package:logstack_mobile/theme/logstack_colors.dart';
 import 'package:logstack_mobile/widgets/app_logo.dart';
 import 'package:logstack_mobile/widgets/loading_states.dart';
@@ -18,6 +19,7 @@ enum PushPermissionFlow { onboarding, settings }
 
 /// Explains push alerts and triggers the OS permission dialog only when the
 /// user taps Enable — never on screen load or app launch.
+/// Onboarding always offers Skip / set up later (Guideline 4.5.4).
 class PushPermissionScreen extends ConsumerStatefulWidget {
   const PushPermissionScreen({
     super.key,
@@ -45,7 +47,16 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
     unawaited(_completePushSetup());
   }
 
+  Future<void> _skipOnboarding() async {
+    final storage = ref.read(storageServiceProvider);
+    await storage.setPushNotificationsEnabled(false);
+    final onboarding = ref.read(onboardingProvider.notifier);
+    await onboarding.markComplete();
+  }
+
   Future<void> _finishFromSettings() async {
+    final storage = ref.read(storageServiceProvider);
+    await storage.setPushNotificationsEnabled(true);
     final auth = ref.read(authProvider.notifier);
     if (mounted) context.pop();
     unawaited(_completePushSetup(auth: auth));
@@ -68,7 +79,9 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
       if (_fromSettings) {
         if (mounted) context.pop();
       } else {
-        await _finishOnboarding();
+        final storage = ref.read(storageServiceProvider);
+        await storage.setPushNotificationsEnabled(false);
+        await _finishOnboardingWithoutSetup();
       }
       return;
     }
@@ -85,6 +98,8 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional) {
+      final storage = ref.read(storageServiceProvider);
+      await storage.setPushNotificationsEnabled(true);
       if (_fromSettings) {
         await _finishFromSettings();
       } else {
@@ -97,9 +112,14 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
       _requesting = false;
       _declined = true;
       _statusMessage = _fromSettings
-          ? 'Notifications were not enabled. You can allow them in system settings, then try again.'
-          : 'Push notifications are required for alert delivery. Please enable them to continue.';
+          ? 'Notifications were not enabled. You can allow them in system settings, then try again — or leave them off.'
+          : 'Notifications are optional. You can enable them later in Settings, or open system settings if you previously declined.';
     });
+  }
+
+  Future<void> _finishOnboardingWithoutSetup() async {
+    final onboarding = ref.read(onboardingProvider.notifier);
+    await onboarding.markComplete();
   }
 
   Future<void> _openSystemNotificationSettings() async {
@@ -147,7 +167,8 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Logstack sends alerts and escalations to this device. Without notifications, you may miss critical incidents.',
+                'Logstack can send alerts and escalations to this device. '
+                'Notifications are optional — you can turn them on or off anytime in Settings.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: LogstackColors.textSecondary,
                       height: 1.5,
@@ -210,13 +231,17 @@ class _PushPermissionScreenState extends ConsumerState<PushPermissionScreen> {
                         ),
                   ),
                 ],
-                if (_fromSettings) ...[
-                  const SizedBox(height: 12),
+                const SizedBox(height: 12),
+                if (_fromSettings)
                   TextButton(
                     onPressed: () => context.pop(),
                     child: const Text('Not now'),
+                  )
+                else
+                  TextButton(
+                    onPressed: _requesting ? null : _skipOnboarding,
+                    child: const Text('Skip — set up later'),
                   ),
-                ],
               ],
               const SizedBox(height: 16),
             ],
