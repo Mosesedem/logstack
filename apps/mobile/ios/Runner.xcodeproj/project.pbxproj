@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -254,7 +254,7 @@
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
 			packageReferences = (
-				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */,
+				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */,
 			);
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
@@ -313,13 +313,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -339,7 +335,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\nrm -rf \"$HOME/Library/Developer/Xcode/DerivedData/ModuleCache.noindex\"\nrm -rf \"$HOME/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex\"\nmkdir -p \"$HOME/Library/Developer/Xcode/DerivedData/ModuleCache.noindex\"\nmkdir -p \"$HOME/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex\"\n/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
+			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
 		};
 		A7EA1317148BE22B0A6D0470 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -349,13 +345,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -514,15 +506,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
-				CLANG_ENABLE_EXPLICIT_MODULES = NO;
 				CLANG_ENABLE_MODULES = YES;
-				CLANG_STAT_CACHE_ENABLE = NO;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = K8T663XUUD;
 				ENABLE_BITCODE = NO;
-				ENABLE_EXPLICIT_MODULES = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Logstack;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -532,11 +521,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.1.7;
-				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDK_STAT_CACHE_DIR = "$(PROJECT_TEMP_DIR)";
-				SDK_STAT_CACHE_ENABLE = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -549,19 +535,13 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
-				CLANG_ENABLE_EXPLICIT_MODULES = NO;
-				CLANG_STAT_CACHE_ENABLE = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_EXPLICIT_MODULES = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
-				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDK_STAT_CACHE_DIR = "$(PROJECT_TEMP_DIR)";
-				SDK_STAT_CACHE_ENABLE = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -575,19 +555,13 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
-				CLANG_ENABLE_EXPLICIT_MODULES = NO;
-				CLANG_STAT_CACHE_ENABLE = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_EXPLICIT_MODULES = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
-				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDK_STAT_CACHE_DIR = "$(PROJECT_TEMP_DIR)";
-				SDK_STAT_CACHE_ENABLE = NO;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
 			};
@@ -599,19 +573,13 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
-				CLANG_ENABLE_EXPLICIT_MODULES = NO;
-				CLANG_STAT_CACHE_ENABLE = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_EXPLICIT_MODULES = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				MARKETING_VERSION = 1.0;
-				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDK_STAT_CACHE_DIR = "$(PROJECT_TEMP_DIR)";
-				SDK_STAT_CACHE_ENABLE = NO;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
 			};
@@ -732,15 +700,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
-				CLANG_ENABLE_EXPLICIT_MODULES = NO;
 				CLANG_ENABLE_MODULES = YES;
-				CLANG_STAT_CACHE_ENABLE = NO;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.Debug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = K8T663XUUD;
 				ENABLE_BITCODE = NO;
-				ENABLE_EXPLICIT_MODULES = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Logstack;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -750,11 +715,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.1.7;
-				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDK_STAT_CACHE_DIR = "$(PROJECT_TEMP_DIR)";
-				SDK_STAT_CACHE_ENABLE = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -768,15 +730,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
-				CLANG_ENABLE_EXPLICIT_MODULES = NO;
 				CLANG_ENABLE_MODULES = YES;
-				CLANG_STAT_CACHE_ENABLE = NO;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = K8T663XUUD;
 				ENABLE_BITCODE = NO;
-				ENABLE_EXPLICIT_MODULES = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Logstack;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -786,11 +745,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.1.7;
-				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDK_STAT_CACHE_DIR = "$(PROJECT_TEMP_DIR)";
-				SDK_STAT_CACHE_ENABLE = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -833,7 +789,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */ = {
+		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage;
 		};
