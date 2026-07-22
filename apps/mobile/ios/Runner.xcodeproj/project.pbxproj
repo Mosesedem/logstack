@@ -531,7 +531,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.6;
+				MARKETING_VERSION = 1.1.7;
 				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -749,7 +749,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.6;
+				MARKETING_VERSION = 1.1.7;
 				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -785,7 +785,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.6;
+				MARKETING_VERSION = 1.1.7;
 				MODULE_CACHE_DIR = "$(PROJECT_TEMP_DIR)/ModuleCache.noindex";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.logstack.mobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";

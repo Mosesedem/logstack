@@ -1,3 +1,4 @@
+"use client";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -241,7 +242,7 @@ export default function HomePage() {
         </div>
       </section>
       {/* Showoff Section */}
-      <section className="relative z-10 border-t border-white/5 bg-zinc-900/20 py-32">
+      <section className="relative z-10 border-t border-white/5 bg-zinc-900/20 py-32 ml-20">
         <div className="container mx-auto px-4">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <div>
@@ -281,7 +282,13 @@ export default function HomePage() {
                 <Button
                   variant="outline"
                   className="h-12 border-zinc-700 bg-zinc-800/50 text-zinc-300"
-                  disabled
+                  // disabled
+                  onClick={() =>
+                    window.open(
+                      "https://play.google.com/store/apps/details?id=tech.logstack.mobile",
+                      "_blank",
+                    )
+                  }
                 >
                   <span className="mr-2 h-6 w-6 flex items-center justify-center">
                     <svg
@@ -304,13 +311,19 @@ export default function HomePage() {
                       </g>
                     </svg>
                   </span>
-                  App Store - Coming soon
+                  App Store
                 </Button>
 
                 <Button
                   variant="outline"
                   className="h-12 border-zinc-700 bg-zinc-800/50 text-zinc-300"
-                  disabled
+                  // disabled
+                  onClick={() =>
+                    window.open(
+                      "https://play.google.com/store/apps/details?id=tech.logstack.mobile",
+                      "_blank",
+                    )
+                  }
                 >
                   <span className="mr-2 h-6 w-6 flex items-center justify-center">
                     <svg
@@ -414,7 +427,7 @@ export default function HomePage() {
                       </g>
                     </svg>
                   </span>
-                  Google Play - Coming soon
+                  Google Play
                 </Button>
                 <p className="text-sm text-zinc-500 w-full">
                   Mobile apps are in private beta. Public store links will be
