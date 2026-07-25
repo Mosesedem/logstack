@@ -285,7 +285,7 @@ export default function HomePage() {
                   // disabled
                   onClick={() =>
                     window.open(
-                      "https://play.google.com/store/apps/details?id=tech.logstack.mobile",
+                      "https://apps.apple.com/app/logstack/id6787477135",
                       "_blank",
                     )
                   }
