@@ -242,7 +242,7 @@ export default function HomePage() {
         </div>
       </section>
       {/* Showoff Section */}
-      <section className="relative z-10 border-t border-white/5 bg-zinc-900/20 py-32 ml-20">
+      <section className="relative z-10 border-t border-white/5 bg-zinc-900/20">
         <div className="container mx-auto px-4">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <div>
