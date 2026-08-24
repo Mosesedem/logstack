@@ -5,7 +5,7 @@ export const baseOptions: BaseLayoutProps = {
   nav: {
     title: (
       <LogstackLogo
-        href={null}
+        href="/"
         size={24}
         className="font-semibold"
         labelClassName="text-sm font-semibold"

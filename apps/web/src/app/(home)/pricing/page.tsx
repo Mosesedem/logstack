@@ -88,13 +88,13 @@ export default function PricingPage() {
       <Navbar />
 
       <div className="relative z-10 container mx-auto px-4 pt-28 pb-20">
-        <Link
+        {/* <Link
           href="/"
           className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white mb-8"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to home
-        </Link>
+        </Link> */}
 
         <section className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">

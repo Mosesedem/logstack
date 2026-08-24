@@ -93,14 +93,14 @@ export default function HomePage() {
           </div>
 
           <div className="mt-12 flex items-center justify-center gap-8 text-sm text-zinc-500">
-            <div className="flex items-center gap-2">
+            {/* <div className="flex items-center gap-2">
               <Check className="h-4 w-4 text-green-500" />
               <span>No credit card required</span>
             </div>
             <div className="flex items-center gap-2">
               <Check className="h-4 w-4 text-green-500" />
               <span>Self-host ready</span>
-            </div>
+            </div> */}
           </div>
         </div>
       </section>
@@ -210,22 +210,22 @@ export default function HomePage() {
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <FeatureCard
-            icon={<Zap className="h-6 w-6 text-yellow-400" />}
+            icon={<Zap className="h-6 w-6 text-orange-400" />}
             title="Real-time Streaming"
             description="Watch logs flow in real-time via WebSockets. Debug production issues as if they were local."
           />
           <FeatureCard
-            icon={<Shield className="h-6 w-6 text-blue-400" />}
+            icon={<Shield className="h-6 w-6 text-orange-400" />}
             title="Granular Alerts"
             description="Set up complex alert rules based on log patterns, error rates, or business metrics."
           />
           <FeatureCard
-            icon={<BarChart3 className="h-6 w-6 text-green-400" />}
+            icon={<BarChart3 className="h-6 w-6 text-orange-400" />}
             title="Visual Analytics"
             description="Turn JSON logs into beautiful dashboards. Visualize trends, spikes, and anomalies instantly."
           />
           <FeatureCard
-            icon={<Smartphone className="h-6 w-6 text-purple-400" />}
+            icon={<Smartphone className="h-6 w-6 text-orange-400" />}
             title="Mobile Companion"
             description="Monitor your infrastructure from anywhere. Native iOS and Android apps included."
           />
@@ -235,7 +235,7 @@ export default function HomePage() {
             description="Deploy via Docker or Kubernetes. Keep 100% ownership of your sensitive data."
           />
           <FeatureCard
-            icon={<Code className="h-6 w-6 text-pink-400" />}
+            icon={<Code className="h-6 w-6 text-orange-400" />}
             title="Type-Safe SDKs"
             description="First-class support for TypeScript, Go, and Python. Autocomplete your way to better logs."
           />
