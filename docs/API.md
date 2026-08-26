@@ -662,7 +662,7 @@ Public `GET /billing/pricing` reads active plans from the DB.
 
 ### Log retention
 
-Admins set how long logs are kept **per pricing tier** (`retentionDays` on each plan, also `PUT /admin/retention`). `0` means keep forever. A worker deletes expired rows on startup and every 24h; `POST /admin/retention/run` runs the same job immediately. A kill switch (`enabled`) pauses automatic deletion.
+Admins set how long logs are kept **per pricing tier** (`retentionDays` on each plan, also `PUT /admin/retention`). `0` means keep forever. A worker deletes expired rows every 24h; `POST /admin/retention/run` runs the same job immediately. A kill switch (`enabled`) pauses automatic deletion.
 
 ```json
 {

@@ -93,8 +93,8 @@ Email, push, billing, and OAuth are optional for local dev. Without an email pro
 | `READ_TIMEOUT`                   | API            | Optional                 | loaded in config; not yet applied by `cmd/server` |
 | `WRITE_TIMEOUT`                  | API            | Optional                 | loaded in config; not yet applied by `cmd/server` |
 | `IDLE_TIMEOUT`                   | API            | Optional                 | loaded in config; not yet applied by `cmd/server` |
-| `RATE_LIMIT_REQUESTS`            | API            | Optional                 | `0` (`.env.example`: `100`)                       |
-| `RATE_LIMIT_WINDOW`              | API            | Optional                 | `0` (`.env.example`: `1m`)                        |
+| `RATE_LIMIT_REQUESTS`            | API            | Optional                 | `100`                                             |
+| `RATE_LIMIT_WINDOW`              | API            | Optional                 | `1m`                                              |
 | `LOG_LEVEL`                      | API            | Optional                 | `info`                                            |
 | `LOG_JSON`                       | API            | Optional                 | `false`                                           |
 | `USAGE_SYNC_INTERVAL`            | API            | Optional                 | `1m`                                              |

@@ -222,7 +222,7 @@ Configure Docker log rotation in `/etc/docker/daemon.json`:
 
 ### Data Retention
 
-Log expiry is handled in-process by `LogRetentionWorker` (runs on API startup, then every 24h). Admins set the window per pricing tier at **Admin → Log retention** (`retentionDays`; `0` = keep forever) and can click **Run cleanup now**. Do not add a separate SQL cron unless you are operating a DB-only fallback.
+Log expiry is handled in-process by `LogRetentionWorker` (every 24h, plus **Run cleanup now** in admin). Admins set the window per pricing tier at **Admin → Log retention** (`retentionDays`; `0` = keep forever). Do not add a separate SQL cron unless you are operating a DB-only fallback.
 
 ### Updates
 

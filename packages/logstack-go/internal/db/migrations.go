@@ -208,6 +208,15 @@ VALUES ('log_retention.enabled', 'true')
 ON CONFLICT (key) DO NOTHING;
 `,
 	},
+	{
+		Version: "028_alert_histories_log_fk_set_null",
+		Up: `
+ALTER TABLE alert_histories DROP CONSTRAINT IF EXISTS fk_alert_histories_log;
+ALTER TABLE alert_histories
+  ADD CONSTRAINT fk_alert_histories_log
+  FOREIGN KEY (log_id) REFERENCES logs(id) ON DELETE SET NULL;
+`,
+	},
 }
 
 func ensureEnumType(db *gorm.DB, name, values string) error {

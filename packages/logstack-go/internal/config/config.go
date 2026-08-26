@@ -116,9 +116,9 @@ func Load() (*Config, error) {
 		WriteTimeout: getEnvDuration("WRITE_TIMEOUT", 0),
 		IdleTimeout:  getEnvDuration("IDLE_TIMEOUT", 0),
 
-		// Rate limiting
-		RateLimitRequests: getEnvInt("RATE_LIMIT_REQUESTS", 0),
-		RateLimitWindow:   getEnvDuration("RATE_LIMIT_WINDOW", 0),
+		// Rate limiting — 0/0 would 429 every /v1 request (count >= 0).
+		RateLimitRequests: getEnvInt("RATE_LIMIT_REQUESTS", 100),
+		RateLimitWindow:   getEnvDuration("RATE_LIMIT_WINDOW", time.Minute),
 
 		// Logging
 		LogLevel: getEnv("LOG_LEVEL", ""),
@@ -160,6 +160,12 @@ func Load() (*Config, error) {
 func (c *Config) Validate() error {
 	if c.DatabaseURL == "" {
 		return errors.New("DATABASE_URL must be set")
+	}
+	if strings.HasPrefix(c.DatabaseURL, "DATABASE_URL=") {
+		return errors.New("DATABASE_URL is doubled (DATABASE_URL=DATABASE_URL=...); fix the value in .env")
+	}
+	if !strings.Contains(c.DatabaseURL, "://") {
+		return errors.New("DATABASE_URL must be a postgres URL (postgres://...)")
 	}
 	if c.RedisURL == "" {
 		return errors.New("REDIS_URL must be set")

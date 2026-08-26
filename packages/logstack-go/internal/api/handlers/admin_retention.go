@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mosesedem/logstack/internal/models"
@@ -76,17 +78,22 @@ func (h *AdminHandler) GetLogRetention(c *gin.Context) {
 		})
 	}
 
-	expired, err := h.retention.CountExpired(ctx)
-	if err != nil {
-		slog.Error("admin count expired logs", "error", err)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to count expired logs"})
-		return
-	}
 	lastRun, err := h.retention.LastRun(ctx)
 	if err != nil {
 		slog.Error("admin last retention run", "error", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to load last cleanup"})
 		return
+	}
+
+	// COUNT over logs can take minutes on a large table and the proxy then
+	// returns 502 with no CORS headers. Keep the page load cheap.
+	var expired int64
+	countCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	expired, err = h.retention.CountExpired(countCtx)
+	if err != nil {
+		slog.Warn("admin count expired logs skipped", "error", err)
+		expired = 0
 	}
 
 	c.JSON(http.StatusOK, retentionStatusResponse{

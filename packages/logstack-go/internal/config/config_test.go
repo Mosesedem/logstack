@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 // requiredEnvVars sets the minimum env vars needed for Load() to pass validation.
@@ -151,6 +152,33 @@ func TestLoadExpandsAllowedOriginsFromEnv(t *testing.T) {
 		if cfg.AllowedOrigins[i] != want[i] {
 			t.Fatalf("AllowedOrigins = %v, want %v", cfg.AllowedOrigins, want)
 		}
+	}
+}
+
+func TestLoadAppliesRateLimitDefaults(t *testing.T) {
+	setRequiredEnvVars(t)
+	t.Setenv("RATE_LIMIT_REQUESTS", "")
+	t.Setenv("RATE_LIMIT_WINDOW", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+	if cfg.RateLimitRequests != 100 {
+		t.Fatalf("RateLimitRequests = %d, want 100", cfg.RateLimitRequests)
+	}
+	if cfg.RateLimitWindow != time.Minute {
+		t.Fatalf("RateLimitWindow = %s, want 1m", cfg.RateLimitWindow)
+	}
+}
+
+func TestLoadRejectsDoubledDatabaseURL(t *testing.T) {
+	setRequiredEnvVars(t)
+	t.Setenv("DATABASE_URL", "DATABASE_URL=postgres://user:pass@localhost:5432/testdb")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected error for doubled DATABASE_URL")
 	}
 }
 

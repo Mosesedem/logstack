@@ -1596,7 +1596,7 @@ usage:bytes:{userID}:{YYYY-MM}
 
 ### LogRetentionWorker
 
-**Schedule:** On API startup, then every 24 hours. Admins can also trigger it from `/admin/retention` (`POST /v1/admin/retention/run`).
+**Schedule:** Every 24 hours. Admins can also trigger it from `/admin/retention` (`POST /v1/admin/retention/run`). Not run on process start (avoids locking `logs` during deploys).
 
 **Responsibilities:**
 

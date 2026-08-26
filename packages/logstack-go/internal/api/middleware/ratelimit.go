@@ -56,7 +56,7 @@ func (rl *RateLimiter) LimitByAPIKey() gin.HandlerFunc {
 
 func (rl *RateLimiter) limitByKey(keyFunc func(*gin.Context) string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if rl.redis == nil {
+		if rl.redis == nil || rl.requests <= 0 || rl.window <= 0 {
 			c.Next()
 			return
 		}

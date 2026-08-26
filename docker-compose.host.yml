@@ -26,6 +26,8 @@ services:
       - PAYSTACK_WEBHOOK_URL=${PAYSTACK_WEBHOOK_URL:-https://api.logstack.tech/v1/webhooks/paystack}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_JSON=${LOG_JSON:-true}
+      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-1m}
     depends_on:
       postgres:
         condition: service_healthy

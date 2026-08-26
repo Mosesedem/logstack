@@ -66,6 +66,14 @@ func setupRetentionDB(t *testing.T) *gorm.DB {
 			value TEXT NOT NULL,
 			updated_at DATETIME
 		)`,
+		`CREATE TABLE alert_histories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			alert_rule_id INTEGER NOT NULL,
+			log_id INTEGER,
+			sent_at DATETIME,
+			status TEXT NOT NULL,
+			error_message TEXT
+		)`,
 	}
 	for _, stmt := range stmts {
 		if err := db.Exec(stmt).Error; err != nil {
@@ -169,6 +177,42 @@ func TestLogRetentionKeepsForeverWhenDaysZero(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatalf("count=%d want 2", count)
+	}
+}
+
+func TestLogRetentionDeletesLogsWithAlertHistory(t *testing.T) {
+	db := setupRetentionDB(t)
+	_, keepID := seedRetentionFixture(t, db, 7, 10*24*time.Hour)
+
+	var oldID int64
+	if err := db.Raw(`SELECT id FROM logs WHERE message = ?`, "old").Scan(&oldID).Error; err != nil {
+		t.Fatalf("old id: %v", err)
+	}
+	if err := db.Exec(
+		`INSERT INTO alert_histories (alert_rule_id, log_id, sent_at, status) VALUES (?,?,?,?)`,
+		1, oldID, time.Now().UTC(), "success",
+	).Error; err != nil {
+		t.Fatalf("history: %v", err)
+	}
+
+	w := NewLogRetentionWorker(db)
+	result := w.Run(context.Background(), "admin")
+	if result.Error != "" {
+		t.Fatalf("run error: %s", result.Error)
+	}
+	if result.Deleted != 1 {
+		t.Fatalf("deleted=%d want 1", result.Deleted)
+	}
+	var remaining int64
+	if err := db.Model(&models.Log{}).Count(&remaining).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if remaining != 1 {
+		t.Fatalf("remaining=%d want 1", remaining)
+	}
+	var kept models.Log
+	if err := db.First(&kept, keepID).Error; err != nil {
+		t.Fatalf("kept: %v", err)
 	}
 }
 

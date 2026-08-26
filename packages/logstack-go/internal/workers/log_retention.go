@@ -50,10 +50,10 @@ func NewLogRetentionWorker(db *gorm.DB) *LogRetentionWorker {
 	}
 }
 
-// Start runs cleanup immediately, then once per day.
+// Start runs cleanup once per day. Deletion is not run on process start —
+// a full-table delete at deploy time can lock logs and 502 the whole API.
 func (w *LogRetentionWorker) Start(ctx context.Context) {
 	slog.Info("log retention worker started", "interval", logRetentionInterval.String())
-	w.Run(ctx, "startup")
 
 	ticker := time.NewTicker(logRetentionInterval)
 	defer ticker.Stop()
@@ -245,10 +245,37 @@ func (w *LogRetentionWorker) projectsByTier(ctx context.Context) (map[string][]u
 
 func (w *LogRetentionWorker) deleteExpired(ctx context.Context, projectIDs []uuid.UUID, retentionDays int) (int, error) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -retentionDays)
-	result := w.db.WithContext(ctx).
-		Where("project_id IN ? AND created_at < ?", projectIDs, cutoff).
-		Delete(&models.Log{})
-	return int(result.RowsAffected), result.Error
+	const batchSize = 5000
+	total := 0
+	for {
+		var ids []int64
+		if err := w.db.WithContext(ctx).Model(&models.Log{}).
+			Where("project_id IN ? AND created_at < ?", projectIDs, cutoff).
+			Limit(batchSize).
+			Pluck("id", &ids).Error; err != nil {
+			return total, err
+		}
+		if len(ids) == 0 {
+			return total, nil
+		}
+		if err := w.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			// alert_histories.log_id may still be RESTRICT; drop those rows first.
+			if err := tx.Where("log_id IN ?", ids).Delete(&models.AlertHistory{}).Error; err != nil {
+				return err
+			}
+			res := tx.Where("id IN ?", ids).Delete(&models.Log{})
+			if res.Error != nil {
+				return res.Error
+			}
+			total += int(res.RowsAffected)
+			return nil
+		}); err != nil {
+			return total, err
+		}
+		if len(ids) < batchSize {
+			return total, nil
+		}
+	}
 }
 
 func (w *LogRetentionWorker) persistResult(ctx context.Context, result RetentionRunResult) {

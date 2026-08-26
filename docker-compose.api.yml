@@ -12,6 +12,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "${API_HOST_PORT:-8082}:8080"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgres://logstack:logstack@postgres:5432/logstack?sslmode=disable}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
@@ -20,6 +22,8 @@ services:
       - ENV=${ENV:-production}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
       - BASE_URL=${BASE_URL:-https://api.logstack.tech}
+      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-1m}
       - BREVO_API_KEY=${BREVO_API_KEY:-}
       - FCM_SERVICE_ACCOUNT_PATH=${FCM_SERVICE_ACCOUNT_PATH:-}
       - FCM_PROJECT_ID=${FCM_PROJECT_ID:-}
