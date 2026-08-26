@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
-import { Overpass } from "next/font/google";
+// import { Overpass } from "next/font/google";
+import { Space_Grotesk } from "next/font/google";
+
 import "./globals.css";
 import { Providers } from "./providers";
 
-const overpass = Overpass({ subsets: ["latin"] });
+// const overpass = Overpass({ subsets: ["latin"] });
+const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -29,7 +32,14 @@ export const metadata: Metadata = {
     description:
       "Production-ready log management with real-time streaming and smart alerts",
     siteName: "Logstack",
-    images: [{ url: "/android-chrome-512x512.png", width: 512, height: 512, alt: "Logstack" }],
+    images: [
+      {
+        url: "/android-chrome-512x512.png",
+        width: 512,
+        height: 512,
+        alt: "Logstack",
+      },
+    ],
     type: "website",
   },
   twitter: {
@@ -48,7 +58,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={overpass.className}>
+      {/* <body className={overpass.className}> */}
+      <body className={spaceGrotesk.className}>
         <Providers>{children}</Providers>
       </body>
     </html>
