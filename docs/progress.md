@@ -77,6 +77,7 @@
 
 | Date       | Change                                                                                                                                                                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-26 | **Admin log retention:** `pricing_plans.retention_days` is admin-editable; daily `LogRetentionWorker` (also on startup) deletes expired logs; `/admin/retention` UI + `GET/PUT /admin/retention` + `POST /admin/retention/run`. `0` days = keep forever. |
 | 2026-08-26 | **Landing `#stream` section:** moved the live `production.stream` terminal out of the hero into its own block (heading, copy, dashboard CTA), matching the dedicated `#install` treatment. |
 | 2026-08-26 | **Landing prod polish:** dedicated `#install` section with Node / Python / Go tabs (`install-logstack.ts` plus matching snippets); mobile download badges + scaled phone mockup; `brand`/`surface` tokens, sticky-nav overflow fix, dead footer links removed. |
 | 2026-07-21 | **App Store 4.5.4 / 4:** mobile push optional — onboarding Skip + Settings notifications toggle; Create Account → in-app docs info screen (no external signup / no in-app form). |

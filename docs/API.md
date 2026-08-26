@@ -657,7 +657,24 @@ Public `GET /billing/pricing` reads active plans from the DB.
 | Alerts | `GET\|POST /admin/alerts` | `GET\|PUT\|DELETE /admin/alerts/:id` |
 | Invites | `GET\|POST /admin/invites` | `PUT\|DELETE /admin/invites/:id` |
 | Usage | `GET /admin/usage` | `PUT\|DELETE /admin/usage/:id` |
+| Log retention | `GET\|PUT /admin/retention` | `POST /admin/retention/run` |
 | Audit | `GET /admin/audit` | `DELETE /admin/audit/:id` |
+
+### Log retention
+
+Admins set how long logs are kept **per pricing tier** (`retentionDays` on each plan, also `PUT /admin/retention`). `0` means keep forever. A worker deletes expired rows on startup and every 24h; `POST /admin/retention/run` runs the same job immediately. A kill switch (`enabled`) pauses automatic deletion.
+
+```json
+{
+  "enabled": true,
+  "interval": "24h0m0s",
+  "tiers": [
+    { "planId": 1, "tier": "free", "name": "Free", "retentionDays": 7 }
+  ],
+  "expiredCount": 1204,
+  "lastRun": { "ranAt": "2026-08-26T02:00:00Z", "deleted": 1204, "triggered": "cron" }
+}
+```
 
 List endpoints accept common query params: `limit`, `offset`, plus resource-specific
 filters (`search`, `status`, `tier`, `role`, `userId`, `projectId`, `organizationId`).

@@ -10,18 +10,19 @@ import (
 
 // PricingPlan is the DB-backed, admin-editable pricing plan (maps to public PricingTier).
 type PricingPlan struct {
-	ID          uint           `gorm:"primaryKey" json:"id"`
-	Tier        string         `gorm:"size:20;uniqueIndex;not null" json:"tier"` // free|starter|pro|enterprise
-	Name        string         `gorm:"size:100;not null" json:"name"`
-	Description string         `gorm:"type:text" json:"description"`
-	LogLimit    int64          `gorm:"not null;default:10000" json:"logLimit"`
-	Features    datatypes.JSON `gorm:"type:jsonb;not null" json:"features"` // []string
-	Prices      datatypes.JSON `gorm:"type:jsonb;not null" json:"prices"`   // map[string]int currency→cents
-	Limits      datatypes.JSON `gorm:"type:jsonb;not null" json:"limits"`   // map[string]string
-	SortOrder   int            `gorm:"not null;default:0" json:"sortOrder"`
-	Active      bool           `gorm:"not null;default:true" json:"active"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	UpdatedAt   time.Time      `json:"updatedAt"`
+	ID            uint           `gorm:"primaryKey" json:"id"`
+	Tier          string         `gorm:"size:20;uniqueIndex;not null" json:"tier"` // free|starter|pro|enterprise
+	Name          string         `gorm:"size:100;not null" json:"name"`
+	Description   string         `gorm:"type:text" json:"description"`
+	LogLimit      int64          `gorm:"not null;default:10000" json:"logLimit"`
+	RetentionDays int            `gorm:"not null;default:7" json:"retentionDays"`
+	Features      datatypes.JSON `gorm:"type:jsonb;not null" json:"features"` // []string
+	Prices        datatypes.JSON `gorm:"type:jsonb;not null" json:"prices"`   // map[string]int currency→cents
+	Limits        datatypes.JSON `gorm:"type:jsonb;not null" json:"limits"`   // map[string]string
+	SortOrder     int            `gorm:"not null;default:0" json:"sortOrder"`
+	Active        bool           `gorm:"not null;default:true" json:"active"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UpdatedAt     time.Time      `json:"updatedAt"`
 }
 
 func (PricingPlan) TableName() string {
@@ -33,14 +34,23 @@ func (p *PricingPlan) ToPricingTier() PricingTier {
 	features := decodeStringSlice(p.Features)
 	prices := decodeIntMap(p.Prices)
 	limits := decodeStringMap(p.Limits)
+	days := p.RetentionDays
+	if days == 0 && p.ID == 0 {
+		days = DefaultRetentionDays(SubscriptionTier(p.Tier))
+	}
+	if limits == nil {
+		limits = map[string]string{}
+	}
+	limits["retention"] = FormatRetentionDays(days)
 	return PricingTier{
-		Tier:        SubscriptionTier(p.Tier),
-		Name:        p.Name,
-		Description: p.Description,
-		LogLimit:    p.LogLimit,
-		Features:    features,
-		Prices:      prices,
-		Limits:      limits,
+		Tier:          SubscriptionTier(p.Tier),
+		Name:          p.Name,
+		Description:   p.Description,
+		LogLimit:      p.LogLimit,
+		RetentionDays: days,
+		Features:      features,
+		Prices:        prices,
+		Limits:        limits,
 	}
 }
 
@@ -48,10 +58,11 @@ func (p *PricingPlan) ToPricingTier() PricingTier {
 func DefaultPricingTiers() []PricingTier {
 	return []PricingTier{
 		{
-			Tier:        TierFree,
-			Name:        "Free",
-			Description: "Perfect for personal projects and getting started",
-			LogLimit:    10_000,
+			Tier:          TierFree,
+			Name:          "Free",
+			Description:   "Perfect for personal projects and getting started",
+			LogLimit:      10_000,
+			RetentionDays: 7,
 			Features: []string{
 				"10,000 logs per month",
 				"7-day log retention",
@@ -65,10 +76,11 @@ func DefaultPricingTiers() []PricingTier {
 			},
 		},
 		{
-			Tier:        TierStarter,
-			Name:        "Starter",
-			Description: "For small teams and growing applications",
-			LogLimit:    500_000,
+			Tier:          TierStarter,
+			Name:          "Starter",
+			Description:   "For small teams and growing applications",
+			LogLimit:      500_000,
+			RetentionDays: 30,
 			Features: []string{
 				"500,000 logs per month",
 				"30-day log retention",
@@ -84,10 +96,11 @@ func DefaultPricingTiers() []PricingTier {
 			},
 		},
 		{
-			Tier:        TierPro,
-			Name:        "Pro",
-			Description: "For larger teams with advanced needs",
-			LogLimit:    5_000_000,
+			Tier:          TierPro,
+			Name:          "Pro",
+			Description:   "For larger teams with advanced needs",
+			LogLimit:      5_000_000,
+			RetentionDays: 90,
 			Features: []string{
 				"5,000,000 logs per month",
 				"90-day log retention",
@@ -104,10 +117,11 @@ func DefaultPricingTiers() []PricingTier {
 			},
 		},
 		{
-			Tier:        TierEnterprise,
-			Name:        "Enterprise",
-			Description: "Custom solutions for large organizations",
-			LogLimit:    -1,
+			Tier:          TierEnterprise,
+			Name:          "Enterprise",
+			Description:   "Custom solutions for large organizations",
+			LogLimit:      -1,
+			RetentionDays: 365,
 			Features: []string{
 				"Unlimited logs",
 				"Custom retention",
@@ -165,16 +179,21 @@ func PricingPlanFromTier(t PricingTier, sortOrder int) (PricingPlan, error) {
 	if err != nil {
 		return PricingPlan{}, err
 	}
+	days := t.RetentionDays
+	if days == 0 {
+		days = DefaultRetentionDays(t.Tier)
+	}
 	return PricingPlan{
-		Tier:        string(t.Tier),
-		Name:        t.Name,
-		Description: t.Description,
-		LogLimit:    t.LogLimit,
-		Features:    datatypes.JSON(features),
-		Prices:      datatypes.JSON(prices),
-		Limits:      datatypes.JSON(limits),
-		SortOrder:   sortOrder,
-		Active:      true,
+		Tier:          string(t.Tier),
+		Name:          t.Name,
+		Description:   t.Description,
+		LogLimit:      t.LogLimit,
+		RetentionDays: days,
+		Features:      datatypes.JSON(features),
+		Prices:        datatypes.JSON(prices),
+		Limits:        datatypes.JSON(limits),
+		SortOrder:     sortOrder,
+		Active:        true,
 	}, nil
 }
 

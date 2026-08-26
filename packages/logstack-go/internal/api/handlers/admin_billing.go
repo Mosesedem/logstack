@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -16,27 +17,29 @@ import (
 // ---------- Pricing plans ----------
 
 type adminPlanBody struct {
-	Tier        string            `json:"tier" binding:"required,oneof=free starter pro enterprise"`
-	Name        string            `json:"name" binding:"required,min=1,max=100"`
-	Description string            `json:"description"`
-	LogLimit    int64             `json:"logLimit"`
-	Features    []string          `json:"features"`
-	Prices      map[string]int    `json:"prices"`
-	Limits      map[string]string `json:"limits"`
-	SortOrder   *int              `json:"sortOrder"`
-	Active      *bool             `json:"active"`
+	Tier          string            `json:"tier" binding:"required,oneof=free starter pro enterprise"`
+	Name          string            `json:"name" binding:"required,min=1,max=100"`
+	Description   string            `json:"description"`
+	LogLimit      int64             `json:"logLimit"`
+	RetentionDays *int              `json:"retentionDays"`
+	Features      []string          `json:"features"`
+	Prices        map[string]int    `json:"prices"`
+	Limits        map[string]string `json:"limits"`
+	SortOrder     *int              `json:"sortOrder"`
+	Active        *bool             `json:"active"`
 }
 
 type adminPlanUpdateBody struct {
-	Name        *string            `json:"name" binding:"omitempty,min=1,max=100"`
-	Description *string            `json:"description"`
-	LogLimit    *int64             `json:"logLimit"`
-	Features    []string           `json:"features"`
-	Prices      map[string]int     `json:"prices"`
-	Limits      map[string]string  `json:"limits"`
-	SortOrder   *int               `json:"sortOrder"`
-	Active      *bool              `json:"active"`
-	Tier        *string            `json:"tier" binding:"omitempty,oneof=free starter pro enterprise"`
+	Name          *string           `json:"name" binding:"omitempty,min=1,max=100"`
+	Description   *string           `json:"description"`
+	LogLimit      *int64            `json:"logLimit"`
+	RetentionDays *int              `json:"retentionDays"`
+	Features      []string          `json:"features"`
+	Prices        map[string]int    `json:"prices"`
+	Limits        map[string]string `json:"limits"`
+	SortOrder     *int              `json:"sortOrder"`
+	Active        *bool             `json:"active"`
+	Tier          *string           `json:"tier" binding:"omitempty,oneof=free starter pro enterprise"`
 }
 
 func (h *AdminHandler) ListPricingPlans(c *gin.Context) {
@@ -124,6 +127,13 @@ func (h *AdminHandler) UpdatePricingPlan(c *gin.Context) {
 	if req.LogLimit != nil {
 		plan.LogLimit = *req.LogLimit
 	}
+	if req.RetentionDays != nil {
+		if *req.RetentionDays < 0 || *req.RetentionDays > 3650 {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Code: "VALIDATION_ERROR", Message: "retentionDays must be between 0 and 3650"})
+			return
+		}
+		plan.RetentionDays = *req.RetentionDays
+	}
 	if req.Features != nil {
 		b, _ := json.Marshal(req.Features)
 		plan.Features = datatypes.JSON(b)
@@ -200,16 +210,24 @@ func buildPlanFromBody(req adminPlanBody) (models.PricingPlan, error) {
 	if req.Active != nil {
 		active = *req.Active
 	}
+	days := models.DefaultRetentionDays(models.SubscriptionTier(req.Tier))
+	if req.RetentionDays != nil {
+		if *req.RetentionDays < 0 || *req.RetentionDays > 3650 {
+			return models.PricingPlan{}, fmt.Errorf("retentionDays must be between 0 and 3650")
+		}
+		days = *req.RetentionDays
+	}
 	return models.PricingPlan{
-		Tier:        req.Tier,
-		Name:        strings.TrimSpace(req.Name),
-		Description: req.Description,
-		LogLimit:    req.LogLimit,
-		Features:    datatypes.JSON(fb),
-		Prices:      datatypes.JSON(pb),
-		Limits:      datatypes.JSON(lb),
-		SortOrder:   sortOrder,
-		Active:      active,
+		Tier:          req.Tier,
+		Name:          strings.TrimSpace(req.Name),
+		Description:   req.Description,
+		LogLimit:      req.LogLimit,
+		RetentionDays: days,
+		Features:      datatypes.JSON(fb),
+		Prices:        datatypes.JSON(pb),
+		Limits:        datatypes.JSON(lb),
+		SortOrder:     sortOrder,
+		Active:        active,
 	}, nil
 }
 
@@ -435,13 +453,13 @@ func (h *AdminHandler) DeleteSubscription(c *gin.Context) {
 // ---------- Invoices / transactions ----------
 
 type adminCreateInvoiceRequest struct {
-	UserID      uint                   `json:"userId" binding:"required"`
-	Reference   string                 `json:"reference" binding:"required,min=1,max=255"`
-	AmountCents int                    `json:"amountCents" binding:"required"`
-	Currency    string                 `json:"currency" binding:"required,len=3"`
-	Status      string                 `json:"status" binding:"omitempty,oneof=pending paid failed"`
+	UserID      uint                     `json:"userId" binding:"required"`
+	Reference   string                   `json:"reference" binding:"required,min=1,max=255"`
+	AmountCents int                      `json:"amountCents" binding:"required"`
+	Currency    string                   `json:"currency" binding:"required,len=3"`
+	Status      string                   `json:"status" binding:"omitempty,oneof=pending paid failed"`
 	LineItems   []models.InvoiceLineItem `json:"lineItems"`
-	PaidAt      string                 `json:"paidAt"`
+	PaidAt      string                   `json:"paidAt"`
 }
 
 type adminUpdateInvoiceRequest struct {

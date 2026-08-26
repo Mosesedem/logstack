@@ -29,6 +29,7 @@ type RouterConfig struct {
 	OrganizationService *services.OrganizationService
 	AuditService        *services.AuditService
 	UsageSyncWorker     *workers.UsageSyncWorker
+	LogRetentionWorker  *workers.LogRetentionWorker
 	Hub                 *websocket.Hub
 	Config              *config.Config
 	NotificationService *notification.Service
@@ -225,6 +226,7 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 			{
 				adminHandler := handlers.NewAdminHandler(cfg.DB)
 				adminHandler.SetNotifier(cfg.NotificationService)
+				adminHandler.SetRetentionWorker(cfg.LogRetentionWorker)
 				admin.GET("/stats", adminHandler.GetSystemStats)
 
 				// Direct push + email from admin dashboard
@@ -251,6 +253,11 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 				admin.GET("/plans/:id", adminHandler.GetPricingPlan)
 				admin.PUT("/plans/:id", adminHandler.UpdatePricingPlan)
 				admin.DELETE("/plans/:id", adminHandler.DeletePricingPlan)
+
+				// Log retention / expiry
+				admin.GET("/retention", adminHandler.GetLogRetention)
+				admin.PUT("/retention", adminHandler.UpdateLogRetention)
+				admin.POST("/retention/run", adminHandler.RunLogRetention)
 
 				// Subscriptions
 				admin.GET("/subscriptions", adminHandler.ListSubscriptions)

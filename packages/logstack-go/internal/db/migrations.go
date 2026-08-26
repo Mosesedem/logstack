@@ -189,6 +189,25 @@ CREATE INDEX IF NOT EXISTS idx_log_escalations_project ON log_escalations(projec
 ALTER TABLE users ADD COLUMN IF NOT EXISTS escalation_email VARCHAR(255);
 `,
 	},
+	{
+		Version: "027_log_retention_settings",
+		Up: `
+ALTER TABLE pricing_plans ADD COLUMN IF NOT EXISTS retention_days integer NOT NULL DEFAULT 7;
+UPDATE pricing_plans SET retention_days = 7 WHERE tier = 'free';
+UPDATE pricing_plans SET retention_days = 30 WHERE tier = 'starter';
+UPDATE pricing_plans SET retention_days = 90 WHERE tier = 'pro';
+UPDATE pricing_plans SET retention_days = 365 WHERE tier = 'enterprise';
+
+CREATE TABLE IF NOT EXISTS system_settings (
+    key        varchar(64) PRIMARY KEY,
+    value      text        NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT NOW()
+);
+INSERT INTO system_settings (key, value)
+VALUES ('log_retention.enabled', 'true')
+ON CONFLICT (key) DO NOTHING;
+`,
+	},
 }
 
 func ensureEnumType(db *gorm.DB, name, values string) error {
@@ -271,7 +290,7 @@ func RunMigrations(db *gorm.DB) error {
 	// AutoMigrate creates missing tables/columns for all models.
 	// We guard this with a version key so it only runs when the schema version changes,
 	// not on every startup (which would hammer a remote DB with 100+ inspection queries).
-	const autoMigrateVersion = "automigrate_v5"
+	const autoMigrateVersion = "automigrate_v6"
 	applied, err := appliedVersions(db)
 	if err != nil {
 		return err
@@ -291,6 +310,7 @@ func RunMigrations(db *gorm.DB) error {
 			&models.Subscription{},
 			&models.UsageLog{},
 			&models.PricingPlan{},
+			&models.SystemSetting{},
 			// Invite, Invoice, MobileRefreshToken are owned by numbered SQL migrations above.
 		); err != nil {
 			return err

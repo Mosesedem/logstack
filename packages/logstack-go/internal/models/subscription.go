@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,6 +41,34 @@ func (t SubscriptionTier) LogLimit() int64 {
 		return -1 // Unlimited
 	}
 	return 10_000 // Default to free tier
+}
+
+// DefaultRetentionDays is the built-in log expiry window for a tier.
+// 0 means logs are kept indefinitely until an admin sets a positive value.
+func DefaultRetentionDays(tier SubscriptionTier) int {
+	switch tier {
+	case TierFree:
+		return 7
+	case TierStarter:
+		return 30
+	case TierPro:
+		return 90
+	case TierEnterprise:
+		return 365
+	default:
+		return 7
+	}
+}
+
+// FormatRetentionDays is the public/admin label for a retention window.
+func FormatRetentionDays(days int) string {
+	if days <= 0 {
+		return "Forever"
+	}
+	if days == 1 {
+		return "1 day"
+	}
+	return fmt.Sprintf("%d days", days)
 }
 
 // Scan implements the sql.Scanner interface
@@ -169,11 +198,12 @@ func (s *Subscription) ToResponse() SubscriptionResponse {
 // PricingTier represents the pricing information for a tier (public API shape).
 // Editable catalogue lives in PricingPlan; see DefaultPricingTiers / LoadPricingTiers.
 type PricingTier struct {
-	Tier        SubscriptionTier  `json:"tier"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	LogLimit    int64             `json:"logLimit"`
-	Features    []string          `json:"features"`
-	Prices      map[string]int    `json:"prices"` // Currency -> amount in cents
-	Limits      map[string]string `json:"limits"` // Human-readable limits
+	Tier          SubscriptionTier  `json:"tier"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description"`
+	LogLimit      int64             `json:"logLimit"`
+	RetentionDays int               `json:"retentionDays"`
+	Features      []string          `json:"features"`
+	Prices        map[string]int    `json:"prices"` // Currency -> amount in cents
+	Limits        map[string]string `json:"limits"` // Human-readable limits
 }

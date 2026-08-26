@@ -11,12 +11,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/mosesedem/logstack/internal/models"
 	"github.com/mosesedem/logstack/internal/services/notification"
+	"github.com/mosesedem/logstack/internal/workers"
 	"gorm.io/gorm"
 )
 
 type AdminHandler struct {
-	db       *gorm.DB
-	notifier *notification.Service
+	db        *gorm.DB
+	notifier  *notification.Service
+	retention *workers.LogRetentionWorker
 }
 
 func NewAdminHandler(db *gorm.DB) *AdminHandler {
@@ -26,6 +28,11 @@ func NewAdminHandler(db *gorm.DB) *AdminHandler {
 // SetNotifier attaches email/push delivery for admin broadcast endpoints.
 func (h *AdminHandler) SetNotifier(n *notification.Service) {
 	h.notifier = n
+}
+
+// SetRetentionWorker attaches the log expiry cron so admins can inspect and run it.
+func (h *AdminHandler) SetRetentionWorker(w *workers.LogRetentionWorker) {
+	h.retention = w
 }
 
 // ---------- Stats ----------

@@ -1594,6 +1594,20 @@ usage:bytes:{userID}:{YYYY-MM}
 
 ---
 
+### LogRetentionWorker
+
+**Schedule:** On API startup, then every 24 hours. Admins can also trigger it from `/admin/retention` (`POST /v1/admin/retention/run`).
+
+**Responsibilities:**
+
+- Delete logs older than the admin-configured window for each pricing tier
+- Honor `system_settings.log_retention.enabled` (pause without changing windows)
+- Persist the last run result for the admin UI
+
+**Windows:** `pricing_plans.retention_days` (admin-editable). `0` = never expire. Projects without an active/trialing subscription use the Free window. Default seed: Free 7 / Starter 30 / Pro 90 / Enterprise 365.
+
+---
+
 ### LogAggregator
 
 **Schedule:** Every 5 minutes (configurable)

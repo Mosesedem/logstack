@@ -125,6 +125,7 @@ func main() {
 		OrganizationService: organizationService,
 		AuditService:        auditService,
 		UsageSyncWorker:     usageSyncWorker,
+		LogRetentionWorker:  logRetentionWorker,
 		Hub:                 hub,
 		Config:              cfg,
 		NotificationService: notifier,

@@ -17,6 +17,7 @@ import {
   BarChart3,
   ScrollText,
   Send,
+  Timer,
 } from "lucide-react";
 
 const navItems = [
@@ -31,6 +32,7 @@ const navItems = [
   { href: "/admin/alerts", label: "Alerts", icon: Bell },
   { href: "/admin/invites", label: "Invites", icon: Mail },
   { href: "/admin/usage", label: "Usage", icon: BarChart3 },
+  { href: "/admin/retention", label: "Log retention", icon: Timer },
   { href: "/admin/audit", label: "Audit", icon: ScrollText },
 ];
 

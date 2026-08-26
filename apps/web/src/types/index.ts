@@ -158,6 +158,7 @@ export interface PricingTier {
   name: string;
   description: string;
   logLimit: number;
+  retentionDays: number;
   features: string[];
   prices: Record<string, number>; // currency -> amount in cents
   limits: {

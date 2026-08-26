@@ -222,15 +222,7 @@ Configure Docker log rotation in `/etc/docker/daemon.json`:
 
 ### Data Retention
 
-Implement log cleanup for old data:
-
-```sql
--- Delete logs older than 30 days
-DELETE FROM logs WHERE created_at < NOW() - INTERVAL '30 days';
-
--- Run as a cron job
-0 3 * * * docker exec logstack-postgres psql -U logstack -c "DELETE FROM logs WHERE created_at < NOW() - INTERVAL '30 days';"
-```
+Log expiry is handled in-process by `LogRetentionWorker` (runs on API startup, then every 24h). Admins set the window per pricing tier at **Admin → Log retention** (`retentionDays`; `0` = keep forever) and can click **Run cleanup now**. Do not add a separate SQL cron unless you are operating a DB-only fallback.
 
 ### Updates
 

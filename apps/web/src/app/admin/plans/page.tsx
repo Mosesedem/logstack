@@ -34,6 +34,7 @@ type Plan = {
   name: string;
   description: string;
   logLimit: number;
+  retentionDays: number;
   features: string[] | string;
   prices: Record<string, number> | string;
   limits: Record<string, string> | string;
@@ -46,6 +47,7 @@ type FormState = {
   name: string;
   description: string;
   logLimit: string;
+  retentionDays: string;
   features: string;
   priceUsd: string;
   priceNgn: string;
@@ -58,6 +60,7 @@ const empty: FormState = {
   name: "",
   description: "",
   logLimit: "10000",
+  retentionDays: "7",
   features: "",
   priceUsd: "0",
   priceNgn: "0",
@@ -82,6 +85,7 @@ function toBody(form: FormState) {
     name: form.name.trim(),
     description: form.description,
     logLimit: Number(form.logLimit) || 0,
+    retentionDays: Number(form.retentionDays) || 0,
     features: form.features
       .split("\n")
       .map((s) => s.trim())
@@ -92,6 +96,10 @@ function toBody(form: FormState) {
     },
     limits: {
       logs: `${form.logLimit}/month`,
+      retention:
+        Number(form.retentionDays) <= 0
+          ? "Forever"
+          : `${Number(form.retentionDays)} days`,
     },
     sortOrder: Number(form.sortOrder) || 0,
     active: form.active,
@@ -118,6 +126,7 @@ export default function AdminPlansPage() {
       name: p.name,
       description: p.description ?? "",
       logLimit: String(p.logLimit ?? 0),
+      retentionDays: String(p.retentionDays ?? 7),
       features: Array.isArray(features) ? features.join("\n") : "",
       priceUsd: String(prices.USD ?? 0),
       priceNgn: String(prices.NGN ?? 0),
@@ -148,12 +157,13 @@ export default function AdminPlansPage() {
             "Tier",
             "Name",
             "Log limit",
+            "Retention",
             "USD",
             "NGN",
             "Active",
             "Actions",
           ]}
-          colSpan={7}
+          colSpan={8}
           empty={items.length === 0}
         >
           {items.map((p) => {
@@ -172,6 +182,11 @@ export default function AdminPlansPage() {
                 <td className="p-4 font-medium">{p.name}</td>
                 <td className="p-4">
                   {p.logLimit < 0 ? "Unlimited" : p.logLimit.toLocaleString()}
+                </td>
+                <td className="p-4">
+                  {p.retentionDays <= 0
+                    ? "Forever"
+                    : `${p.retentionDays}d`}
                 </td>
                 <td className="p-4">
                   {prices.USD === -1
@@ -332,6 +347,18 @@ function PlanDialog({
                 value={form.logLimit}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, logLimit: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Retention days (0 = forever)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={3650}
+                value={form.retentionDays}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, retentionDays: e.target.value }))
                 }
               />
             </div>
