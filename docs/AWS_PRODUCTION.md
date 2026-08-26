@@ -241,10 +241,19 @@ Copy the printed **private key** into GitHub.
 
 ### Manual on server
 
+This EC2 uses **host nginx** (ports 80/443) and publishes the API on **127.0.0.1:8082**. Always use `docker-compose.api.yml`.
+
+**Do not** run `docker-compose.prod.yml` here. That file starts Docker nginx on 80/443 (conflicts with host nginx) and does **not** map `:8082`, so Cloudflare returns 502.
+
+If `git pull` complains that local files would be overwritten, those are leftover server-side edits — discard them, then pull:
+
 ```bash
 cd ~/logstack
+git checkout -- packages/logstack-go
 git pull --ff-only origin main
-docker compose -f docker-compose.host.yml up -d --build --remove-orphans
+DOCKER_BUILDKIT=1 docker compose -f docker-compose.api.yml up -d --build --remove-orphans
+curl -sS http://127.0.0.1:8082/health
+curl -sS https://api.logstack.tech/health
 ```
 
 ### Disk full during `go build` (`no space left on device`)
@@ -277,9 +286,9 @@ The current Dockerfile is CGO-off, uses BuildKit module/build caches, and no lon
 
 | File | When to use |
 | ---- | ----------- |
-| `docker-compose.host.yml` | **Your production** — API + Postgres + Redis in Docker; host nginx on 80/443 |
-| `docker-compose.prod.yml` | Dedicated host — Docker nginx + bundled Postgres/Redis |
-| `docker-compose.api.yml` | Direct API on host port `8082` (no TLS, debugging) |
+| `docker-compose.api.yml` | **This EC2** — API on `127.0.0.1:8082`; host nginx terminates TLS |
+| `docker-compose.host.yml` | Same idea, slightly different env wiring; not the file currently running |
+| `docker-compose.prod.yml` | Dedicated host with **Docker** nginx on 80/443 — **not this machine** |
 | `docker-compose.yml` | Full stack with web frontend (not used in this setup) |
 
 Direct-access fallback (no nginx):

@@ -32,7 +32,7 @@ import type { LinkedDevice, LinkedDevicesResponse } from "@/types";
 function deviceLabel(type: LinkedDevice["deviceType"]): string {
   if (type === "ios") return "iPhone / iPad";
   if (type === "android") return "Android";
-  return type;
+  return "Mobile app";
 }
 
 export default function DevicesSettingsPage() {
@@ -47,10 +47,14 @@ export default function DevicesSettingsPage() {
   });
 
   const removeOne = useMutation({
-    mutationFn: (id: number) => api.delete(`/users/me/devices/${id}`),
+    mutationFn: (id: string) =>
+      api.delete(`/users/me/devices/${encodeURIComponent(id)}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["linked-devices"] });
-      toast({ title: "Device removed", description: "It will no longer receive push alerts." });
+      toast({
+        title: "Device logged out",
+        description: "That device is signed out and will not receive push alerts.",
+      });
     },
     onError: (e: Error) => {
       toast({ title: "Could not remove device", description: e.message, variant: "destructive" });
@@ -62,7 +66,10 @@ export default function DevicesSettingsPage() {
     mutationFn: () => api.delete("/users/me/devices"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["linked-devices"] });
-      toast({ title: "All devices removed" });
+      toast({
+        title: "All devices logged out",
+        description: "Every linked phone is signed out and will stop getting alerts.",
+      });
     },
     onError: (e: Error) => {
       toast({ title: "Could not remove devices", description: e.message, variant: "destructive" });
@@ -84,8 +91,8 @@ export default function DevicesSettingsPage() {
           <div>
             <CardTitle>Mobile devices</CardTitle>
             <CardDescription>
-              Devices that still receive push alerts for your account. Remove
-              old phones or tablets so they stop getting notifications.
+              Phones and tablets signed in to your account. Removing a device
+              logs it out and stops push alerts.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -98,7 +105,7 @@ export default function DevicesSettingsPage() {
                 onClick={() => setPending("all")}
                 disabled={busy}
               >
-                Remove all
+                Log out all
               </Button>
             ) : null}
           </div>
@@ -116,10 +123,10 @@ export default function DevicesSettingsPage() {
           ) : devices.length === 0 ? (
             <div className="rounded-lg border border-dashed px-4 py-8 text-center">
               <Smartphone className="mx-auto h-8 w-8 text-muted-foreground" />
-              <p className="mt-3 text-sm font-medium">No devices registered</p>
+              <p className="mt-3 text-sm font-medium">No devices signed in</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Link the Logstack app and enable notifications to receive
-                alerts on your phone.
+                Link the Logstack app to see it here. Enable notifications in
+                the app to receive alerts.
               </p>
             </div>
           ) : (
@@ -138,14 +145,24 @@ export default function DevicesSettingsPage() {
                         <span className="font-medium">
                           {deviceLabel(device.deviceType)}
                         </span>
-                        <Badge variant="outline">{device.deviceType}</Badge>
+                        {device.deviceType ? (
+                          <Badge variant="outline">{device.deviceType}</Badge>
+                        ) : null}
+                        {device.signedIn ? (
+                          <Badge variant="outline">Signed in</Badge>
+                        ) : null}
+                        {device.pushEnabled ? (
+                          <Badge variant="outline">Push on</Badge>
+                        ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Last seen {formatRelativeTime(device.lastSeenAt)}
                       </p>
-                      <p className="truncate font-mono text-[11px] text-muted-foreground">
-                        {device.maskedToken}
-                      </p>
+                      {device.maskedToken ? (
+                        <p className="truncate font-mono text-[11px] text-muted-foreground">
+                          {device.maskedToken}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <Button
@@ -160,16 +177,15 @@ export default function DevicesSettingsPage() {
                     ) : (
                       <Trash2 className="mr-2 h-4 w-4" />
                     )}
-                    Remove
+                    Log out
                   </Button>
                 </li>
               ))}
             </ul>
           )}
           <p className="mt-4 text-xs text-muted-foreground">
-            Removing a device stops push alerts immediately. If the app is
-            still signed in on that phone, it may register again the next time
-            it opens — log out there to keep it off the list.
+            Logging out a device revokes its session and deletes its push
+            token. The app on that phone will need to sign in again.
           </p>
         </CardContent>
       </Card>
@@ -183,12 +199,14 @@ export default function DevicesSettingsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pending === "all" ? "Remove all devices?" : "Remove this device?"}
+              {pending === "all"
+                ? "Log out all devices?"
+                : "Log out this device?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pending === "all"
-                ? "None of your linked phones will receive Logstack push alerts until you link them again."
-                : "This device will stop receiving Logstack push alerts."}
+                ? "Every linked phone will be signed out and stop receiving push alerts until you sign in again."
+                : "This device will be signed out and will stop receiving Logstack push alerts."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -204,7 +222,7 @@ export default function DevicesSettingsPage() {
                 }
               }}
             >
-              {busy ? "Removing…" : "Remove"}
+              {busy ? "Logging out…" : "Log out"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

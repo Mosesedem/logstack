@@ -48,6 +48,7 @@ type Claims struct {
 	UserID    uint   `json:"userId"`
 	Email     string `json:"email"`
 	TokenType string `json:"tokenType"` // "access" or "refresh"
+	SessionID string `json:"sid,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -107,6 +108,27 @@ func (s *AuthService) GenerateTokens(user *models.User) (*TokenPair, error) {
 		ExpiresAt:    accessExpiry.Unix(),
 		TokenType:    "Bearer",
 	}, nil
+}
+
+// GenerateMobileAccessToken issues a short-lived access JWT bound to a mobile session.
+func (s *AuthService) GenerateMobileAccessToken(user *models.User, sessionID string) (string, error) {
+	accessExpiry := time.Now().Add(s.accessTokenExpiry)
+	accessClaims := Claims{
+		UserID:    user.ID,
+		Email:     user.Email,
+		TokenType: "access",
+		SessionID: sessionID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(accessExpiry),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Subject:   fmt.Sprintf("%d", user.ID),
+			Issuer:    "logstack",
+			ID:        generateTokenID(),
+		},
+	}
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+	return accessToken.SignedString(s.jwtSecret)
 }
 
 func (s *AuthService) ValidateToken(tokenString string) (*Claims, error) {

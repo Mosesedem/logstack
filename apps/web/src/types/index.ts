@@ -122,11 +122,13 @@ export interface PushToken {
 }
 
 export interface LinkedDevice {
-  id: number;
-  deviceType: "ios" | "android";
-  maskedToken: string;
+  id: string;
+  deviceType?: "ios" | "android" | "";
+  maskedToken?: string;
   lastSeenAt: string;
   createdAt: string;
+  signedIn: boolean;
+  pushEnabled: boolean;
 }
 
 export interface LinkedDevicesResponse {

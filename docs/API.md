@@ -570,7 +570,7 @@ Invalidate all active sessions.
 
 ### GET /users/me/devices
 
-List mobile devices that still receive push alerts for the current user. Raw FCM tokens are never returned.
+List mobile devices for the current user: signed-in app sessions plus any leftover push tokens. Raw FCM tokens are never returned. Device `id` is `session:<uuid>` or `push:<id>`.
 
 **Response `200`:**
 
@@ -579,11 +579,13 @@ List mobile devices that still receive push alerts for the current user. Raw FCM
   "count": 1,
   "devices": [
     {
-      "id": 12,
+      "id": "session:550e8400-e29b-41d4-a716-446655440000",
       "deviceType": "ios",
       "maskedToken": "dK3k8a1b0c...9f8e7d6c5b",
       "lastSeenAt": "2026-08-26T13:00:00Z",
-      "createdAt": "2026-07-01T09:00:00Z"
+      "createdAt": "2026-07-01T09:00:00Z",
+      "signedIn": true,
+      "pushEnabled": true
     }
   ]
 }
@@ -591,13 +593,13 @@ List mobile devices that still receive push alerts for the current user. Raw FCM
 
 ### DELETE /users/me/devices/:id
 
-Stop push alerts to one of your devices. `404 NOT_FOUND` if the id is missing or belongs to another user.
+Log out that device: revoke its mobile session and delete its push token so it stops receiving alerts. `404 NOT_FOUND` if the id is missing or belongs to another user.
 
 ### DELETE /users/me/devices
 
-Remove every push token for the current user.
+Log out every mobile session and delete every push token for the current user.
 
-If the app is still signed in on a removed device, it may register a new token the next time it opens.
+The app on a removed device must sign in again. After the next sign-in, push registration is bound to that session (`sid` claim on the mobile access JWT).
 
 ---
 

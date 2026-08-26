@@ -278,8 +278,8 @@ export default function SettingsPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               After linking, enable push in the mobile app (Settings) so demo
-              bursts and alerts reach your device in realtime. Remove old
-              phones from Devices if they still get alerts.
+              bursts and alerts reach your device in realtime. Log out old
+              phones from Devices so they stop getting alerts.
             </p>
           </CardContent>
         </Card>

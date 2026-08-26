@@ -77,7 +77,7 @@
 
 | Date       | Change                                                                                                                                                                                                                                       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-08-26 | **Device management:** `GET/DELETE /users/me/devices` (+ delete-all) so dashboard users can stop push to old phones. Settings → Devices lists last-seen + remove. Raw FCM tokens stay server-side. |
+| 2026-08-26 | **Device logout:** Settings → Devices now revokes the mobile session (logs the app out) and deletes the push token. Sessions are bound to FCM tokens via JWT `sid` + `push_tokens.session_id`. |
 | 2026-08-26 | **Retention FK:** cleanup was `Deleted 0` because `fk_alert_histories_log` blocked `DELETE FROM logs`. Worker now detaches `alert_histories.log_id` (SET NULL) in batches; migration 028 makes the FK `ON DELETE SET NULL`. Sidebar usage fetch no longer `console.error`s (that was ingested as a log). |
 | 2026-08-26 | **API Docker build:** dropped `gcc` + `go build -a` (disk-full on small EC2); BuildKit cache mounts. Select: project switcher + alerts history always controlled. |
 | 2026-08-26 | **Admin log retention:** `pricing_plans.retention_days` is admin-editable; daily `LogRetentionWorker` deletes expired logs; `/admin/retention` UI + `GET/PUT /admin/retention` + `POST /admin/retention/run`. `0` days = keep forever. |

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/mosesedem/logstack/internal/models"
 	"github.com/mosesedem/logstack/internal/services/notification"
@@ -64,7 +65,9 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		MaskedToken: masked,
 	})
 
-	now := time.Now()
+	now := time.Now().UTC()
+	sessionID := sessionIDFromContext(c)
+	h.touchMobileSession(userID, sessionID, string(req.DeviceType), now)
 
 	// Multiple devices per user are allowed (phone + tablet, device upgrade, etc.).
 	// Token string is unique globally; re-registering the same FCM token updates the row.
@@ -75,6 +78,7 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 	if err := h.db.Where("token = ?", req.Token).First(&existing).Error; err == nil {
 		existing.UserID = userID
 		existing.DeviceType = req.DeviceType
+		existing.SessionID = sessionID
 		existing.UpdatedAt = now
 		if err := h.db.Save(&existing).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -123,6 +127,7 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		UserID:     userID,
 		Token:      req.Token,
 		DeviceType: req.DeviceType,
+		SessionID:  sessionID,
 		UpdatedAt:  now,
 		CreatedAt:  now,
 	}
@@ -145,6 +150,37 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		"deviceType":  req.DeviceType,
 		"maskedToken": masked,
 	})
+}
+
+func sessionIDFromContext(c *gin.Context) *uuid.UUID {
+	raw, ok := c.Get("sessionID")
+	if !ok {
+		return nil
+	}
+	s, ok := raw.(string)
+	if !ok || strings.TrimSpace(s) == "" {
+		return nil
+	}
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return nil
+	}
+	return &id
+}
+
+func (h *MobileHandler) touchMobileSession(userID uint, sessionID *uuid.UUID, deviceInfo string, now time.Time) {
+	if sessionID == nil {
+		return
+	}
+	updates := map[string]any{
+		"last_used_at": now,
+		"device_info":  deviceInfo,
+	}
+	if err := h.db.Model(&models.MobileRefreshToken{}).
+		Where("id = ? AND user_id = ? AND revoked = ?", *sessionID, userID, false).
+		Updates(updates).Error; err != nil {
+		slog.Warn("failed to stamp mobile session from push register", "sessionID", sessionID, "error", err)
+	}
 }
 
 // TestPush handles POST /v1/mobile/push-test — sends a test notification to the

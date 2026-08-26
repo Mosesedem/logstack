@@ -78,6 +78,7 @@ func JWTAuth(authService *services.AuthService) gin.HandlerFunc {
 
 		c.Set("userID", claims.UserID)
 		c.Set("userEmail", claims.Email)
+		c.Set("sessionID", claims.SessionID)
 		c.Set("token", token)
 		c.Next()
 	}
@@ -112,6 +113,7 @@ func OptionalJWTAuth(authService *services.AuthService) gin.HandlerFunc {
 
 		c.Set("userID", claims.UserID)
 		c.Set("userEmail", claims.Email)
+		c.Set("sessionID", claims.SessionID)
 		c.Set("token", token)
 		c.Next()
 	}
@@ -176,6 +178,7 @@ func WSAuth(authService *services.AuthService) gin.HandlerFunc {
 
 		c.Set("userID", claims.UserID)
 		c.Set("userEmail", claims.Email)
+		c.Set("sessionID", claims.SessionID)
 		c.Set("token", token)
 		c.Next()
 	}

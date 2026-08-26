@@ -675,13 +675,12 @@ func (h *AuthHandler) confirmQRSession(ctx context.Context, sessionKey string, u
 		return "", "", err
 	}
 
-	// Generate short-lived JWT access token
-	tokens, err := h.authService.GenerateTokens(user)
+	accessToken, err := h.authService.GenerateMobileAccessToken(user, mobileToken.ID.String())
 	if err != nil {
 		return "", "", err
 	}
 
-	return tokens.AccessToken, mrt, nil
+	return accessToken, mrt, nil
 }
 
 // issueMobileTokens creates a short-lived access token and non-expiring mobile refresh token.
@@ -700,12 +699,12 @@ func (h *AuthHandler) issueMobileTokens(user *models.User) (string, string, erro
 		return "", "", err
 	}
 
-	tokens, err := h.authService.GenerateTokens(user)
+	accessToken, err := h.authService.GenerateMobileAccessToken(user, mobileToken.ID.String())
 	if err != nil {
 		return "", "", err
 	}
 
-	return tokens.AccessToken, mrt, nil
+	return accessToken, mrt, nil
 }
 
 // resolveQRSessionUser loads the account bound to a pending QR session.
@@ -1162,6 +1161,11 @@ func (h *AuthHandler) RefreshMobileToken(c *gin.Context) {
 		return
 	}
 
+	now := time.Now().UTC()
+	if err := h.db.Model(&mrt).Update("last_used_at", now).Error; err != nil {
+		slog.Warn("RefreshMobileToken: failed to stamp last_used_at", "error", err, "sessionID", mrt.ID)
+	}
+
 	// Load user
 	var user models.User
 	if err := h.db.First(&user, mrt.UserID).Error; err != nil {
@@ -1169,15 +1173,14 @@ func (h *AuthHandler) RefreshMobileToken(c *gin.Context) {
 		return
 	}
 
-	// Generate new short-lived access token
-	tokens, err := h.authService.GenerateTokens(&user)
+	accessToken, err := h.authService.GenerateMobileAccessToken(&user, mrt.ID.String())
 	if err != nil {
 		slog.Error("RefreshMobileToken: failed to generate tokens", "error", err, "userID", user.ID)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to generate access token"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"accessToken": tokens.AccessToken})
+	c.JSON(http.StatusOK, gin.H{"accessToken": accessToken})
 }
 
 // MobileLogout handles POST /v1/auth/mobile-logout (JWT-protected).
