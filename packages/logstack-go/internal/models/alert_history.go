@@ -21,5 +21,5 @@ type AlertHistory struct {
 
 	// Relations
 	AlertRule AlertRule `gorm:"foreignKey:AlertRuleID" json:"alertRule,omitempty"`
-	Log       *Log      `gorm:"foreignKey:LogID" json:"log,omitempty"`
+	Log       *Log      `gorm:"foreignKey:LogID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"log,omitempty"`
 }

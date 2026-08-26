@@ -27,8 +27,9 @@ export function SidebarUsage({ className }: { className?: string }) {
       try {
         const data = await api.get<UsageSummary>("/billing/usage");
         setUsage(data);
-      } catch (error) {
-        console.error("Failed to load sidebar usage:", error);
+      } catch {
+        // Leave usage null — the widget already renders "Usage data unavailable".
+        // Do not console.error: captureConsole would ingest this as a customer log.
       } finally {
         setLoading(false);
       }

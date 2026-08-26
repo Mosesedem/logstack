@@ -55,7 +55,7 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		return
 	}
 
-	masked := maskPushToken(req.Token)
+	masked := models.MaskPushToken(req.Token)
 	notification.RecordPushTrace(notification.PushTraceEvent{
 		Phase:       "register_attempt",
 		Source:      "mobile_register",
@@ -114,7 +114,7 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 			Source:      "mobile_register",
 			UserID:      userID,
 			DeviceType:  string(oldest.DeviceType),
-			MaskedToken: maskPushToken(oldest.Token),
+			MaskedToken: models.MaskPushToken(oldest.Token),
 			Detail:      "evicted least-recently-updated token (cap 10)",
 		})
 	}
@@ -145,13 +145,6 @@ func (h *MobileHandler) RegisterPushToken(c *gin.Context) {
 		"deviceType":  req.DeviceType,
 		"maskedToken": masked,
 	})
-}
-
-func maskPushToken(token string) string {
-	if len(token) <= 20 {
-		return "***"
-	}
-	return token[:10] + "..." + token[len(token)-10:]
 }
 
 // TestPush handles POST /v1/mobile/push-test — sends a test notification to the

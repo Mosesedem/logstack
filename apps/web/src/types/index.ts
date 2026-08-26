@@ -121,6 +121,19 @@ export interface PushToken {
   createdAt: string;
 }
 
+export interface LinkedDevice {
+  id: number;
+  deviceType: "ios" | "android";
+  maskedToken: string;
+  lastSeenAt: string;
+  createdAt: string;
+}
+
+export interface LinkedDevicesResponse {
+  devices: LinkedDevice[];
+  count: number;
+}
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;

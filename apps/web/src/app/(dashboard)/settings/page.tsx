@@ -23,6 +23,7 @@ import { api } from "@/lib/api-client";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { BillingContextResponse, User } from "@/types";
+import Link from "next/link";
 import { LinkMobileDialog } from "@/components/auth/link-mobile-dialog";
 import { SettingsPageSkeleton } from "@/components/loading";
 import { BILLING_COUNTRIES } from "@/components/billing/billing-region-card";
@@ -266,13 +267,19 @@ export default function SettingsPage() {
               page or alerts.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Button onClick={() => setLinkMobileOpen(true)}>
-              Link Mobile App
-            </Button>
-            <p className="text-xs text-muted-foreground mt-3">
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => setLinkMobileOpen(true)}>
+                Link Mobile App
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/settings/devices">Manage devices</Link>
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
               After linking, enable push in the mobile app (Settings) so demo
-              bursts and alerts reach your device in realtime.
+              bursts and alerts reach your device in realtime. Remove old
+              phones from Devices if they still get alerts.
             </p>
           </CardContent>
         </Card>

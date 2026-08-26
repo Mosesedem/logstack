@@ -214,6 +214,14 @@ func TestLogRetentionDeletesLogsWithAlertHistory(t *testing.T) {
 	if err := db.First(&kept, keepID).Error; err != nil {
 		t.Fatalf("kept: %v", err)
 	}
+
+	var history models.AlertHistory
+	if err := db.First(&history).Error; err != nil {
+		t.Fatalf("history should be kept: %v", err)
+	}
+	if history.LogID != nil {
+		t.Fatalf("history.log_id=%v want nil after log expiry", *history.LogID)
+	}
 }
 
 func TestLogRetentionDisabledSkipsDelete(t *testing.T) {

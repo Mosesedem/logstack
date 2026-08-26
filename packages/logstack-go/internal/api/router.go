@@ -181,6 +181,9 @@ func NewRouter(cfg *RouterConfig) *gin.Engine {
 				users.PUT("/me", usersHandler.UpdateCurrentUser)
 				users.PUT("/me/password", usersHandler.UpdatePassword)
 				users.POST("/me/logout-all", usersHandler.LogoutAll)
+				users.GET("/me/devices", usersHandler.ListDevices)
+				users.DELETE("/me/devices", usersHandler.DeleteAllDevices)
+				users.DELETE("/me/devices/:id", usersHandler.DeleteDevice)
 			}
 
 			// Billing

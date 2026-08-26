@@ -259,8 +259,11 @@ func (w *LogRetentionWorker) deleteExpired(ctx context.Context, projectIDs []uui
 			return total, nil
 		}
 		if err := w.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			// alert_histories.log_id may still be RESTRICT; drop those rows first.
-			if err := tx.Where("log_id IN ?", ids).Delete(&models.AlertHistory{}).Error; err != nil {
+			// Production DBs may still have RESTRICT on alert_histories.log_id.
+			// Detach history first (keep the alert audit row) then delete logs.
+			if err := tx.Model(&models.AlertHistory{}).
+				Where("log_id IN ?", ids).
+				Updates(map[string]interface{}{"log_id": nil}).Error; err != nil {
 				return err
 			}
 			res := tx.Where("id IN ?", ids).Delete(&models.Log{})

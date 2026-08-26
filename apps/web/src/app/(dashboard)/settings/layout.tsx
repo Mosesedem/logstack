@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 const settingsNav = [
   { href: "/settings", label: "Profile", exact: true },
+  { href: "/settings/devices", label: "Devices" },
   { href: "/settings/team", label: "Team" },
   { href: "/settings/audit", label: "Audit Log" },
 ];

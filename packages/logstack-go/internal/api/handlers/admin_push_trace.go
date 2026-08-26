@@ -63,16 +63,10 @@ func (h *AdminHandler) GetPushTokens(c *gin.Context) {
 
 	views := make([]tokenView, 0, len(tokens))
 	for _, t := range tokens {
-		masked := t.Token
-		if len(masked) > 20 {
-			masked = masked[:10] + "..." + masked[len(masked)-10:]
-		} else if masked != "" {
-			masked = "***"
-		}
 		views = append(views, tokenView{
 			ID:          t.ID,
 			DeviceType:  string(t.DeviceType),
-			MaskedToken: masked,
+			MaskedToken: models.MaskPushToken(t.Token),
 			UpdatedAt:   t.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 			CreatedAt:   t.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		})

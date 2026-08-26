@@ -568,6 +568,37 @@ Change password.
 
 Invalidate all active sessions.
 
+### GET /users/me/devices
+
+List mobile devices that still receive push alerts for the current user. Raw FCM tokens are never returned.
+
+**Response `200`:**
+
+```json
+{
+  "count": 1,
+  "devices": [
+    {
+      "id": 12,
+      "deviceType": "ios",
+      "maskedToken": "dK3k8a1b0c...9f8e7d6c5b",
+      "lastSeenAt": "2026-08-26T13:00:00Z",
+      "createdAt": "2026-07-01T09:00:00Z"
+    }
+  ]
+}
+```
+
+### DELETE /users/me/devices/:id
+
+Stop push alerts to one of your devices. `404 NOT_FOUND` if the id is missing or belongs to another user.
+
+### DELETE /users/me/devices
+
+Remove every push token for the current user.
+
+If the app is still signed in on a removed device, it may register a new token the next time it opens.
+
 ---
 
 ## Mobile

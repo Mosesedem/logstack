@@ -3,6 +3,7 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -189,4 +190,83 @@ func (h *UsersHandler) LogoutAll(c *gin.Context) {
 
 	slog.Info("User logged out from all devices", "userID", userID)
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out from all devices successfully"})
+}
+
+// ListDevices handles GET /v1/users/me/devices — push tokens that still receive alerts.
+func (h *UsersHandler) ListDevices(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+
+	var tokens []models.PushToken
+	if err := h.db.Where("user_id = ?", userID).Order("updated_at DESC, id DESC").Find(&tokens).Error; err != nil {
+		slog.Error("list devices", "error", err, "userID", userID)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to load devices",
+		})
+		return
+	}
+
+	views := make([]models.DeviceView, 0, len(tokens))
+	for _, t := range tokens {
+		views = append(views, t.ToDeviceView())
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"devices": views,
+		"count":   len(views),
+	})
+}
+
+// DeleteDevice handles DELETE /v1/users/me/devices/:id
+func (h *UsersHandler) DeleteDevice(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Code:    "VALIDATION_ERROR",
+			Message: "Invalid device id",
+		})
+		return
+	}
+
+	result := h.db.Where("user_id = ? AND id = ?", userID, id).Delete(&models.PushToken{})
+	if result.Error != nil {
+		slog.Error("delete device", "error", result.Error, "userID", userID, "deviceID", id)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to remove device",
+		})
+		return
+	}
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Code:    "NOT_FOUND",
+			Message: "Device not found",
+		})
+		return
+	}
+
+	slog.Info("push device removed", "userID", userID, "deviceID", id)
+	c.JSON(http.StatusOK, gin.H{"message": "Device removed"})
+}
+
+// DeleteAllDevices handles DELETE /v1/users/me/devices
+func (h *UsersHandler) DeleteAllDevices(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+
+	result := h.db.Where("user_id = ?", userID).Delete(&models.PushToken{})
+	if result.Error != nil {
+		slog.Error("delete all devices", "error", result.Error, "userID", userID)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to remove devices",
+		})
+		return
+	}
+
+	slog.Info("all push devices removed", "userID", userID, "count", result.RowsAffected)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Devices removed",
+		"removed": result.RowsAffected,
+	})
 }
