@@ -67,6 +67,11 @@ const config: Config = {
           error: "#ef4444",
           critical: "#dc2626",
         },
+        brand: {
+          DEFAULT: "rgb(74 222 128 / <alpha-value>)",
+          foreground: "rgb(9 9 11 / <alpha-value>)",
+        },
+        surface: "rgb(24 24 27 / <alpha-value>)",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -86,11 +91,16 @@ const config: Config = {
           "0%": { transform: "translateX(0)" },
           "100%": { transform: "translateX(-50%)" },
         },
+        "log-in": {
+          from: { opacity: "0", transform: "translateY(6px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "scroll-left": "scroll-left 30s linear infinite",
+        "log-in": "log-in 0.35s ease-out",
       },
       backgroundColor: {
         "terminal-bg": "#0f172a",

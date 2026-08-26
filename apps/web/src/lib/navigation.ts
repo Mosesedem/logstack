@@ -75,7 +75,9 @@ export function isExternalNavLink(href: string): boolean {
 /** Landing-page footer link groups. */
 export const productFooterLinks: SimpleLink[] = [
   { href: "/#features", label: "Features" },
-  { href: "/integrations", label: "Integrations" },
+  { href: "/#stream", label: "Live stream" },
+  { href: "/#install", label: "SDKs" },
+  { href: "/#mobile", label: "Mobile app" },
   { href: "/pricing", label: "Pricing" },
   { href: "/changelog", label: "Changelog" },
 ];
@@ -96,8 +98,8 @@ export const resourcesFooterLinks: SimpleLink[] = [
 ];
 
 export const companyFooterLinks: SimpleLink[] = [
-  { href: "/about", label: "About" },
   { href: "/blog", label: "Blog" },
-  { href: "/careers", label: "Careers" },
   { href: "/contact", label: "Contact" },
+  { href: "/support", label: "Support" },
+  { href: "/privacy", label: "Privacy" },
 ];

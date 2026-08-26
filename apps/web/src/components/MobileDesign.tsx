@@ -490,11 +490,13 @@ const LogstackMobile = () => {
   }, [index]);
 
   return (
-    <div className="relative group">
-      <div className="absolute inset-0 rounded-full bg-primary/30 opacity-50 blur-[120px] transition-opacity duration-500 group-hover:opacity-80" />
+    <div className="relative mx-auto w-full max-w-[310px]">
+      <div className="pointer-events-none absolute inset-x-6 inset-y-16 rounded-full bg-emerald-500/20 opacity-60 blur-[80px] sm:blur-[120px]" />
 
-      {/* Device frame */}
-      <div className="relative mx-auto h-[640px] w-[310px] overflow-hidden rounded-[3rem] border-[12px] border-zinc-900 bg-zinc-900 shadow-2xl">
+      {/* Scaled device: layout box matches the visual size so small screens don't overflow. */}
+      <div className="relative mx-auto h-[512px] w-[248px] overflow-hidden sm:h-[576px] sm:w-[279px] lg:h-[640px] lg:w-[310px]">
+        <div className="origin-top-left scale-[0.8] sm:scale-90 lg:scale-100">
+          <div className="relative h-[640px] w-[310px] overflow-hidden rounded-[3rem] border-[12px] border-zinc-900 bg-zinc-900 shadow-2xl">
         {/* Dynamic Island */}
         <div className="absolute left-1/2 top-2 z-50 flex h-7 w-[118px] -translate-x-1/2 items-center justify-center rounded-full bg-black">
           <div className="h-2 w-2 rounded-full bg-blue-500/40 blur-[1px]" />
@@ -537,9 +539,11 @@ const LogstackMobile = () => {
           </div>
         </div>
       </div>
+        </div>
+      </div>
 
       {/* Caption under phone — current step */}
-      <div className="mt-5 flex justify-center">
+      <div className="mt-4 flex justify-center px-2 sm:mt-5">
         <AnimatePresence mode="wait">
           <motion.p
             key={screen}

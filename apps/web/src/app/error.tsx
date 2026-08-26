@@ -43,7 +43,7 @@ export default function Error({ error, reset }: ErrorPageProps) {
 
         <div className="space-y-4">
           <p className="text-lg text-zinc-400">
-            We're sorry — an unexpected error occurred.
+            We&apos;re sorry — an unexpected error occurred.
           </p>
 
           {process.env.NODE_ENV === "development" && (
