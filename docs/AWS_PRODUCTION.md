@@ -247,6 +247,30 @@ git pull --ff-only origin main
 docker compose -f docker-compose.host.yml up -d --build --remove-orphans
 ```
 
+### Disk full during `go build` (`no space left on device`)
+
+The API image failed to rebuild, so new routes like `GET /v1/admin/retention` stay **404** until a successful build. The Go builder image plus `go build -a` (old Dockerfile) can fill a 30 GB disk.
+
+**Do not** run `docker system prune --volumes` — that can wipe Postgres.
+
+```bash
+df -h
+docker builder prune -af
+docker image prune -af
+sudo journalctl --vacuum-size=50M
+df -h
+
+cd ~/logstack
+git pull --ff-only origin main
+DOCKER_BUILDKIT=1 docker compose -f docker-compose.api.yml up -d --build --remove-orphans
+# production with host nginx:
+# DOCKER_BUILDKIT=1 docker compose -f docker-compose.host.yml up -d --build --remove-orphans
+
+curl -sS https://api.logstack.tech/health
+```
+
+The current Dockerfile is CGO-off, uses BuildKit module/build caches, and no longer passes `-a` (which rebuilt the stdlib every time).
+
 ---
 
 ## 7. Compose files reference

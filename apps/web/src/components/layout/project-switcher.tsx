@@ -23,9 +23,14 @@ export function ProjectSwitcher({ className }: { className?: string }) {
     return <div className="text-sm text-muted-foreground">No projects</div>
   }
 
+  const selectedId = currentProject?.id ?? projects[0]?.id
+  if (!selectedId) {
+    return <div className="text-sm text-muted-foreground">No projects</div>
+  }
+
   return (
     <Select
-      value={currentProject?.id}
+      value={selectedId}
       onValueChange={(id) => {
         const project = projects.find((p) => p.id === id)
         if (project) setCurrentProject(project)

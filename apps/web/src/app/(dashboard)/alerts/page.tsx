@@ -243,7 +243,7 @@ export default function AlertsPage() {
             <div className="grid gap-1.5 max-w-sm w-full">
               <label className="text-sm font-medium">Alert rule</label>
               <Select
-                value={String(historyAlertId ?? "")}
+                value={String(historyAlertId ?? alerts[0].id)}
                 onValueChange={(value) => setHistoryAlertId(Number(value))}
               >
                 <SelectTrigger>
