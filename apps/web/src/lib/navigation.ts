@@ -5,6 +5,7 @@ import {
   FileText,
   FlaskConical,
   FolderOpen,
+  GitForkIcon,
   LayoutDashboard,
   Phone,
   Settings,
@@ -53,7 +54,7 @@ export const resourceNavLinks: NavLink[] = [
   {
     href: "https://github.com/mosesedem/logstack",
     label: "GitHub",
-    icon: FolderOpen,
+    icon: GitForkIcon,
     external: true,
   },
 ];
