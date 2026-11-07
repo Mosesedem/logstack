@@ -8,7 +8,7 @@
 
 ## Sidebar account menu, password visibility, changelog (2026-11-07)
 
-The dashboard usage card is the account menu (Link mobile app, Settings, Billing or Upgrade plan, Sign out) in the desktop sidebar and the mobile drawer. Password fields use `PasswordInput` (show/hide) on login, signup, reset, settings, admin user edit, and the SDK Demo API key. Public changelog copy at `apps/web/src/app/(home)/changelog/page.tsx` describes ingest, the live log stream, level-and-pattern alerts, Paystack/Polar by country, the mobile link, and password visibility.
+The dashboard usage card is the account menu (Link mobile app, Settings, Billing or Upgrade plan, Sign out) in the desktop sidebar and the mobile drawer. The sidebar logo row and usage card stay fully visible; the link list scrolls when the column is taller than the screen. Password fields use `PasswordInput` (show/hide) on login, signup, reset, settings, admin user edit, and the SDK Demo API key. Public changelog copy at `apps/web/src/app/(home)/changelog/page.tsx` describes ingest, the live log stream, level-and-pattern alerts, Paystack/Polar by country, the mobile link, and password visibility.
 
 ## Email verification links (2026-11-07)
 

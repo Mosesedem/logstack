@@ -23,11 +23,11 @@ export function Sidebar({ className }: { className?: string }) {
   return (
     <aside
       className={cn(
-        "hidden w-64 flex-col border-r border-border bg-card md:flex",
+        "hidden h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden border-r border-border bg-card md:flex",
         className,
       )}
     >
-      <div className="flex h-16 items-center border-b border-border px-6">
+      <div className="flex h-16 shrink-0 items-center border-b border-border px-6">
         <LogstackLogo
           href="/overview"
           size={28}
@@ -36,7 +36,7 @@ export function Sidebar({ className }: { className?: string }) {
         />
       </div>
 
-      <nav className="flex-1 space-y-1 p-4">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-4">
         {dashboardNavItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -104,7 +104,7 @@ export function Sidebar({ className }: { className?: string }) {
         })}
       </nav>
 
-      <div className="border-t border-border p-4">
+      <div className="shrink-0 border-t border-border p-4">
         <SidebarUsage />
       </div>
     </aside>

@@ -65,7 +65,7 @@ export function SlideMenuDrawer({
 
       <aside
         className={cn(
-          "absolute inset-y-0 left-0 flex w-[min(88vw,320px)] flex-col border-r border-border bg-card shadow-2xl",
+          "absolute inset-y-0 left-0 flex min-h-0 w-[min(88vw,320px)] flex-col overflow-hidden border-r border-border bg-card shadow-2xl",
           panelClassName,
         )}
       >
@@ -87,7 +87,7 @@ export function SlideMenuDrawer({
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           {children}
         </div>
 
