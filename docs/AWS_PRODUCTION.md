@@ -32,14 +32,14 @@ Other apps on same host (3000, 8080, …) are untouched — Logstack only binds 
 
 **Public URLs**
 
-| Use | URL |
-| --- | --- |
-| Health | `https://api.logstack.tech/health` |
-| API base | `https://api.logstack.tech/v1` |
-| Log ingest | `POST https://api.logstack.tech/v1/logs` |
-| WebSocket | `wss://api.logstack.tech/v1/stream` |
+| Use               | URL                                               |
+| ----------------- | ------------------------------------------------- |
+| Health            | `https://api.logstack.tech/health`                |
+| API base          | `https://api.logstack.tech/v1`                    |
+| Log ingest        | `POST https://api.logstack.tech/v1/logs`          |
+| WebSocket         | `wss://api.logstack.tech/v1/stream`               |
 | SDK endpoint host | `https://api.logstack.tech` (SDK adds `/v1/logs`) |
-| Paystack webhook | `https://api.logstack.tech/v1/webhooks/paystack` |
+| Paystack webhook  | `https://api.logstack.tech/v1/webhooks/paystack`  |
 
 ---
 
@@ -47,20 +47,20 @@ Other apps on same host (3000, 8080, …) are untouched — Logstack only binds 
 
 ### EC2
 
-| Setting | Value |
-| ------- | ----- |
-| AMI | Ubuntu 22.04 or 24.04 LTS |
-| Type | `t3.medium` or larger (4 GB+ RAM) |
-| Storage | 30 GB gp3 |
+| Setting   | Value                                                   |
+| --------- | ------------------------------------------------------- |
+| AMI       | Ubuntu 22.04 or 24.04 LTS                               |
+| Type      | `t3.medium` or larger (4 GB+ RAM)                       |
+| Storage   | 30 GB gp3                                               |
 | User data | Paste `infra/aws/ec2-user-data.sh` (optional bootstrap) |
 
 ### Security group (inbound)
 
-| Port | Source | Purpose |
-| ---- | ------ | ------- |
-| 22 | Your IP | SSH |
-| 80 | `0.0.0.0/0` | HTTP (ACME + redirect to HTTPS) |
-| 443 | `0.0.0.0/0` | HTTPS API |
+| Port | Source      | Purpose                         |
+| ---- | ----------- | ------------------------------- |
+| 22   | Your IP     | SSH                             |
+| 80   | `0.0.0.0/0` | HTTP (ACME + redirect to HTTPS) |
+| 443  | `0.0.0.0/0` | HTTPS API                       |
 
 Do **not** expose 5432, 6379, or 8080 publicly.
 
@@ -76,9 +76,9 @@ Do **not** expose 5432, 6379, or 8080 publicly.
 
 Create an **A record**:
 
-| Name | Type | Value |
-| ---- | ---- | ----- |
-| `api` | A | `<Elastic-IP>` |
+| Name  | Type | Value          |
+| ----- | ---- | -------------- |
+| `api` | A    | `<Elastic-IP>` |
 
 Result: `api.logstack.tech` → your EC2 Elastic IP.
 
@@ -104,7 +104,7 @@ cd ~/logstack
 ### Production environment
 
 ```bash
-cp .env.production.example .env
+cp .env.example .env
 nano .env
 ```
 
@@ -114,7 +114,7 @@ nano .env
 API_DOMAIN=api.logstack.tech
 CERTBOT_EMAIL=you@logstack.tech
 POSTGRES_PASSWORD=<strong password>
-JWT_SECRET=$(openssl rand -base64 32)   # paste output
+JWT_SECRET=3KA0uVQUeflaOFY3TnEkQDXDQsIyNetDAWC1bcihWt8
 ALLOWED_ORIGINS=*
 BASE_URL=https://api.logstack.tech
 ```
@@ -222,12 +222,12 @@ Copy the printed **private key** into GitHub.
 
 2. **Add repository secrets** (Settings → Secrets and variables → Actions)
 
-| Secret | Value |
-| ------ | ----- |
-| `DEPLOY_KEY` | Full private key from setup script |
-| `DEPLOY_HOST` | `18.225.219.208` |
-| `DEPLOY_USER` | `ubuntu` |
-| `DEPLOY_PATH` | `/home/ubuntu/logstack` |
+| Secret        | Value                              |
+| ------------- | ---------------------------------- |
+| `DEPLOY_KEY`  | Full private key from setup script |
+| `DEPLOY_HOST` | `18.225.219.208`                   |
+| `DEPLOY_USER` | `ubuntu`                           |
+| `DEPLOY_PATH` | `/home/ubuntu/logstack`            |
 
 3. **Optional:** create a `production` environment (Settings → Environments) for deploy approval gates.
 
@@ -284,12 +284,12 @@ The current Dockerfile is CGO-off, uses BuildKit module/build caches, and no lon
 
 ## 7. Compose files reference
 
-| File | When to use |
-| ---- | ----------- |
-| `docker-compose.api.yml` | **This EC2** — API on `127.0.0.1:8082`; host nginx terminates TLS |
+| File                      | When to use                                                              |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `docker-compose.api.yml`  | **This EC2** — API on `127.0.0.1:8082`; host nginx terminates TLS        |
 | `docker-compose.host.yml` | Same idea, slightly different env wiring; not the file currently running |
-| `docker-compose.prod.yml` | Dedicated host with **Docker** nginx on 80/443 — **not this machine** |
-| `docker-compose.yml` | Full stack with web frontend (not used in this setup) |
+| `docker-compose.prod.yml` | Dedicated host with **Docker** nginx on 80/443 — **not this machine**    |
+| `docker-compose.yml`      | Full stack with web frontend (not used in this setup)                    |
 
 Direct-access fallback (no nginx):
 
@@ -326,13 +326,13 @@ Webhook URL: `https://api.logstack.tech/v1/webhooks/paystack`
 
 ## 9. Troubleshooting
 
-| Symptom | Fix |
-| ------- | --- |
-| nginx won't start | Run `./scripts/setup-ssl.sh` first; certs must exist in `logstack_certbot_conf` |
-| `502 Bad Gateway` | `docker compose -f docker-compose.prod.yml logs api` — wait for healthcheck |
-| Certbot fails | DNS not propagated, or port 80 blocked/in use |
+| Symptom                | Fix                                                                                                         |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| nginx won't start      | Run `./scripts/setup-ssl.sh` first; certs must exist in `logstack_certbot_conf`                             |
+| `502 Bad Gateway`      | `docker compose -f docker-compose.prod.yml logs api` — wait for healthcheck                                 |
+| Certbot fails          | DNS not propagated, or port 80 blocked/in use                                                               |
 | CORS errors in browser | Set `ALLOWED_ORIGINS` in `.env`, rebuild api: `docker compose -f docker-compose.prod.yml up -d --build api` |
-| Port 80 conflict | Stop other service on 80, or use ALB for TLS instead of host nginx |
+| Port 80 conflict       | Stop other service on 80, or use ALB for TLS instead of host nginx                                          |
 
 ### Database backup
 

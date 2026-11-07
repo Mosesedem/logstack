@@ -1,97 +1,70 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { useProject } from "@/hooks/use-project";
-import { api } from "@/lib/api-client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { OverviewPageSkeleton, Spinner } from "@/components/loading";
 import {
   Activity,
-  AlertTriangle,
-  BarChart3,
-  Clock,
+  Bell,
+  Code2,
   FileText,
+  Plus,
+  RefreshCw,
   Settings,
   Users,
 } from "lucide-react";
 
-interface DashboardStats {
-  totalLogsToday: number;
-  errorCount: number;
-  activeAlerts: number;
-  logLimit: number;
-  usagePercentage: number;
-}
+import { useProject } from "@/hooks/use-project";
+import { api } from "@/lib/api-client";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { LogAnalytics } from "@/components/logs/log-analytics";
+import { OverviewPageSkeleton, Spinner } from "@/components/loading";
 
 export default function OverviewPage() {
   const { currentProject, isLoading: projectLoading } = useProject();
   const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
   const projectId = currentProject?.id;
 
-  useEffect(() => {
+  const { data: alerts = [], isFetching: alertsFetching } = useQuery({
+    queryKey: ["alerts", projectId],
+    queryFn: () => api.get<{ enabled: boolean }[]>(`/alerts?projectId=${projectId}`),
+    enabled: !!projectId,
+  });
+
+  const activeAlertsCount = alerts.filter((a) => a.enabled).length;
+
+  const handleRefresh = async () => {
     if (!projectId) return;
-    loadStats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
-
-  const loadStats = async (opts?: { silent?: boolean }) => {
-    if (!projectId) return;
-
-    try {
-      if (opts?.silent) setRefreshing(true);
-      else setLoading(true);
-      const [logsResult, alertsResult] = await Promise.allSettled([
-        api.get<{ logs: { level: string }[]; total: number }>(
-          `/projects/${projectId}/logs?limit=1&offset=0`,
-        ),
-        api.get<{ enabled: boolean }[]>(`/alerts?projectId=${projectId}`),
-      ]);
-
-      const totalLogsToday =
-        logsResult.status === "fulfilled" ? logsResult.value.total : 0;
-      const errorCount =
-        logsResult.status === "fulfilled"
-          ? logsResult.value.logs.filter((l) => l.level === "error").length
-          : 0;
-      const activeAlerts =
-        alertsResult.status === "fulfilled"
-          ? alertsResult.value.filter((a) => a.enabled).length
-          : 0;
-
-      setStats({
-        totalLogsToday,
-        errorCount,
-        activeAlerts,
-        logLimit: 10000,
-        usagePercentage: 0,
-      });
-    } catch (error) {
-      console.error("Failed to load dashboard stats:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["log-analytics", projectId] }),
+      queryClient.invalidateQueries({ queryKey: ["alerts", projectId] }),
+    ]);
   };
 
-  if (projectLoading || (currentProject && loading && !stats)) {
+  if (projectLoading) {
     return <OverviewPageSkeleton />;
   }
 
   if (!currentProject) {
     return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold">Overview</h1>
-          <p className="text-muted-foreground">
-            Select or create a project to view your dashboard
+      <div className="flex h-full flex-col items-center justify-center space-y-4 py-20 text-center">
+        <div className="max-w-md space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
+          <p className="text-muted-foreground text-sm">
+            Select or create a project to view telemetry and activity.
           </p>
         </div>
-        <Button onClick={() => router.push("/create")}>Create Project</Button>
+        <Button onClick={() => router.push("/create")}>
+          <Plus className="mr-2 h-4 w-4" />
+          Create Project
+        </Button>
       </div>
     );
   }
@@ -100,104 +73,94 @@ export default function OverviewPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Overview</h1>
-          <p className="text-muted-foreground">
-            Overview for {currentProject.name}
+          <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
+          <p className="text-muted-foreground text-sm">
+            Telemetry and system health for{" "}
+            <span className="text-foreground font-medium">{currentProject.name}</span>
           </p>
         </div>
-        <Button
-          onClick={() => loadStats({ silent: true })}
-          className="w-full sm:w-auto"
-          disabled={refreshing}
-        >
-          {refreshing ? (
-            <Spinner size="sm" className="mr-2" label="Refreshing" />
-          ) : (
-            <Activity className="mr-2 h-4 w-4" />
-          )}
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            className="w-full sm:w-auto"
+          >
+            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+            Refresh
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => router.push("/logs")}
+            className="w-full sm:w-auto"
+          >
+            <FileText className="mr-2 h-3.5 w-3.5" />
+            Live Logs
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Real telemetry analytics (Total Events, Error Rate, Warn Count, 24h Area Chart) */}
+      <LogAnalytics projectId={projectId!} />
+
+      {/* Quick context & actions */}
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Logs Today</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Active Alert Rules</CardTitle>
+            <Bell className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalLogsToday}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats?.errorCount} errors detected
+            <div className="text-2xl font-bold">{activeAlertsCount}</div>
+            <p className="text-muted-foreground text-xs">
+              {alerts.length} total configured rules
             </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Alerts</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.activeAlerts}</div>
-            <p className="text-xs text-muted-foreground">Across all rules</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Usage</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.usagePercentage}%</div>
-            <p className="text-xs text-muted-foreground">
-              of {stats?.logLimit.toLocaleString()} logs
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Uptime</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">99.9%</div>
-            <p className="text-xs text-muted-foreground">Last 30 days</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
             <Button
-              className="w-full justify-start"
-              variant="outline"
-              onClick={() => router.push("/logs")}
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              View Logs
-            </Button>
-            <Button
-              className="w-full justify-start"
-              variant="outline"
+              variant="link"
+              className="mt-2 h-auto p-0 text-xs"
               onClick={() => router.push("/alerts")}
             >
-              <Settings className="mr-2 h-4 w-4" />
-              Configure Alerts
+              Configure alerts &rarr;
             </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">SDK Integration</CardTitle>
+            <Code2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm font-medium text-foreground">Test Ingestion</div>
+            <p className="text-muted-foreground text-xs">
+              Simulate checkout, cart, or error events in real time.
+            </p>
             <Button
-              className="w-full justify-start"
-              variant="outline"
-              onClick={() => router.push("/settings/team")}
+              variant="link"
+              className="mt-2 h-auto p-0 text-xs"
+              onClick={() => router.push("/demo")}
             >
-              <Users className="mr-2 h-4 w-4" />
-              Invite Team Member
+              Open SDK Demo &rarr;
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Project Settings</CardTitle>
+            <Settings className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm font-medium text-foreground">API Keys & Team</div>
+            <p className="text-muted-foreground text-xs">
+              Rotate ingest keys, manage devices, and invite collaborators.
+            </p>
+            <Button
+              variant="link"
+              className="mt-2 h-auto p-0 text-xs"
+              onClick={() => router.push("/projects")}
+            >
+              Manage projects &rarr;
             </Button>
           </CardContent>
         </Card>

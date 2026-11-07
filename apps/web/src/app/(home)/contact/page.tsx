@@ -1,69 +1,61 @@
 import { Metadata } from "next";
+import { Mail, Clock, MessageSquare } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Contact Us - Logstack",
-  description: "Contact Logstack for log management support",
+  description: "Contact Logstack for log management support and sales inquiries",
 };
 
 export default function ContactPage() {
   return (
-    <div className="container mx-auto px-4 py-16 max-w-4xl">
-      <div className="prose dark:prose-invert mx-auto">
-        <h1>Contact Us</h1>
-        <p>Have questions about Logstack? We're here to help.</p>
-
-        <h2>Get in Touch</h2>
-        <p>
-          Email:{" "}
-          <a href="mailto:support@logstack.tech">support@logstack.tech</a>
+    <div className="container mx-auto max-w-3xl px-4 py-16">
+      <div className="mb-12">
+        <h1 className="text-4xl font-bold tracking-tight">Contact Us</h1>
+        <p className="mt-2 text-zinc-400">
+          Have questions about self-hosting, enterprise plans, or SDK integrations?
+          We&apos;re here to help.
         </p>
-        <p>Or use our contact form below:</p>
+      </div>
 
-        <form className="mt-8 space-y-4">
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium mb-1">
-              Name
-            </label>
-            <input
-              type="text"
-              id="name"
-              className="w-full px-3 py-2 border rounded-md"
-              placeholder="Your name"
-            />
-          </div>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              id="email"
-              className="w-full px-3 py-2 border rounded-md"
-              placeholder="your@email.com"
-            />
-          </div>
-          <div>
-            <label htmlFor="message" className="block text-sm font-medium mb-1">
-              Message
-            </label>
-            <textarea
-              id="message"
-              rows={4}
-              className="w-full px-3 py-2 border rounded-md"
-              placeholder="How can we help?"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-primary text-white rounded-md"
+      <div className="grid gap-6 sm:grid-cols-2">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-6">
+          <Mail className="mb-3 h-5 w-5 text-emerald-400" />
+          <h2 className="text-base font-semibold">Technical Support</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            For bugs, integration questions, and operational help:
+          </p>
+          <a
+            href="mailto:support@logstack.tech"
+            className="mt-3 inline-block font-mono text-sm text-emerald-400 hover:underline"
           >
-            Send Message
-          </button>
-        </form>
+            support@logstack.tech
+          </a>
+        </div>
 
-        <h2>Support Hours</h2>
-        <p>
-          Our support team is available Monday through Friday, 9am to 6pm EST.
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-6">
+          <MessageSquare className="mb-3 h-5 w-5 text-emerald-400" />
+          <h2 className="text-base font-semibold">Sales & Enterprise</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            For high-volume custom retention, dedicated nodes, and SLAs:
+          </p>
+          <a
+            href="mailto:sales@logstack.tech"
+            className="mt-3 inline-block font-mono text-sm text-emerald-400 hover:underline"
+          >
+            sales@logstack.tech
+          </a>
+        </div>
+      </div>
+
+      <div className="mt-10 rounded-xl border border-zinc-800 bg-zinc-950/60 p-6">
+        <div className="flex items-center gap-3">
+          <Clock className="h-5 w-5 text-zinc-400" />
+          <h2 className="text-sm font-medium text-zinc-200">Support Hours & SLA</h2>
+        </div>
+        <p className="mt-2 text-sm text-zinc-400">
+          Our engineering team monitors critical infrastructure 24/7. Standard
+          inquiries are answered Monday through Friday within 24 hours.
         </p>
       </div>
     </div>

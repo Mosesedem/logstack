@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Battery,
@@ -9,7 +9,6 @@ import {
   Fingerprint,
   Lock,
   LockOpen,
-  QrCode,
   Search,
   Settings,
   Signal,
@@ -19,53 +18,53 @@ import {
 import { LogstackLogo } from "@/components/brand/logstack-logo";
 
 /**
- * Landing mockup of the Logstack Flutter companion app.
- * Design tokens + screen copy mirror apps/mobile (logstack_colors, onboarding, logs).
+ * Interactive mockup of the Logstack Flutter companion app.
+ * Native pixel sizing prevents WebKit scale() blurriness on mobile.
  */
 
-type ScreenId = "splash" | "push" | "security" | "login" | "logs";
+type ScreenId = "logs" | "push" | "security";
 
-const SCREENS: { id: ScreenId; durationMs: number }[] = [
-  { id: "splash", durationMs: 2800 },
-  { id: "push", durationMs: 2600 },
-  { id: "security", durationMs: 3000 },
-  { id: "login", durationMs: 2800 },
-  { id: "logs", durationMs: 5200 },
-];
+interface MockLog {
+  id: number;
+  level: "CRITICAL" | "ERROR" | "WARN" | "INFO" | "DEBUG";
+  message: string;
+  source: string;
+  time: string;
+}
 
-const LOGS = [
+const LOGS: MockLog[] = [
   {
     id: 1,
-    level: "CRITICAL" as const,
-    message: "DB Connection Timeout",
+    level: "CRITICAL",
+    message: "DB Connection Timeout: pool exhausted (max 100)",
     source: "api",
     time: "2m ago",
   },
   {
     id: 2,
-    level: "ERROR" as const,
-    message: "Payment webhook failed",
+    level: "ERROR",
+    message: "Payment webhook failed: polar signature mismatch",
     source: "billing",
     time: "5m ago",
   },
   {
     id: 3,
-    level: "WARN" as const,
-    message: "Rate limit approaching",
+    level: "WARN",
+    message: "Rate limit approaching: 92% of quota consumed",
     source: "gateway",
     time: "14m ago",
   },
   {
     id: 4,
-    level: "INFO" as const,
-    message: "Worker process started",
+    level: "INFO",
+    message: "Worker process started: queue=ingest pid=4021",
     source: "worker",
     time: "20m ago",
   },
   {
     id: 5,
-    level: "DEBUG" as const,
-    message: "Cache warm complete",
+    level: "DEBUG",
+    message: "Cache warm complete: 1,420 keys indexed",
     source: "cache",
     time: "1h ago",
   },
@@ -73,66 +72,46 @@ const LOGS = [
 
 const LEVEL_STYLES = {
   CRITICAL: {
-    fg: "text-[#b91c1c]",
-    bg: "bg-[#b91c1c]/20",
-    bar: "bg-[#b91c1c]",
-    chip: "border-[#b91c1c]/50",
-  },
-  ERROR: {
     fg: "text-[#ef4444]",
     bg: "bg-[#ef4444]/20",
     bar: "bg-[#ef4444]",
-    chip: "border-[#ef4444]/50",
+  },
+  ERROR: {
+    fg: "text-[#f87171]",
+    bg: "bg-[#ef4444]/15",
+    bar: "bg-[#ef4444]",
   },
   WARN: {
-    fg: "text-[#eab308]",
-    bg: "bg-[#eab308]/20",
+    fg: "text-[#facc15]",
+    bg: "bg-[#eab308]/15",
     bar: "bg-[#eab308]",
-    chip: "border-[#eab308]/50",
   },
   INFO: {
-    fg: "text-[#3b82f6]",
-    bg: "bg-[#3b82f6]/20",
-    bar: "bg-[#3b82f6]",
-    chip: "border-[#3b82f6]/50",
+    fg: "text-[#38bdf8]",
+    bg: "bg-[#38bdf8]/15",
+    bar: "bg-[#38bdf8]",
   },
   DEBUG: {
     fg: "text-[#c084fc]",
-    bg: "bg-[#c084fc]/20",
+    bg: "bg-[#c084fc]/15",
     bar: "bg-[#c084fc]",
-    chip: "border-[#c084fc]/50",
   },
 } as const;
 
-const FILTERS = ["All", "Debug", "Info", "Warn", "Error", "Critical"] as const;
+const FILTERS = ["All", "Critical", "Error", "Warn", "Info"] as const;
+type FilterType = (typeof FILTERS)[number];
 
-const FILTER_DOT: Record<string, string | null> = {
+const FILTER_DOT: Record<FilterType, string | null> = {
   All: null,
-  Debug: "#c084fc",
-  Info: "#3b82f6",
-  Warn: "#eab308",
-  Error: "#ef4444",
-  Critical: "#b91c1c",
+  Critical: "#ef4444",
+  Error: "#f87171",
+  Warn: "#facc15",
+  Info: "#38bdf8",
 };
-
-const screenMotion = {
-  initial: { opacity: 0, x: 18 },
-  animate: { opacity: 1, x: 0 },
-  exit: { opacity: 0, x: -14 },
-  transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const },
-};
-
-function AppLogoMark({ size = 72 }: { size?: number }) {
-  return (
-    <div className="relative flex shrink-0 items-center justify-center shadow-lg shadow-black/40">
-      <LogstackLogo href={null} showLabel={false} size={size} priority />
-    </div>
-  );
-}
 
 function StatusBar() {
   return (
-    <div className="flex shrink-0 items-center justify-between px-5 pt-3 text-[11px] font-semibold text-zinc-300">
+    <div className="flex shrink-0 items-center justify-between px-5 pt-3 pb-1 text-[11px] font-semibold text-zinc-300">
       <span className="tabular-nums">9:41</span>
       <div className="flex items-center gap-1.5">
         <Signal className="h-3 w-3" strokeWidth={2.5} />
@@ -146,298 +125,223 @@ function StatusBar() {
 function PrimaryButton({
   children,
   icon,
-  className = "",
+  onClick,
 }: {
   children: ReactNode;
   icon?: ReactNode;
-  className?: string;
+  onClick?: () => void;
 }) {
   return (
-    <div
-      className={`flex h-11 items-center justify-center gap-2 rounded-[10px] bg-[#fafafa] px-5 text-[13px] font-semibold text-[#09090b] ${className}`}
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-xs font-semibold text-zinc-950 transition-opacity hover:opacity-90 active:scale-[0.99]"
     >
       {icon}
-      {children}
-    </div>
+      <span>{children}</span>
+    </button>
   );
 }
 
-function OutlinedButton({
-  children,
-  icon,
-}: {
-  children: ReactNode;
-  icon?: ReactNode;
-}) {
+function PushScreen({ onSwitchToLogs }: { onSwitchToLogs: () => void }) {
   return (
-    <div className="flex h-11 items-center justify-center gap-2 rounded-[10px] border border-[#3f3f46] px-5 text-[13px] font-medium text-[#fafafa]">
-      {icon}
-      {children}
-    </div>
-  );
-}
+    <div className="flex h-full flex-col justify-between px-5 pb-8 pt-4">
+      <div className="flex flex-col items-center pt-2 text-center">
+        <div className="relative flex shrink-0 items-center justify-center">
+          <LogstackLogo href={null} showLabel={false} size={56} priority />
+        </div>
+        <div className="mt-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-400">
+          <Bell className="h-6 w-6" />
+        </div>
+        <h3 className="mt-4 text-base font-semibold text-white">
+          Real-time incident alerts
+        </h3>
+        <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+          Get push alerts the instant error rates spike or critical thresholds
+          are breached in production.
+        </p>
 
-function SplashScreen() {
-  return (
-    <div className="flex h-full flex-col px-6 pb-12 pt-2">
-      <div className="flex flex-1 flex-col items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.85 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <AppLogoMark size={80} />
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25, duration: 0.45 }}
-          className="mt-7 text-center"
-        >
-          <h3 className="text-[22px] font-bold tracking-tight text-[#fafafa]">
-            Logstack
-          </h3>
-          <p className="mt-2.5 text-[13px] leading-relaxed text-[#a1a1aa]">
-            Real-time alerts and logs in your pocket
+        <div className="mt-5 w-full space-y-2 rounded-xl border border-white/10 bg-zinc-900/80 p-3 text-left">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-semibold text-white">Threshold trigger</span>
+            <span className="text-emerald-400 font-mono">active</span>
+          </div>
+          <p className="text-[10px] font-mono text-zinc-400">
+            &gt; 5 errors/min in api-gateway
           </p>
-        </motion.div>
+        </div>
       </div>
-      <motion.div
-        initial={{ opacity: 0.4 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.7, duration: 0.35 }}
-      >
-        <PrimaryButton>Get started</PrimaryButton>
-        <p className="mt-2 text-center text-[11px] text-[#71717a]">
-          Tap to continue
-        </p>
-      </motion.div>
-    </div>
-  );
-}
 
-function PushScreen() {
-  return (
-    <div className="flex h-full flex-col px-6 pb-12 pt-4">
-      <div className="flex flex-col items-center pt-2">
-        <AppLogoMark size={64} />
-        <Bell className="mt-7 h-11 w-11 text-[#3b82f6]" strokeWidth={1.5} />
-        <h3 className="mt-5 w-full text-left text-[18px] font-semibold text-[#fafafa]">
-          Enable push notifications
-        </h3>
-        <p className="mt-2.5 text-left text-[12.5px] leading-relaxed text-[#a1a1aa]">
-          Logstack sends alerts and escalations to this device. Without
-          notifications, you may miss critical incidents.
-        </p>
-      </div>
-      <div className="mt-auto">
-        <PrimaryButton icon={<Bell className="h-4 w-4" />}>
-          Enable notifications
+      <div className="space-y-2">
+        <PrimaryButton
+          icon={<Bell className="h-3.5 w-3.5" />}
+          onClick={onSwitchToLogs}
+        >
+          View live stream
         </PrimaryButton>
+        <p className="text-center text-[10px] text-zinc-500">
+          Escalations routed to your mobile device
+        </p>
       </div>
     </div>
   );
 }
 
-function SecurityScreen() {
+function SecurityScreen({ onSwitchToLogs }: { onSwitchToLogs: () => void }) {
   return (
-    <div className="flex h-full flex-col px-5 pb-12 pt-3">
-      {/* Step progress — security setup */}
-      <div className="mb-4 flex gap-1.5">
-        {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className={`h-[3px] flex-1 rounded-sm ${
-              i === 0 ? "bg-[#3b82f6]" : "bg-[#27272a]"
-            }`}
-          />
-        ))}
-      </div>
+    <div className="flex h-full flex-col justify-between px-5 pb-8 pt-3">
+      <div>
+        <div className="flex flex-col items-center text-center">
+          <div className="relative flex shrink-0 items-center justify-center">
+            <LogstackLogo href={null} showLabel={false} size={48} priority />
+          </div>
+          <h3 className="mt-3 text-sm font-semibold text-white">
+            Biometric telemetry lock
+          </h3>
+          <p className="mt-1 text-[11px] text-zinc-400">
+            Keep sensitive production metadata protected
+          </p>
+        </div>
 
-      <div className="flex flex-col items-center">
-        <AppLogoMark size={56} />
-        <h3 className="mt-5 text-center text-[16px] font-semibold leading-snug text-[#fafafa]">
-          How should Logstack protect your logs?
-        </h3>
-        <p className="mt-2 text-center text-[11px] text-[#a1a1aa]">
-          You can change this anytime in Settings.
-        </p>
-      </div>
-
-      <div className="mt-6 space-y-2.5">
-        <div className="rounded-[14px] border border-white/10 bg-[#18181b] p-3.5">
-          <div className="flex gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#3b82f6]/15">
-              <Lock className="h-5 w-5 text-[#3b82f6]" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[13px] font-semibold text-[#fafafa]">
-                  Protected
-                </span>
-                <span className="rounded-md bg-[#22c55e]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#22c55e]">
-                  Recommended
-                </span>
+        <div className="mt-4 space-y-2">
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+            <div className="flex gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+                <Lock className="h-4 w-4" />
               </div>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                Lock with PIN or Face ID when you leave the app.
-              </p>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-white">
+                    Face ID & PIN
+                  </span>
+                  <span className="rounded bg-emerald-500/20 px-1 py-0.2 text-[9px] font-bold text-emerald-400">
+                    Active
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[10px] text-zinc-300">
+                  Secures cached logs on device exit
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-3 opacity-60">
+            <div className="flex gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400">
+                <LockOpen className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-xs font-semibold text-zinc-300">
+                  Open Session
+                </span>
+                <p className="mt-0.5 text-[10px] text-zinc-400">
+                  Unlocked until manual signout
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-[14px] border border-white/10 bg-[#18181b] p-3.5 opacity-80">
-          <div className="flex gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-500/15">
-              <LockOpen className="h-5 w-5 text-[#a1a1aa]" />
-            </div>
-            <div className="min-w-0">
-              <span className="text-[13px] font-semibold text-[#fafafa]">
-                Stay open
-              </span>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                No lock screen until you sign out.
-              </p>
-            </div>
-          </div>
+        <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-zinc-400">
+          <Fingerprint className="h-3.5 w-3.5 text-blue-400" />
+          <span>Biometric hardware enclave enabled</span>
         </div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1.1, duration: 0.4 }}
-        className="mt-4 flex items-center justify-center gap-2 text-[11px] text-[#a1a1aa]"
-      >
-        <Fingerprint className="h-3.5 w-3.5 text-[#3b82f6]" />
-        Biometric unlock available
-      </motion.div>
+      <PrimaryButton onClick={onSwitchToLogs}>
+        Return to log stream
+      </PrimaryButton>
     </div>
   );
 }
 
-function LoginScreen() {
+function LogCard({ log }: { log: MockLog }) {
+  const style = LEVEL_STYLES[log.level];
   return (
-    <div className="flex h-full flex-col px-6 pb-12 pt-6">
-      <div className="flex flex-1 flex-col items-center justify-center">
-        <AppLogoMark size={72} />
-        <h3 className="mt-6 text-[20px] font-bold tracking-tight text-[#fafafa]">
-          Logstack
-        </h3>
-        <p className="mt-2 max-w-[220px] text-center text-[12.5px] leading-relaxed text-[#a1a1aa]">
-          Link this device to your existing account
-        </p>
-
-        <div className="mt-8 w-full space-y-2.5">
-          <PrimaryButton icon={<QrCode className="h-4 w-4" />}>
-            Scan QR Code
-          </PrimaryButton>
-          <OutlinedButton icon={<Lock className="h-4 w-4" />}>
-            Enter PIN
-          </OutlinedButton>
-        </div>
-
-        <p className="mt-6 max-w-[230px] text-center text-[10.5px] leading-relaxed text-[#71717a]">
-          Accounts are created on the web dashboard — not in this app.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function LogCard({
-  level,
-  message,
-  source,
-  time,
-  index,
-}: {
-  level: keyof typeof LEVEL_STYLES;
-  message: string;
-  source: string;
-  time: string;
-  index: number;
-}) {
-  const style = LEVEL_STYLES[level];
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.15 + index * 0.12, duration: 0.35 }}
-      className="overflow-hidden rounded-[10px] border border-white/10 bg-[#18181b]"
-    >
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-zinc-900/90">
       <div className="flex">
         <div className={`w-1 shrink-0 ${style.bar}`} />
-        <div className="min-w-0 flex-1 p-2.5">
+        <div className="min-w-0 flex-1 p-2">
           <div className="flex items-start gap-1.5">
             <span
-              className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold tracking-wider ${style.bg} ${style.fg}`}
+              className={`shrink-0 rounded px-1 py-0.2 text-[8px] font-bold tracking-wider ${style.bg} ${style.fg}`}
             >
-              {level}
+              {log.level}
             </span>
-            <p className="line-clamp-2 font-mono text-[11px] leading-snug text-[#fafafa]">
-              {message}
+            <p className="line-clamp-2 font-mono text-[10.5px] leading-snug text-zinc-200">
+              {log.message}
             </p>
           </div>
-          <div className="mt-1.5 flex gap-2 font-mono text-[9px] text-[#71717a]">
-            <span>{time}</span>
-            <span className="text-[#a1a1aa]">{source}</span>
+          <div className="mt-1 flex items-center justify-between font-mono text-[9px] text-zinc-500">
+            <span className="text-zinc-400">{log.source}</span>
+            <span>{log.time}</span>
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
-function LogsScreen() {
+function LogsScreen({
+  selectedFilter,
+  onSelectFilter,
+}: {
+  selectedFilter: FilterType;
+  onSelectFilter: (f: FilterType) => void;
+}) {
+  const filteredLogs =
+    selectedFilter === "All"
+      ? LOGS
+      : LOGS.filter(
+          (l) => l.level.toLowerCase() === selectedFilter.toLowerCase(),
+        );
+
   return (
     <div className="flex h-full flex-col">
       {/* App bar */}
-      <div className="flex shrink-0 items-center justify-between px-3 py-2">
-        <button
-          type="button"
-          className="flex min-w-0 items-center gap-0.5 text-left"
-          tabIndex={-1}
-        >
-          <span className="truncate text-[15px] font-semibold text-[#fafafa]">
+      <div className="flex shrink-0 items-center justify-between px-3.5 py-1.5">
+        <div className="flex items-center gap-1">
+          <span className="text-xs font-semibold text-white">
             production-api
           </span>
-          <ChevronsUpDown className="h-4 w-4 shrink-0 text-[#71717a]" />
-        </button>
-        <Settings className="h-5 w-5 text-[#fafafa]" strokeWidth={1.75} />
+          <ChevronsUpDown className="h-3.5 w-3.5 text-zinc-500" />
+        </div>
+        <Settings className="h-4 w-4 text-zinc-400" />
       </div>
 
       {/* Live connection banner */}
-      <div className="flex shrink-0 items-center gap-2 bg-[#22c55e]/12 px-3.5 py-1.5">
+      <div className="flex shrink-0 items-center gap-1.5 bg-emerald-500/15 px-3.5 py-1">
         <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#22c55e] opacity-60" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#22c55e]" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
         </span>
-        <span className="text-[11px] font-semibold text-[#22c55e]">
-          Live stream connected
+        <span className="text-[10px] font-semibold text-emerald-400">
+          Live stream connected (ws)
         </span>
       </div>
 
-      {/* Search */}
-      <div className="shrink-0 px-3.5 pt-2.5">
-        <div className="flex h-9 items-center gap-2 rounded-[10px] border border-[#3f3f46] bg-[#18181b] px-2.5">
-          <Search className="h-3.5 w-3.5 text-[#71717a]" />
-          <span className="text-[12px] text-[#71717a]">Search logs…</span>
+      {/* Search preview */}
+      <div className="shrink-0 px-3 pt-2">
+        <div className="flex h-7 items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/90 px-2 text-[11px] text-zinc-500">
+          <Search className="h-3 w-3" />
+          <span>Filter logs...</span>
         </div>
       </div>
 
-      {/* Level filter chips */}
-      <div className="mt-2 flex shrink-0 gap-1.5 overflow-hidden px-3.5">
-        {FILTERS.map((label, i) => {
-          const selected = i === 0;
+      {/* Interactive Level filter chips */}
+      <div className="mt-2 flex shrink-0 gap-1 overflow-x-auto no-scrollbar px-3 pb-0.5">
+        {FILTERS.map((label) => {
+          const isSelected = selectedFilter === label;
           const dot = FILTER_DOT[label];
           return (
-            <div
+            <button
               key={label}
-              className={`flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[10px] ${
-                selected
-                  ? "border-[#a1a1aa]/50 bg-[#27272a] font-semibold text-[#fafafa]"
-                  : "border-[#3f3f46] bg-[#18181b] font-medium text-[#a1a1aa]"
+              type="button"
+              onClick={() => onSelectFilter(label)}
+              className={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[9.5px] font-medium transition-colors ${
+                isSelected
+                  ? "border-zinc-500 bg-zinc-800 font-semibold text-white"
+                  : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200"
               }`}
             >
               {dot && (
@@ -447,62 +351,76 @@ function LogsScreen() {
                 />
               )}
               {label}
-            </div>
+            </button>
           );
         })}
       </div>
 
       {/* Log feed */}
-      <div className="mt-2 flex-1 space-y-2 overflow-hidden px-3.5 pb-12">
-        {LOGS.map((log, index) => (
-          <LogCard key={log.id} {...log} index={index} />
-        ))}
+      <div className="mt-2 flex-1 space-y-1.5 overflow-y-auto px-3 pb-6">
+        {filteredLogs.length === 0 ? (
+          <div className="flex h-28 items-center justify-center text-center text-[10px] text-zinc-500">
+            No {selectedFilter} logs in active buffer
+          </div>
+        ) : (
+          filteredLogs.map((log) => <LogCard key={log.id} log={log} />)
+        )}
       </div>
     </div>
   );
 }
 
-function ScreenContent({ screen }: { screen: ScreenId }) {
-  switch (screen) {
-    case "splash":
-      return <SplashScreen />;
-    case "push":
-      return <PushScreen />;
-    case "security":
-      return <SecurityScreen />;
-    case "login":
-      return <LoginScreen />;
-    case "logs":
-      return <LogsScreen />;
-  }
-}
-
-const LogstackMobile = () => {
-  const [index, setIndex] = useState(0);
-  const screen = SCREENS[index].id;
-
-  useEffect(() => {
-    const ms = SCREENS[index].durationMs;
-    const t = window.setTimeout(() => {
-      setIndex((i) => (i + 1) % SCREENS.length);
-    }, ms);
-    return () => window.clearTimeout(t);
-  }, [index]);
+export default function LogstackMobile() {
+  const [screen, setScreen] = useState<ScreenId>("logs");
+  const [filter, setFilter] = useState<FilterType>("All");
 
   return (
-    <div className="relative mx-auto w-full max-w-[310px]">
-      <div className="pointer-events-none absolute inset-x-6 inset-y-16 rounded-full bg-emerald-500/20 opacity-60 blur-[80px] sm:blur-[120px]" />
+    <div className="relative mx-auto w-full max-w-[280px] xs:max-w-[300px] sm:max-w-[320px]">
+      {/* Screen Mode Tabs */}
+      <div className="mb-3 flex items-center justify-center gap-1 rounded-xl border border-zinc-800 bg-zinc-950 p-1 text-xs">
+        <button
+          type="button"
+          onClick={() => setScreen("logs")}
+          className={`flex-1 rounded-lg px-2 py-1 text-center font-medium transition-all ${
+            screen === "logs"
+              ? "bg-zinc-800 text-white shadow-sm"
+              : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          Live Triage
+        </button>
+        <button
+          type="button"
+          onClick={() => setScreen("push")}
+          className={`flex-1 rounded-lg px-2 py-1 text-center font-medium transition-all ${
+            screen === "push"
+              ? "bg-zinc-800 text-white shadow-sm"
+              : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          Push Alerts
+        </button>
+        <button
+          type="button"
+          onClick={() => setScreen("security")}
+          className={`flex-1 rounded-lg px-2 py-1 text-center font-medium transition-all ${
+            screen === "security"
+              ? "bg-zinc-800 text-white shadow-sm"
+              : "text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          Security
+        </button>
+      </div>
 
-      {/* Scaled device: layout box matches the visual size so small screens don't overflow. */}
-      <div className="relative mx-auto h-[512px] w-[248px] overflow-hidden sm:h-[576px] sm:w-[279px] lg:h-[640px] lg:w-[310px]">
-        <div className="origin-top-left scale-[0.8] sm:scale-90 lg:scale-100">
-          <div className="relative h-[640px] w-[310px] overflow-hidden rounded-[3rem] border-[12px] border-zinc-900 bg-zinc-900 shadow-2xl">
+      {/* Crisp Native Phone Device Frame (no CSS scale blur) */}
+      <div className="relative mx-auto h-[500px] sm:h-[540px] w-full overflow-hidden rounded-[2.5rem] border-[8px] sm:border-[10px] border-zinc-800 bg-zinc-950 shadow-2xl">
         {/* Dynamic Island */}
-        <div className="absolute left-1/2 top-2 z-50 flex h-7 w-[118px] -translate-x-1/2 items-center justify-center rounded-full bg-black">
-          <div className="h-2 w-2 rounded-full bg-blue-500/40 blur-[1px]" />
+        <div className="absolute left-1/2 top-2 z-40 flex h-4.5 w-24 -translate-x-1/2 items-center justify-center rounded-full bg-black">
+          <div className="h-1.5 w-1.5 rounded-full bg-blue-500/40" />
         </div>
 
-        {/* Screen */}
+        {/* Screen Canvas */}
         <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#09090b]">
           <StatusBar />
 
@@ -511,62 +429,37 @@ const LogstackMobile = () => {
               <motion.div
                 key={screen}
                 className="absolute inset-0"
-                initial={screenMotion.initial}
-                animate={screenMotion.animate}
-                exit={screenMotion.exit}
-                transition={screenMotion.transition}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18 }}
               >
-                <ScreenContent screen={screen} />
+                {screen === "logs" && (
+                  <LogsScreen
+                    selectedFilter={filter}
+                    onSelectFilter={setFilter}
+                  />
+                )}
+                {screen === "push" && (
+                  <PushScreen onSwitchToLogs={() => setScreen("logs")} />
+                )}
+                {screen === "security" && (
+                  <SecurityScreen onSwitchToLogs={() => setScreen("logs")} />
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
 
           {/* Home indicator */}
-          <div className="pointer-events-none absolute bottom-2 left-1/2 h-1.5 w-28 -translate-x-1/2 rounded-full bg-zinc-700/80" />
-
-          {/* Progress dots */}
-          <div className="pointer-events-none absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
-            {SCREENS.map((s, i) => (
-              <span
-                key={s.id}
-                className={`h-1 rounded-full transition-all duration-300 ${
-                  i === index
-                    ? "w-4 bg-[#fafafa]"
-                    : "w-1 bg-zinc-600"
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
+          <div className="pointer-events-none absolute bottom-1.5 left-1/2 h-1 w-24 -translate-x-1/2 rounded-full bg-zinc-700/80" />
         </div>
       </div>
 
-      {/* Caption under phone — current step */}
-      <div className="mt-4 flex justify-center px-2 sm:mt-5">
-        <AnimatePresence mode="wait">
-          <motion.p
-            key={screen}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            className="flex items-center gap-1.5 text-xs text-zinc-500"
-          >
-            {screen === "splash" && "Welcome & onboarding"}
-            {screen === "push" && "Push alert setup"}
-            {screen === "security" && "PIN & biometric lock"}
-            {screen === "login" && "Link device via QR or PIN"}
-            {screen === "logs" && (
-              <>
-                <Check className="h-3 w-3 text-[#22c55e]" />
-                Live logs & triage on the go
-              </>
-            )}
-          </motion.p>
-        </AnimatePresence>
+      {/* Interactive Hint */}
+      <div className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-zinc-500">
+        <Check className="h-3.5 w-3.5 text-emerald-400" />
+        <span>Interactive preview • Tap chips & tabs</span>
       </div>
     </div>
   );
-};
-
-export default LogstackMobile;
+}

@@ -7,46 +7,29 @@ export const metadata: Metadata = {
 
 export default function CookiePolicyPage() {
   return (
-    <div className="container mx-auto px-4 py-16 max-w-4xl">
-      <div className="prose dark:prose-invert mx-auto">
-        <h1>Cookie Policy</h1>
-        <p className="text-muted-foreground">Last updated: May 6, 2026</p>
+    <div className="container mx-auto max-w-3xl px-4 py-16">
+      <div className="prose prose-invert max-w-none">
+        <h1 className="text-4xl font-bold tracking-tight">Cookie Policy</h1>
+        <p className="text-zinc-400">Last updated: May 6, 2026</p>
 
-        <h2>1. What Are Cookies</h2>
-        <p>
-          Cookies are small text files that are stored on your device when you
-          visit a website.
+        <h2 className="mt-8 text-xl font-semibold">1. What Are Cookies</h2>
+        <p className="text-zinc-300">
+          Cookies and local storage tokens are small data items stored on your device
+          to maintain your authenticated session and preserve user preferences.
         </p>
 
-        <h2>2. How We Use Cookies</h2>
-        <p>We use cookies to:</p>
-        <ul>
-          <li>Remember your login session</li>
-          <li>Understand how you use our website</li>
-          <li>Improve your browsing experience</li>
-          <li>Market our services to you</li>
+        <h2 className="mt-8 text-xl font-semibold">2. How We Use Cookies</h2>
+        <p className="text-zinc-300">Logstack uses strictly functional cookies to:</p>
+        <ul className="list-disc list-inside space-y-1 text-zinc-300">
+          <li>Maintain secure authentication sessions across page navigations</li>
+          <li>Preserve your active project selection in the dashboard</li>
+          <li>Remember your theme and interface preferences</li>
         </ul>
 
-        <h2>3. Types of Cookies We Use</h2>
-        <ul>
-          <li>
-            <strong>Essential Cookies:</strong> Necessary for our website to
-            function
-          </li>
-          <li>
-            <strong>Performance Cookies:</strong> Help us understand how
-            visitors use our site
-          </li>
-          <li>
-            <strong>Functionality Cookies:</strong> Allow us to remember your
-            preferences
-          </li>
-        </ul>
-
-        <h2>4. Managing Cookies</h2>
-        <p>
-          You can control and manage cookies in your browser settings. However,
-          disabling cookies may affect your experience on our website.
+        <h2 className="mt-8 text-xl font-semibold">3. Third-Party Trackers</h2>
+        <p className="text-zinc-300">
+          We do not sell telemetry data to third parties or use third-party cross-site
+          tracking cookies.
         </p>
       </div>
     </div>

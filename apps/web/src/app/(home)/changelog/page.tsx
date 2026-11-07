@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Navbar } from "@/components/marketing/Navbar";
 
 const ENTRIES = [
   {
@@ -24,34 +23,31 @@ const ENTRIES = [
 
 export default function ChangelogPage() {
   return (
-    <div className="relative min-h-screen bg-black text-white">
-      <Navbar />
-      <div className="relative z-10 container mx-auto px-4 pt-32 pb-20 max-w-3xl">
-        <h1 className="text-4xl font-bold mb-4">Changelog</h1>
-        <p className="text-zinc-400 mb-12">
-          What&apos;s new in Logstack. Also see{" "}
-          <Link href="/docs" className="text-primary hover:underline">
-            docs
-          </Link>
-          .
-        </p>
+    <div className="container mx-auto max-w-3xl px-4 py-16">
+      <h1 className="mb-4 text-4xl font-bold tracking-tight">Changelog</h1>
+      <p className="mb-12 text-zinc-400">
+        What&apos;s new in Logstack. Also see{" "}
+        <Link href="/docs" className="text-emerald-400 hover:underline">
+          documentation
+        </Link>
+        .
+      </p>
 
-        <div className="space-y-10">
-          {ENTRIES.map((entry) => (
-            <article
-              key={entry.date}
-              className="border-b border-white/10 pb-10 last:border-0"
-            >
-              <time className="text-sm text-zinc-500">{entry.date}</time>
-              <h2 className="text-xl font-semibold mt-1 mb-3">{entry.title}</h2>
-              <ul className="list-disc list-inside space-y-1 text-zinc-400">
-                {entry.items.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </article>
-          ))}
-        </div>
+      <div className="space-y-10">
+        {ENTRIES.map((entry) => (
+          <article
+            key={entry.date}
+            className="border-b border-zinc-800 pb-10 last:border-0"
+          >
+            <time className="text-sm font-mono text-zinc-500">{entry.date}</time>
+            <h2 className="mt-1 mb-3 text-xl font-semibold">{entry.title}</h2>
+            <ul className="list-disc list-inside space-y-1 text-zinc-400">
+              {entry.items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </article>
+        ))}
       </div>
     </div>
   );

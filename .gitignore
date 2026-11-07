@@ -71,4 +71,5 @@ progress.txt
 *.env
 # secrets/
 
+fire.json
 

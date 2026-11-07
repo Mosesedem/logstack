@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState, type ReactNode } from "react";
+
+import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -14,14 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { TECH_STACK } from "./tech-stack";
 import LogstackMobile from "@/components/MobileDesign";
-import { Navbar } from "@/components/marketing/Navbar";
-import { FooterLinkGroup } from "@/components/marketing/footer-link-group";
-import {
-  companyFooterLinks,
-  productFooterLinks,
-  resourcesFooterLinks,
-} from "@/lib/navigation";
-import { LogstackLogo } from "@/components/brand/logstack-logo";
 import { LiveProductionStream } from "@/components/marketing/LiveProductionStream";
 import { InstallLogstack } from "@/components/marketing/InstallLogstack";
 
@@ -71,90 +64,42 @@ const FEATURES = [
   },
 ];
 
-const HERO_WORDS = ["lightspeed", "zero drift", "full context"];
-
-function CyclingWord() {
-  const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    if (reduced) return;
-    const id = setInterval(
-      () => setIndex((i) => (i + 1) % HERO_WORDS.length),
-      2600,
-    );
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <span className="relative inline-grid">
-      {HERO_WORDS.map((word, i) => (
-        <span
-          key={word}
-          aria-hidden={i !== index}
-          className={`col-start-1 row-start-1 bg-green-400 bg-clip-text text-transparent transition-all duration-500 ease-out ${
-            i === index
-              ? "translate-y-0 opacity-100 blur-0"
-              : "pointer-events-none -translate-y-2 opacity-0 blur-sm"
-          }`}
-        >
-          {word}
-        </span>
-      ))}
-      <span className="invisible col-start-1 row-start-1">
-        {HERO_WORDS.reduce((a, b) => (a.length > b.length ? a : b))}
-      </span>
-    </span>
-  );
-}
-
 export default function HomePage() {
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-black text-white selection:bg-emerald-500/20">
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] h-[500px] w-[500px] rounded-full bg-emerald-500/10 blur-[120px]" />
-        <div className="absolute right-[-10%] bottom-[-10%] h-[500px] w-[500px] rounded-full bg-blue-500/10 blur-[120px]" />
-      </div>
-      <div className="pointer-events-none fixed inset-0 z-0 bg-[linear-gradient(to_right,#80808010_1px,transparent_1px),linear-gradient(to_bottom,#80808010_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,black_40%,transparent_100%)]" />
-
-      <Navbar />
-
-      <section className="relative z-10 container mx-auto px-4 pt-20 pb-16 text-center sm:pt-32 sm:pb-20">
-        <div className="mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
+    <div className="relative overflow-x-hidden">
+      <section className="relative z-10 container mx-auto px-4 pt-12 pb-12 text-center sm:pt-20 sm:pb-20 md:pt-24">
+        <div className="mx-auto max-w-4xl">
           <Link
             href="/changelog"
-            className="mb-8 inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-white/10 sm:px-4"
+            className="mb-6 inline-flex max-w-full items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/80 px-3.5 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white sm:mb-8 sm:px-4"
           >
-            <span className="relative flex h-1.5 w-1.5 shrink-0">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className="flex h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+            <span className="shrink-0 font-semibold text-emerald-400 sm:text-zinc-300">v1.0</span>
+            <span className="text-zinc-600">|</span>
+            <span className="truncate text-zinc-400">
+              Live streaming, smart alerts & SDKs
             </span>
-            <span className="truncate">V1.3 Now Available</span>
-            <span className="hidden sm:inline">|</span>
-            <span className="hidden sm:inline">
-              New features, improved performance, and enhanced security.
-            </span>
-            <ArrowRight className="h-3 w-3 shrink-0" />
+            <ArrowRight className="h-3 w-3 shrink-0 text-zinc-500" />
           </Link>
 
-          <h1 className="mb-6 text-[2.35rem] font-semibold leading-[0.95] tracking-tight sm:mb-8 sm:text-6xl md:text-7xl lg:text-8xl">
-            Logs that ship
+          <h1 className="mb-5 text-3xl font-semibold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl sm:mb-6">
+            Logs that stream
             <br />
-            at <CyclingWord />
+            <span className="bg-gradient-to-r from-emerald-400 via-green-300 to-emerald-500 bg-clip-text text-transparent">
+              as they happen.
+            </span>
           </h1>
 
-          <p className="mx-auto mb-10 max-w-2xl px-1 text-base leading-relaxed text-pretty text-zinc-400 sm:text-xl">
-            The open-source logging platform for modern engineering teams.
-            Real-time streaming, smart alerts, and instant insights without the
-            enterprise price tag.
+          <p className="mx-auto mb-8 max-w-2xl px-1 text-sm leading-relaxed text-pretty text-zinc-400 sm:text-lg sm:leading-relaxed sm:mb-10">
+            The developer-first log management platform. Ingest structured
+            events in milliseconds, stream live via WebSockets, and alert before
+            users report incidents.
           </p>
 
           <div className="flex w-full flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:gap-4">
             <Button
               size="lg"
-              className="h-12 w-full rounded-full bg-white px-8 text-base text-black hover:bg-zinc-200 sm:w-auto"
+              className="h-11 w-full rounded-full bg-white px-8 text-sm font-medium text-black hover:bg-zinc-200 sm:h-12 sm:w-auto sm:text-base"
               asChild
             >
               <Link href="/signup">
@@ -164,7 +109,7 @@ export default function HomePage() {
             <Button
               size="lg"
               variant="outline"
-              className="h-12 w-full rounded-full border-zinc-800 bg-black/50 px-8 text-base hover:bg-zinc-900 hover:text-white sm:w-auto"
+              className="h-11 w-full rounded-full border-zinc-800 bg-zinc-900/60 px-8 text-sm text-zinc-200 hover:bg-zinc-800 hover:text-white sm:h-12 sm:w-auto sm:text-base"
               asChild
             >
               <Link
@@ -182,22 +127,22 @@ export default function HomePage() {
 
       <LiveProductionStream />
 
-      <section className="relative z-10 overflow-hidden border-y border-white/5 bg-black/40 py-12 backdrop-blur-sm">
+      <section className="relative z-10 overflow-hidden border-y border-white/5 bg-zinc-950/60 py-8 sm:py-12">
         <div className="container mx-auto px-4 text-center">
-          <p className="mb-8 px-2 text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase sm:text-sm sm:tracking-widest">
-            Works seamlessly with your favorite stack
+          <p className="mb-6 px-2 text-xs font-medium tracking-[0.2em] text-zinc-500 uppercase sm:mb-8 sm:text-sm">
+            Works seamlessly with your stack
           </p>
           <div className="w-full max-w-full overflow-hidden [mask-image:_linear-gradient(to_right,transparent_0,_black_24px,_black_calc(100%-24px),transparent_100%)] sm:[mask-image:_linear-gradient(to_right,transparent_0,_black_128px,_black_calc(100%-128px),transparent_100%)]">
-            <div className="flex w-max animate-scroll-left py-4 hover:[animation-play-state:paused]">
+            <div className="flex w-max animate-scroll-left py-3 hover:[animation-play-state:paused]">
               {[...TECH_STACK, ...TECH_STACK].map((tech, index) => (
                 <div
                   key={`${tech.id}-${index}`}
-                  className="group mx-6 flex min-w-[100px] select-none flex-col items-center gap-3 md:mx-10"
+                  className="group mx-5 flex min-w-[90px] select-none flex-col items-center gap-2.5 sm:mx-8 md:mx-10"
                 >
-                  <div className="h-12 w-12 text-white opacity-60 grayscale transition-all duration-300 group-hover:scale-110 group-hover:opacity-100 group-hover:grayscale-0 [&>svg]:h-full [&>svg]:w-full">
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 text-white opacity-60 grayscale transition-all duration-300 group-hover:scale-110 group-hover:opacity-100 group-hover:grayscale-0 [&>svg]:h-full [&>svg]:w-full">
                     {tech.icon}
                   </div>
-                  <span className="text-sm font-medium text-white/60 transition-colors group-hover:text-white">
+                  <span className="text-xs sm:text-sm font-medium text-white/60 transition-colors group-hover:text-white">
                     {tech.name}
                   </span>
                 </div>
@@ -211,19 +156,19 @@ export default function HomePage() {
 
       <section
         id="features"
-        className="mx-auto max-w-6xl scroll-mt-24 px-4 py-20 sm:px-6 sm:py-24"
+        className="mx-auto max-w-6xl scroll-mt-24 px-4 py-12 sm:px-6 sm:py-20 lg:py-24"
       >
         <div className="max-w-2xl">
-          <h2 className="text-3xl font-semibold tracking-[-0.02em] md:text-5xl">
+          <h2 className="text-2xl font-semibold tracking-[-0.02em] sm:text-3xl md:text-5xl">
             Engineered for precision
           </h2>
-          <p className="mt-4 text-muted-foreground">
+          <p className="mt-3 text-sm text-muted-foreground sm:text-base">
             An enterprise-grade logging engine built for clarity, ultra-low
             latency, and complete data ownership.
           </p>
         </div>
 
-        <div className="mt-14 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-8 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-border bg-border sm:mt-12 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((feature) => (
             <FeatureCard key={feature.title} {...feature} />
           ))}
@@ -232,27 +177,27 @@ export default function HomePage() {
 
       <section
         id="mobile"
-        className="mx-auto max-w-6xl scroll-mt-24 px-4 pb-20 sm:px-6 sm:pb-24"
+        className="mx-auto max-w-6xl scroll-mt-24 px-4 pb-12 sm:px-6 sm:pb-20 lg:pb-24"
       >
-        <div className="grid min-w-0 items-center gap-10 overflow-hidden rounded-2xl border border-border bg-surface/40 p-5 sm:gap-12 sm:p-8 md:grid-cols-2 md:gap-14 md:p-14">
+        <div className="grid min-w-0 items-center gap-8 overflow-hidden rounded-2xl border border-border bg-surface/40 p-4 sm:gap-12 sm:p-8 md:grid-cols-2 md:gap-14 md:p-14">
           <div className="min-w-0">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-brand">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs text-emerald-400">
               <Smartphone className="size-3.5" />
-              Mobile first
+              iOS & Android Companion
             </div>
-            <h2 className="mt-5 text-2xl font-semibold tracking-[-0.02em] sm:text-3xl md:text-4xl">
+            <h2 className="mt-4 text-2xl font-semibold tracking-[-0.02em] sm:text-3xl md:text-4xl">
               Control from your pocket.
             </h2>
-            <p className="mt-4 text-muted-foreground">
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
               Production issues do not wait for desktop access. Triage live
               incidents, acknowledge critical alerts, and review distributed
               traces straight from your phone.
             </p>
 
-            <ul className="mt-8 space-y-3">
+            <ul className="mt-6 space-y-2.5 sm:mt-8 sm:space-y-3">
               {MOBILE_POINTS.map((item) => (
-                <li key={item} className="flex items-start gap-3 text-sm">
-                  <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand/15 text-brand">
+                <li key={item} className="flex items-start gap-2.5 text-xs sm:text-sm">
+                  <span className="mt-0.5 flex size-4.5 sm:size-5 shrink-0 items-center justify-center rounded-full bg-brand/15 text-brand">
                     <Check className="size-3" />
                   </span>
                   <span className="text-foreground/85">{item}</span>
@@ -260,7 +205,7 @@ export default function HomePage() {
               ))}
             </ul>
 
-            <div className="mt-8 flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <div className="mt-6 flex w-full flex-col gap-2.5 sm:mt-8 sm:flex-row sm:flex-wrap">
               <StoreBadge
                 href="https://apps.apple.com/app/logstack/id6787477135"
                 eyebrow="Download on the"
@@ -281,83 +226,41 @@ export default function HomePage() {
               Mobile apps are in private beta. Store links go live at launch.
             </p>
           </div>
-          <div className="flex min-w-0 justify-center overflow-hidden">
+          <div className="flex min-w-0 justify-center overflow-hidden pt-2 md:pt-0">
             <LogstackMobile />
           </div>
         </div>
       </section>
 
-      <section className="relative z-10 container mx-auto px-4 py-20 sm:py-32">
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-emerald-500/10 to-black p-8 text-center sm:p-12 lg:p-24">
-          <div className="pointer-events-none absolute top-0 right-0 hidden p-12 opacity-10 sm:block">
-            <Zap className="h-64 w-64 text-white" />
-          </div>
-
-          <h2 className="mb-6 text-3xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
-            Ready to upgrade your logs?
+      <section className="relative z-10 container mx-auto px-4 py-12 sm:py-20 lg:py-24">
+        <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 p-6 text-center sm:p-10 lg:p-14">
+          <h2 className="mb-3 text-2xl font-semibold tracking-tight text-white sm:text-3xl lg:text-4xl">
+            Ready to upgrade your logging stack?
           </h2>
-          <p className="mx-auto mb-10 max-w-2xl text-base text-zinc-300 sm:text-xl">
-            Join thousands of developers shipping better software with Logstack.
-            Open source, powerful, and free to start.
+          <p className="mx-auto mb-6 max-w-xl text-sm text-zinc-400 sm:text-base sm:mb-8">
+            Deploy via Docker or send your first log with our SDKs in under 2
+            minutes. Free and open source.
           </p>
 
           <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:gap-4">
             <Button
               size="lg"
-              className="h-12 w-full rounded-full bg-white px-10 text-base text-black hover:bg-zinc-200 sm:h-14 sm:w-auto sm:text-lg"
+              className="h-11 w-full rounded-full bg-white px-8 text-sm font-medium text-black hover:bg-zinc-200 sm:h-12 sm:w-auto sm:text-base"
               asChild
             >
-              <Link href="/signup">Get Started for Free</Link>
+              <Link href="/signup">Get Started Free</Link>
             </Button>
             <Button
               size="lg"
               variant="outline"
-              className="h-12 w-full rounded-full border-zinc-700 px-10 text-base hover:bg-zinc-800 hover:text-white sm:h-14 sm:w-auto sm:text-lg"
+              className="h-11 w-full rounded-full border-zinc-800 bg-zinc-900/80 px-8 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white sm:h-12 sm:w-auto sm:text-base"
               asChild
             >
-              <Link href="/contact">Contact Sales</Link>
+              <Link href="/docs">Read Documentation</Link>
             </Button>
           </div>
         </div>
       </section>
-
-      <footer className="relative z-10 border-t border-white/10 bg-black pt-16 pb-8">
-        <div className="container mx-auto px-4">
-          <div className="mb-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <LogstackLogo
-                href="/"
-                size={28}
-                className="mb-4 text-xl text-white"
-                labelClassName="text-white"
-              />
-              <p className="max-w-xs text-sm leading-relaxed text-zinc-500">
-                The modern logging stack for forward-thinking engineering teams.
-                Designed for scale, built for speed.
-              </p>
-            </div>
-            <FooterLinkGroup title="Product" links={productFooterLinks} />
-            <FooterLinkGroup title="Resources" links={resourcesFooterLinks} />
-            <FooterLinkGroup title="Company" links={companyFooterLinks} />
-          </div>
-          <div className="flex flex-col items-center justify-between gap-4 border-t border-white/5 pt-8 md:flex-row">
-            <p className="text-xs text-zinc-600">
-              © {new Date().getFullYear()} Logstack Inc. All rights reserved.
-            </p>
-            <div className="flex gap-6 text-xs text-zinc-600">
-              <Link href="/privacy" className="hover:text-zinc-400">
-                Privacy Policy
-              </Link>
-              <Link href="/terms" className="hover:text-zinc-400">
-                Terms of Service
-              </Link>
-              <Link href="/cookies" className="hover:text-zinc-400">
-                Cookie Policy
-              </Link>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
@@ -372,12 +275,12 @@ function FeatureCard({
   description: string;
 }) {
   return (
-    <div className="group bg-background p-6 transition-colors hover:bg-surface/60 sm:p-8">
-      <div className="flex size-10 items-center justify-center rounded-lg border border-border bg-surface/70 text-brand">
+    <div className="group bg-background p-5 sm:p-6 lg:p-8 transition-colors hover:bg-surface/60">
+      <div className="flex size-9 sm:size-10 items-center justify-center rounded-lg border border-border bg-surface/70 text-brand">
         {icon}
       </div>
-      <h3 className="mt-5 text-lg font-medium">{title}</h3>
-      <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+      <h3 className="mt-4 sm:mt-5 text-base sm:text-lg font-medium">{title}</h3>
+      <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed">{description}</p>
     </div>
   );
 }
@@ -399,9 +302,9 @@ function StoreBadge({
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`${eyebrow} ${label}`}
-      className="inline-flex h-14 w-full items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-900/80 px-4 text-left text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800 sm:h-12 sm:w-auto sm:min-w-[11.5rem]"
+      className="inline-flex h-12 w-full sm:w-auto items-center justify-center sm:justify-start gap-3 rounded-xl border border-zinc-700 bg-zinc-900/80 px-4 text-left text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800 sm:min-w-[11.5rem]"
     >
-      <span className="flex size-7 shrink-0 items-center justify-center">
+      <span className="flex size-6 shrink-0 items-center justify-center">
         {children}
       </span>
       <span className="min-w-0 leading-tight">
