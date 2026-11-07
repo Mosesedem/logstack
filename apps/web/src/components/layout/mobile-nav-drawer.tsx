@@ -1,8 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { LogOut, Shield, Smartphone, User } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Shield } from "lucide-react";
 import { LogstackLogo } from "@/components/brand/logstack-logo";
 import { ProjectSwitcher } from "./project-switcher";
 import { SidebarUsage } from "./sidebar-usage";
@@ -46,41 +45,16 @@ export function MobileNavDrawer({
         />
       }
       footer={
-        <>
-          <SidebarUsage />
-
-          <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
-            <User className="h-4 w-4 shrink-0" />
-            <span className="truncate">{session?.user?.email}</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-10"
-              onClick={() => {
-                onClose();
-                onLinkMobile();
-              }}
-            >
-              <Smartphone className="mr-2 h-4 w-4" />
-              Link App
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-10 text-destructive hover:text-destructive"
-              onClick={() => {
-                onClose();
-                onRequestSignOut();
-              }}
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign out
-            </Button>
-          </div>
-        </>
+        <SidebarUsage
+          onLinkMobile={() => {
+            onClose();
+            onLinkMobile();
+          }}
+          onRequestSignOut={() => {
+            onClose();
+            onRequestSignOut();
+          }}
+        />
       }
     >
       <div className="mb-6">

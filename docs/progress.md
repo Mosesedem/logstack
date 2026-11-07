@@ -6,6 +6,10 @@
 > Note: the previous tracker (claiming "28/30, 93%", dated May 6 2026) was inaccurate vs. the
 > actual code state and has been replaced. Trust code over historical claims.
 
+## Sidebar account menu, password visibility, changelog (2026-11-07)
+
+The dashboard usage card is the account menu (Link mobile app, Settings, Billing or Upgrade plan, Sign out) in the desktop sidebar and the mobile drawer. Password fields use `PasswordInput` (show/hide) on login, signup, reset, settings, admin user edit, and the SDK Demo API key. Public changelog copy at `apps/web/src/app/(home)/changelog/page.tsx` describes ingest, the live log stream, level-and-pattern alerts, Paystack/Polar by country, the mobile link, and password visibility.
+
 ## Email verification links (2026-11-07)
 
 Verification mail is `{BASE_URL}/verify-email?token=…`. `BASE_URL` on the API host was `https://api.logstack.tech`, so the link never reached `GET /v1/auth/verify-email` and returned 404. Dashboard page: `apps/web/src/app/(auth)/verify-email/page.tsx`. Until that page is deployed, nginx on the API host serves a verifier at `/verify-email` and `/v1/verify-email`. After the web deploy, set `BASE_URL=https://www.logstack.tech`.

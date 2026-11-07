@@ -28,7 +28,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { LevelBadge } from "@/components/logs";
@@ -384,9 +384,9 @@ export default function DemoPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="api-key">Project API key</Label>
-              <Input
+              <PasswordInput
                 id="api-key"
-                type="password"
+                visibilityLabel="API key"
                 placeholder="ls_..."
                 value={apiKey}
                 onChange={(e) => persistApiKey(e.target.value)}

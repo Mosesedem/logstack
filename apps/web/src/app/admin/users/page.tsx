@@ -6,6 +6,7 @@ import { apiClient, ApiClientError } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -501,9 +502,9 @@ function UserFormFields({
               </span>
             ) : null}
           </Label>
-          <Input
+          <PasswordInput
             id="admin-user-password"
-            type="password"
+            autoComplete="new-password"
             value={form.password}
             minLength={requiredPassword ? 8 : undefined}
             onChange={(e) =>
