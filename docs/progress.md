@@ -6,6 +6,10 @@
 > Note: the previous tracker (claiming "28/30, 93%", dated May 6 2026) was inaccurate vs. the
 > actual code state and has been replaced. Trust code over historical claims.
 
+## Email verification links (2026-11-07)
+
+Verification mail is `{BASE_URL}/verify-email?token=…`. `BASE_URL` on the API host was `https://api.logstack.tech`, so the link never reached `GET /v1/auth/verify-email` and returned 404. Dashboard page: `apps/web/src/app/(auth)/verify-email/page.tsx`. Until that page is deployed, nginx on the API host serves a verifier at `/verify-email` and `/v1/verify-email`. After the web deploy, set `BASE_URL=https://www.logstack.tech`.
+
 ## Phase 0 — Deliverables & tracker
 
 | Item          | Status | Notes                                               |

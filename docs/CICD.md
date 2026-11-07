@@ -185,7 +185,7 @@ JWT_SECRET=<openssl rand -base64 32>
 DATABASE_URL=postgres://logstack:<password>@postgres:5432/logstack?sslmode=disable
 REDIS_URL=redis://redis:6379
 ENV=production
-BASE_URL=https://api.logstack.tech
+BASE_URL=https://www.logstack.tech
 ALLOWED_ORIGINS=https://logstack.tech,https://www.logstack.tech
 API_HOST_PORT=8082
 ```

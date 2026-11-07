@@ -116,7 +116,7 @@ CERTBOT_EMAIL=you@logstack.tech
 POSTGRES_PASSWORD=<strong password>
 JWT_SECRET=3KA0uVQUeflaOFY3TnEkQDXDQsIyNetDAWC1bcihWt8
 ALLOWED_ORIGINS=*
-BASE_URL=https://api.logstack.tech
+BASE_URL=https://www.logstack.tech
 ```
 
 ---
